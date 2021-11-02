@@ -1,0 +1,15 @@
+[
+{
+    "model": "projects.project",
+    "pk": 1,
+    "fields": {
+        "organization": 1,
+        "name": "Demo",
+        "slug": "demo",
+        "is_active": true,
+        "is_public": false,
+        "created": "2021-10-18T10:34:33.352Z",
+        "updated": "2021-10-18T10:34:33.352Z"
+    }
+}
+]

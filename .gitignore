@@ -1,0 +1,16 @@
+*.hprof
+*.pyc
+*$py.class
+.svn
+.cvs
+.DS_Store
+.hg
+.git
+.idea
+.env
+docs/build/
+venv/
+venv3/
+venv39/
+var/
+coverage_html_report/

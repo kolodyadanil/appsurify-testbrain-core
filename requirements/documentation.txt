@@ -1,0 +1,14 @@
+# used by the 'docs' tox env for building the documentation
+Sphinx
+sphinx_rtd_theme
+Pillow
+readme_renderer[md]
+rinohtype
+sphinxcontrib-napoleon
+sphinxcontrib-django
+sphinx_autodoc_annotation
+MarkupSafe
+Pygments
+sphinxcontrib-spelling
+pyenchant
+sphinx-autobuild

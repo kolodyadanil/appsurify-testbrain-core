@@ -1,0 +1,51 @@
+[
+{
+    "model": "customers.user",
+    "pk": 1,
+    "fields": {
+        "password": "pbkdf2_sha256$260000$Bj6kVRHjAuyfZ6gubTuhLU$HOBpOygnUeM8VDVZN0Pa8jQH4feWd0JnIPg9h1EEPyo=",
+        "last_login": "2021-10-17T17:59:16.448Z",
+        "is_superuser": true,
+        "first_name": null,
+        "last_name": null,
+        "email": "admin@localhost.localdomain",
+        "is_staff": true,
+        "is_active": true,
+        "date_joined": "2021-10-17T17:58:53.176Z",
+        "created": "2021-10-17T17:58:53.176Z",
+        "updated": "2021-10-17T17:58:53.176Z",
+        "groups": [],
+        "user_permissions": []
+    }
+},
+{
+    "model": "customers.user",
+    "pk": 2,
+    "fields": {
+        "password": "pbkdf2_sha256$260000$S9IpC7Bm8MNOQ5fvEjAIyr$wLw6z8RW7k2uLj1tPI4K8axLmjDWR9qVOwOvMXScWoE=",
+        "last_login": null,
+        "is_superuser": false,
+        "first_name": null,
+        "last_name": null,
+        "email": "user@localhost.localdomain",
+        "is_staff": false,
+        "is_active": true,
+        "date_joined": "2021-10-17T19:02:51.862Z",
+        "created": "2021-10-17T19:02:51.862Z",
+        "updated": "2021-10-17T19:02:51.862Z",
+        "groups": [],
+        "user_permissions": []
+    }
+},
+{
+    "model": "customers.organization",
+    "pk": 1,
+    "fields": {
+        "platform": "saas",
+        "name": "Appsurify INC",
+        "domain": "appsurify-inc",
+        "created": "2021-10-17T19:01:51.464Z",
+        "updated": "2021-10-17T19:01:51.464Z"
+    }
+}
+]
