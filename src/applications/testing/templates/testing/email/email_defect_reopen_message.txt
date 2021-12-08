@@ -1,0 +1,10 @@
+Hi, {{ user.username }}!
+
+In your project {{ project.name }} defect {{ defect.name }} has been reopened due to the results{% if defect.caused_by_test_run %} from test run {{ defect.caused_by_test_run.name }} which started at {{ defect.caused_by_test_run.start_date }}{% endif %}.
+
+Details of the defect can be found here {{ defect_url }}.
+
+We are sorry to be the bearers of bad news, but you’ve fixed it once and you can fix it again!
+
+Cheers,
+Your friends at Appsurify.

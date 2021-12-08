@@ -1,0 +1,14 @@
+Hello from Appsurify TestBrain!
+
+You have been added as a user to {{ current_site.organization.name|capfirst }}
+by {{ user.username|capfirst }}.
+
+Please click the following link to confirm your email address and create a password: {{ activate_url }}
+
+Thank you from Appsurify.
+
+Appsurify, Inc.
+appsurify.com
+1.650.402.1400
+support@appsurify.com
+

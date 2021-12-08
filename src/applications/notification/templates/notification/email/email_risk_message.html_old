@@ -1,0 +1,14 @@
+{% if period %}
+{% if period == 'immediately' %}<h1>Appsurify TestBrain High Risk Commit Alert</h1>
+    <p>The following commit has been rated as high-risk:</p>
+{% else %}<h1>Appsurify TestBrain {{ period }} Commit Report</h1>
+    <p>The following commit(s) applied during the period have been rated high risk:</p>>{% endif %}
+{% endif %}
+
+<p>
+{% for commit in commits %}
+    <div>Project Name: {{ commit.project.name }}</div>
+    <div>Commit Detail: {{ commit.sha }} {{ commit.message }}</div>
+    <br>
+{% endfor %}
+</p>

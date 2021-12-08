@@ -1,0 +1,3 @@
+{% if period %}
+{% if period == 'immediately' %}TestBrain Commit Alert{% else %}TestBrain {{ period }} Commit Notification{% endif %}
+{% endif %}

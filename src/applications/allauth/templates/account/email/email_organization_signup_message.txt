@@ -1,0 +1,24 @@
+Hi, {{ username|capfirst }},
+
+Thank you for signing up for a free trial of Appsurify TestBrain. TestBrain applies machine learning to make your automated and manual testing smarter.
+
+Your account is now ready. You are configured as the account owner and administrator. You will be able to add additional users and administrators as part of the configuration.
+
+Please use the following link to confirm your email and begin setting up your account: {{ organization_url }}
+
+Your username is: {{ username }}
+
+We will be happy to assist you with the set up and configuration of TestBrain. Just contact us at:
+support@appsurify.com
+1.650.402.1400 x2
+
+We would also love to hear your questions, concerns, and feedback.
+
+Please reach out at any time to your technical support manager:
+James Farrier
+james@appsurify.com
+1.650.402.1400 x320
+
+We look forward to making your QA testing faster and smarter while saving you money.
+
+Appsurify – test smarter

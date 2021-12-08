@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
+from system.env import env
 
-from .base import env, BASE_DIR
 
+# EMAIL
+# ------------------------------------------------------------------------------
 EMAIL_CONFIG = env.email("EMAIL_URL", default="consolemail://")
 
 DEFAULT_FROM_EMAIL = f"TestBrain Support Team <{EMAIL_CONFIG['EMAIL_HOST_USER']}>"

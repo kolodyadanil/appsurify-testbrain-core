@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites>
+  <testsuite errors="5" failures="5" hostname="DESKTOP-16O0SVF" id="0" name="TestRun" package="junit" skipped="5" tests="20" time="0.143" timestamp="2018-06-07T06:22:50">
+
+      <testcase classname="junit.TestRun" name="PassToFail" time="0.008">
+	  
+
+      </testcase>
+	  <testcase classname="junit.TestRun" name="PassToBroken" time="0.008">
+
+      </testcase>
+	  <testcase classname="junit.TestRun" name="PassToNotRun" time="0.008">
+
+      </testcase>
+	  <testcase classname="junit.TestRun" name="PassToNotRun2" time="0.008">
+
+      </testcase>
+	  <testcase classname="junit.TestRun" name="NotRunToPass" time="0.008">
+	  <skipped/>
+
+      </testcase>
+	  <testcase classname="junit.TestRun" name="NotRunToFail" time="0.008">
+	  <skipped/>
+
+      </testcase>
+	  <testcase classname="junit.TestRun" name="NotRunToBroken" time="0.008">
+	  <skipped/>
+
+      </testcase>
+	  <testcase classname="junit.TestRun" name="NotRunToNotRun2" time="0.008">
+	  <skipped/>
+
+      </testcase>
+	  <testcase classname="junit.TestRun" name="FailToPass" time="0.008">
+	  <failure message="expected:2 but was:3" type="junit.framework.AssertionFailedError">
+junit.framework.AssertionFailedError: expected:2 but was:3 at sample.junit.CalculateTest.failingTest2(Unknown Source) at org.eclipse.ant.internal.launching.remote.EclipseDefaultExecutor.executeTargets(EclipseDefaultExecutor.java:36) at org.eclipse.ant.internal.launching.remote.InternalAntRunner.run(InternalAntRunner.java:460) at org.eclipse.ant.internal.launching.remote.InternalAntRunner.main(InternalAntRunner.java:142)
+</failure>
+
+      </testcase>
+	  <testcase classname="junit.TestRun" name="FailToNotRun" time="0.008">
+	  <failure message="expected:2 but was:3" type="junit.framework.AssertionFailedError">
+junit.framework.AssertionFailedError: expected:2 but was:3 at sample.junit.CalculateTest.failingTest2(Unknown Source) at org.eclipse.ant.internal.launching.remote.EclipseDefaultExecutor.executeTargets(EclipseDefaultExecutor.java:36) at org.eclipse.ant.internal.launching.remote.InternalAntRunner.run(InternalAntRunner.java:460) at org.eclipse.ant.internal.launching.remote.InternalAntRunner.main(InternalAntRunner.java:142)
+</failure>
+
+      </testcase>
+	  <testcase classname="junit.TestRun" name="FailToBroken" time="0.008">
+	  <failure message="expected:2 but was:3" type="junit.framework.AssertionFailedError">
+junit.framework.AssertionFailedError: expected:2 but was:3 at sample.junit.CalculateTest.failingTest2(Unknown Source) at org.eclipse.ant.internal.launching.remote.EclipseDefaultExecutor.executeTargets(EclipseDefaultExecutor.java:36) at org.eclipse.ant.internal.launching.remote.InternalAntRunner.run(InternalAntRunner.java:460) at org.eclipse.ant.internal.launching.remote.InternalAntRunner.main(InternalAntRunner.java:142)
+</failure>
+
+      </testcase>
+	  <testcase classname="junit.TestRun" name="FailToNotRun2" time="0.008">
+	  <failure message="expected:2 but was:3" type="junit.framework.AssertionFailedError">
+junit.framework.AssertionFailedError: expected:2 but was:3 at sample.junit.CalculateTest.failingTest2(Unknown Source) at org.eclipse.ant.internal.launching.remote.EclipseDefaultExecutor.executeTargets(EclipseDefaultExecutor.java:36) at org.eclipse.ant.internal.launching.remote.InternalAntRunner.run(InternalAntRunner.java:460) at org.eclipse.ant.internal.launching.remote.InternalAntRunner.main(InternalAntRunner.java:142)
+</failure>
+
+      </testcase>
+	  <testcase classname="junit.TestRun" name="BrokenToPass" time="0.008">
+	  <error message="No runnable methods" type="java.lang.Exception">
+java.lang.Exception: No runnable methods at java.lang.reflect.Constructor.newInstance(Unknown Source) at java.lang.reflect.Constructor.newInstance(Unknown Source) at org.eclipse.ant.internal.launching.remote.EclipseDefaultExecutor.executeTargets(EclipseDefaultExecutor.java:36) at org.eclipse.ant.internal.launching.remote.InternalAntRunner.run(InternalAntRunner.java:460) at org.eclipse.ant.internal.launching.remote.InternalAntRunner.main(InternalAntRunner.java:142)
+</error>
+
+      </testcase>
+	  <testcase classname="junit.TestRun" name="BrokenToNotRun" time="0.008">
+	  <error message="No runnable methods" type="java.lang.Exception">
+java.lang.Exception: No runnable methods at java.lang.reflect.Constructor.newInstance(Unknown Source) at java.lang.reflect.Constructor.newInstance(Unknown Source) at org.eclipse.ant.internal.launching.remote.EclipseDefaultExecutor.executeTargets(EclipseDefaultExecutor.java:36) at org.eclipse.ant.internal.launching.remote.InternalAntRunner.run(InternalAntRunner.java:460) at org.eclipse.ant.internal.launching.remote.InternalAntRunner.main(InternalAntRunner.java:142)
+</error>
+
+      </testcase>
+	  <testcase classname="junit.TestRun" name="BrokenToFail" time="0.008">
+	  <error message="No runnable methods" type="java.lang.Exception">
+java.lang.Exception: No runnable methods at java.lang.reflect.Constructor.newInstance(Unknown Source) at java.lang.reflect.Constructor.newInstance(Unknown Source) at org.eclipse.ant.internal.launching.remote.EclipseDefaultExecutor.executeTargets(EclipseDefaultExecutor.java:36) at org.eclipse.ant.internal.launching.remote.InternalAntRunner.run(InternalAntRunner.java:460) at org.eclipse.ant.internal.launching.remote.InternalAntRunner.main(InternalAntRunner.java:142)
+</error>
+
+      </testcase>
+	  <testcase classname="junit.TestRun" name="BrokenToNotRun2" time="0.008">
+	  <error message="No runnable methods" type="java.lang.Exception">
+java.lang.Exception: No runnable methods at java.lang.reflect.Constructor.newInstance(Unknown Source) at java.lang.reflect.Constructor.newInstance(Unknown Source) at org.eclipse.ant.internal.launching.remote.EclipseDefaultExecutor.executeTargets(EclipseDefaultExecutor.java:36) at org.eclipse.ant.internal.launching.remote.InternalAntRunner.run(InternalAntRunner.java:460) at org.eclipse.ant.internal.launching.remote.InternalAntRunner.main(InternalAntRunner.java:142)
+</error>
+
+      </testcase>
+	  <testcase classname="junit.TestRun" name="PassToPass" time="0.008">
+
+      </testcase>
+	  <testcase classname="junit.TestRun" name="BrokenToBroken" time="0.008">
+	  <error message="No runnable methods" type="java.lang.Exception">
+java.lang.Exception: No runnable methods at java.lang.reflect.Constructor.newInstance(Unknown Source) at java.lang.reflect.Constructor.newInstance(Unknown Source) at org.eclipse.ant.internal.launching.remote.EclipseDefaultExecutor.executeTargets(EclipseDefaultExecutor.java:36) at org.eclipse.ant.internal.launching.remote.InternalAntRunner.run(InternalAntRunner.java:460) at org.eclipse.ant.internal.launching.remote.InternalAntRunner.main(InternalAntRunner.java:142)
+</error>
+
+      </testcase>
+	  <testcase classname="junit.TestRun" name="NotRunToNotRun" time="0.008">
+	  <skipped/>
+
+      </testcase>
+	  <testcase classname="junit.TestRun" name="FailToFail" time="0.008">
+	  <failure message="expected:2 but was:3" type="junit.framework.AssertionFailedError">
+junit.framework.AssertionFailedError: expected:2 but was:3 at sample.junit.CalculateTest.failingTest2(Unknown Source) at org.eclipse.ant.internal.launching.remote.EclipseDefaultExecutor.executeTargets(EclipseDefaultExecutor.java:36) at org.eclipse.ant.internal.launching.remote.InternalAntRunner.run(InternalAntRunner.java:460) at org.eclipse.ant.internal.launching.remote.InternalAntRunner.main(InternalAntRunner.java:142)
+</failure>
+
+      </testcase>
+	  
+
+      <system-out><![CDATA[]]></system-out>
+
+      <system-err><![CDATA[]]></system-err>
+
+  </testsuite>
+</testsuites>

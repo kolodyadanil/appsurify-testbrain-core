@@ -1,0 +1,12 @@
+#!/bin/bash
+
+set -o errexit
+set -o nounset
+
+# until timeout 10 celery -A system inspect ping; do
+#     >&2 echo "Waiting for Celery Workers to become available..."
+# done
+
+# >&2 echo 'Celery Workers is available'
+
+/usr/local/bin/flower -A system

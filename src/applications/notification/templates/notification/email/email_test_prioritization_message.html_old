@@ -1,0 +1,84 @@
+{% if period %}
+<h1>Appsurify TestBrain {{ period }} Test Prioritization Report for {{ project_name }}</h1>
+{% endif %}
+
+
+<p>
+Savings by only running the high priority tests on each commit: {{ total_tests_info.percentage_high_tests }}
+</p>
+
+<p>
+Savings by only running the medium priority tests on each commit: {{ total_tests_info.percentage_medium_tests }}
+</p>
+
+<p>
+Defects missed by only running prioritized tests:{{ total_tests_info.number_low_defects }}
+</p>
+
+<h3>Commit Test Runs</h3>
+<table>
+    <tr>
+        <th>Priority</th>
+        <th>Number Tests</th>
+        <th>Percentage Tests</th>
+        <th>Defects Found Percent</th>
+    </tr>
+    <tr>
+        <td>High</td>
+        <td>{{ total_tests_info.number_high_tests }}</td>
+        <td>{{ total_tests_info.percentage_high_tests }}</td>
+        <td>{{ total_tests_info.percentage_high_defects }}</td>
+    </tr>
+    <tr>
+        <td>Medium</td>
+        <td>{{ total_tests_info.number_medium_tests }}</td>
+        <td>{{ total_tests_info.percentage_medium_tests }}</td>
+        <td>{{ total_tests_info.percentage_medium_defects }}</td>
+    </tr>
+    <tr>
+        <td>Low</td>
+        <td>{{ total_tests_info.number_low_tests }}</td>
+        <td>{{ total_tests_info.percentage_low_tests }}</td>
+        <td>{{ total_tests_info.percentage_low_defects }}</td>
+    </tr>
+    <tr>
+        <td>Unassigned</td>
+        <td>{{ total_tests_info.number_unassigned_tests }}</td>
+        <td>{{ total_tests_info.percentage_unassigned_tests }}</td>
+        <td>{{ total_tests_info.percentage_unassigned_defects }}</td>
+    </tr>
+</table>
+
+<h3>Test Run Details</h3>
+<table>
+    <tr>
+        <th>Priority</th>
+        <th>Number Tests</th>
+        <th>Percentage Tests</th>
+        <th>Defects Found Percent</th>
+    </tr>
+    <tr>
+        <td>High</td>
+        <td>{{ runned_tests_info.number_high_tests }}</td>
+        <td>{{ runned_tests_info.percentage_high_tests }}</td>
+        <td>{{ runned_tests_info.percentage_high_defects }}</td>
+    </tr>
+    <tr>
+        <td>Medium</td>
+        <td>{{ runned_tests_info.number_medium_tests }}</td>
+        <td>{{ runned_tests_info.percentage_medium_tests }}</td>
+        <td>{{ runned_tests_info.percentage_medium_defects }}</td>
+    </tr>
+    <tr>
+        <td>Low</td>
+        <td>{{ runned_tests_info.number_low_tests }}</td>
+        <td>{{ runned_tests_info.percentage_low_tests }}</td>
+        <td>{{ runned_tests_info.percentage_low_defects }}</td>
+    </tr>
+    <tr>
+        <td>Unassigned</td>
+        <td>{{ runned_tests_info.number_unassigned_tests }}</td>
+        <td>{{ runned_tests_info.percentage_unassigned_tests }}</td>
+        <td>{{ runned_tests_info.percentage_unassigned_defects }}</td>
+    </tr>
+</table>

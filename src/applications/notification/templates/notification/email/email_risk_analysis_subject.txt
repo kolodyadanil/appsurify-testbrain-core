@@ -1,0 +1,3 @@
+{% if period %}
+{% if period == 'immediately' %}TestBrain Risk Analysis Alert{% else %}TestBrain {{ period }} commit risk analysis report{% endif %}
+{% endif %}

@@ -1,0 +1,111 @@
+version: '3.7'
+
+volumes:
+  data_storage: {}
+  data_postgres: {}
+  data_postgres_backups: {}
+  data_rabbitmq: {}
+  data_redis: {}
+
+x-testbrain-docker: &testbrian
+  build:
+    context: .
+    dockerfile: ./compose/testbrain/core/Dockerfile
+  image: appsurifyinc/testbrain-core:1.5.4
+  depends_on:
+    - postgres
+    - rabbitmq
+    - redis
+  env_file:
+    - ./docker-compose.env
+  volumes:
+    # - ./src:/opt/app/python
+    - data_storage:/opt/app/storage
+
+services:
+
+  api:
+    <<: *testbrian
+    container_name: testbrain_api
+    command: /start-api
+    ports:
+      - 9000:9000
+
+  worker:
+    <<: *testbrian
+    command: /start-worker
+    depends_on:
+      - backend
+      - postgres
+      - rabbitmq
+      - redis
+
+  beat:
+    <<: *testbrian
+    container_name: testbrain_beat
+    command: /start-beat
+    depends_on:
+      - backend
+      - postgres
+      - rabbitmq
+      - redis
+
+  flower:
+    <<: *testbrian
+    container_name: testbrain_flower
+    command: /start-flower
+    ports:
+      - 5555:5555
+    depends_on:
+      - backend
+      - postgres
+      - rabbitmq
+      - redis
+
+  events:
+    <<: *testbrian
+    container_name: testbrain_events
+    command: /start-events
+    depends_on:
+      - backend
+      - postgres
+      - rabbitmq
+      - redis
+
+  postgres:
+    build:
+      context: .
+      dockerfile: ./compose/postgres/Dockerfile
+    image: appsurifyinc/testbrain-postgres:1.5.4
+    container_name: testbrain_postgres
+    volumes:
+      - data_postgres:/var/lib/postgresql/data:Z
+      - data_postgres_backups:/backups:z
+    ports:
+      - 5432:5432
+    env_file:
+      - ./docker-compose.env
+
+  rabbitmq:
+    build:
+      context: .
+      dockerfile: ./compose/rabbitmq/Dockerfile
+    image: appsurifyinc/testbrain-rabbitmq:1.5.4
+    container_name: testbrain_rabbitmq
+    volumes:
+      - data_rabbitmq:/var/lib/rabbitmq:Z
+    ports:
+      - 5672:5672
+      - 15672:15672
+    env_file:
+      - ./docker-compose.env
+
+  redis:
+    image: redis:6.2.5-alpine
+    container_name: testbrain_redis
+    volumes:
+      - data_redis:/data:Z
+    ports:
+      - 6379:6379
+    env_file:
+      - ./docker-compose.env

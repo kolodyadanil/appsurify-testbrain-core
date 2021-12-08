@@ -1,0 +1,31 @@
+{% load parse_iso %}
+{% if period %}
+{% if period == 'immediately' %}<h1>Appsurify TestBrain Commit Alert</h1>
+<p>The following commits match the specified email alert.</p>
+{% else %}<h1>Appsurify TestBrain {{ period }} Commit Notification</h1>
+<p>The following commits match the specified email alert.</p>>{% endif %}
+{% endif %}
+<p>A commit matching the following criteria has caused this email to be sent.</p>
+{% for trigger in triggers %}
+<p>
+<div>Criteria: </div>
+{% if trigger.alert == 'alert_areas' %} <div>More than {{ trigger.value }} areas changed</div>
+{% elif trigger.alert == 'alert_committer' %} <div>Committer hasn't changed this code before</div>
+{% elif trigger.alert == 'alert_lines' %} <div>More than {{ trigger.value }} lines of code</div>
+{% elif trigger.alert == 'alert_files' %} <div>More than {{ trigger.value }} files changed</div>
+{% elif trigger.alert == 'alert_authors' %} <div>Commit was made by {{ trigger.value }} </div>
+{% elif trigger.alert == 'alert_commit_time_frame' %} <div>Commit was made during this time frame {{ trigger.value.start_datetime|parse_iso|date:'h:i a' }} {{ trigger.value.end_datetime|parse_iso|date:'h:i a' }} UTC</div>
+{% elif trigger.alert == 'alert_commit_weekday' %} <div>Commit was made on: {% for weekday in trigger.value %}{% if weekday == 1 %}sunday {% elif weekday == 2 %}monday {% elif weekday == 3 %}tuesday {% elif weekday == 4 %}wednesday {% elif weekday == 5 %}thursday {% elif weekday == 6 %}friday {% elif weekday == 7 %}saturday {% endif %}{% endfor %}</div>
+{% elif trigger.alert == 'alert_commit_changed_code' %} <div>Commit changed code older than {{ trigger.value }} months</div>
+{% endif %}
+<br>
+{% for commit in trigger.commits %}
+<div>Commit: {{ commit.sha }}</div>
+<div>Author: {{ commit.author.name }}</div>
+<div>Date: {{ commit.created|date:'d M, Y, h:i a' }} UTC</div>
+<div>Area(s): {% for area in commit.areas.all %} {{ area.name }} {% endfor %}</div>
+<div>File(s): {% for file in commit.files.all %} {{ file.full_filename }} {% endfor %}</div>
+<br>
+{% endfor %}
+</p>
+{% endfor %}

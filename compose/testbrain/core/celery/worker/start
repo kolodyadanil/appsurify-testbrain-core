@@ -1,0 +1,10 @@
+#!/bin/bash
+
+set -o errexit
+set -o nounset
+
+/usr/local/bin/celery worker -E -A system \
+--hostname=%h \
+--statedb=/opt/app/worker-%h.state \
+--pidfile=/opt/app/pids/celery-worker-%h.pid \
+--loglevel=INFO

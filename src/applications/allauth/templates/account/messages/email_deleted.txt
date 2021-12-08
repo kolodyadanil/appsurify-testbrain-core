@@ -1,0 +1,2 @@
+{% load i18n %}
+Removed e-mail address {{email}}.
