@@ -1,0 +1,1 @@
+celery_locked_task

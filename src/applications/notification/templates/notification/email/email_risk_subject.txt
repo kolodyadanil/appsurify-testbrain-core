@@ -1,0 +1,3 @@
+{% if period %}
+{% if period == 'immediately' %}TestBrain High-Risk Commit Alert{% else %}TestBrain {{ period }} commit report{% endif %}
+{% endif %}

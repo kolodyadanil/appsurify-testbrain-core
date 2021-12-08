@@ -1,0 +1,11 @@
+{{ inviter.username|capfirst }} ({{ inviter.email }}) invited you to join Appsurify! Welcome to the crew!
+
+Appsurify is a software intelligence app that helps you never miss a release date again.
+We analyze your commit history and test results in order to help your team target their testing, create reliable test automation, reduce defects and increase team throughput.
+
+All you have to do is finish setting up your account to join your team. {{ activate_url }}
+
+Your username is {{ user.username }}
+
+Cheers,
+Your friends at Appsurify

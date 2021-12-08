@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
+from system.env import env
 
-from .base import env, BASE_DIR
 
+# LOGGING
+# ------------------------------------------------------------------------------
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,

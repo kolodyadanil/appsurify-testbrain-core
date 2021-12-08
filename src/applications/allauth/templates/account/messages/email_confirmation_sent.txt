@@ -1,0 +1,2 @@
+{% load i18n %}
+Confirmation e-mail sent to {{email}}.

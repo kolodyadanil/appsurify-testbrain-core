@@ -1,0 +1,3 @@
+{% if period %}
+{% if period == 'immediately' %}TestBrain Defect Alert{% else %}TestBrain {{ period }} Defect Summary{% endif %}
+{% endif %}

@@ -1,0 +1,22 @@
+{% if period %}
+{% if period == 'immediately' %}<h1>Appsurify TestBrain Test Run Notice</h1>
+    <p>You have requested for all test runs. The following test run was just completed:</p>
+{% else %}<h1>Appsurify TestBrain {{ period }} Testing Summary</h1>
+    <p>The following is a summary of all test runs {{ period }}:</p>>{% endif %}
+{% endif %}
+
+<p>
+{% for test_run in test_runs %}
+    <div>Project Name: {{ test_run.project_name }}</div>
+    <div>Test Run Name: {{ test_run.name }}</div>
+    <div>Test Run Url: {{ test_run_url }}{{ test_run.id }}</div>
+
+    <div style="padding-left: 40px;">Number of New Defects: {{ test_run.created_defects__count }}</div>
+    <div style="padding-left: 40px;">Number of Reopened Defects: {{ test_run.reopened_defects__count }}</div>
+    <div style="padding-left: 40px;">Number of Flaky Tests: {{ test_run.founded_defects__flaky_failure__count }}</div>
+    <div style="padding-left: 40px;">Number of Passing Tests: {{ test_run.passed_tests__count }}</div>
+    <div style="padding-left: 40px;">Number of Failing Tests: {{ test_run.failed_tests__count }}</div>
+    <div style="padding-left: 40px;">Number of Broken Tests: {{ test_run.broken_tests__count }}</div>
+    </br>
+{% endfor %}
+</p>

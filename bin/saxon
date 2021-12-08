@@ -1,0 +1,3 @@
+#!/bin/bash
+
+exec java -jar "/opt/app/bin/saxon-he/saxon-he-10.3.jar" "$@"

@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
+from system.env import env
 
-from .base import env, BASE_DIR
-from kombu import Exchange, Queue
+from kombu import Queue, Exchange
 
-CELERY_TIMEZONE = "UTC"
 
+# CELERY
+# ------------------------------------------------------------------------------
 CELERY_BROKER_URL = env.str("BROKER_URL", default="amqp://guest:guest@localhost:5672//")
 CELERY_RESULT_BACKEND = env.str("REDIS_URL", default="redis://localhost:6379/0")
-
+CELERY_TIMEZONE = "UTC"
 CELERY_BROKER_TRANSPORT_OPTIONS = {
     "visibility_timeout": 1800,
     "priority_steps": list(range(11)),
@@ -28,7 +29,7 @@ CELERY_TASK_DEFAULT_EXCHANGE = "default"
 CELERY_TASK_DEFAULT_EXCHANGE_TYPE = "direct"
 CELERY_TASK_DEFAULT_ROUTING_KEY = "default"
 
-CELERY_TASK_QUEUE_MAX_PRIORITY = 10
+CELERY_TASK_QUEUE_MAX_PRIORITY = 100
 CELERY_TASK_DEFAULT_PRIORITY = 0
 
 CELERY_TASK_QUEUES = (
@@ -39,31 +40,32 @@ CELERY_TASK_QUEUES = (
 
 )
 
-# CELERY_TASK_ROUTES = {
-#     '*': {'queue': 'default'},
-#     'applications.*': {'queue': 'normal', 'priority': 5},
-#
-#     'applications.integration.tasks.clone_repository_task': {'queue': 'high', 'priority': 10},
-#
-#     'applications.integration.tasks.fetch_repository_task': {'queue': 'high', 'priority': 8},
-#     'applications.integration.tasks.processing_commits_task': {'queue': 'high', 'priority': 8},
-#
-#     'applications.integration.tasks.processing_files_task': {'queue': 'normal', 'priority': 6},
-#     'applications.integration.tasks.processing_rework_task': {'queue': 'normal', 'priority': 4},
-#     'applications.integration.tasks.processing_defects_task': {'queue': 'normal', 'priority': 4},
-#
-#     'applications.integration.tasks.analyze_fast_model_task': {'queue': 'normal', 'priority': 3},
-#     'applications.integration.tasks.analyze_output_task': {'queue': 'normal', 'priority': 3},
-#
-#     'applications.testing.tasks.add_caused_by_commits_task': {'queue': 'low', 'priority': 2},
-#     'applications.testing.tasks.add_closed_by_commits_task': {'queue': 'low', 'priority': 2},
-#
-#     'applications.integration.tasks.analyze_slow_models_task': {'queue': 'low', 'priority': 1},
-#
-#     'applications.testing.tasks.build_test_prioritization_ml_models': {'queue': 'low', 'priority': 4},
-#     'applications.testing.tasks.build_test_prioritization_ml_model_for_test_suite': {'queue': 'low', 'priority': 4},
-#
-# }
+CELERY_TASK_ROUTES = {
+    '*': {'queue': 'default'},
+
+    'applications.*': {'queue': 'normal', 'priority': 5},
+
+    'applications.integration.tasks.clone_repository_task': {'queue': 'high', 'priority': 100},
+
+    'applications.integration.tasks.fetch_repository_task': {'queue': 'high', 'priority': 80},
+    'applications.integration.tasks.processing_commits_task': {'queue': 'high', 'priority': 80},
+
+    'applications.integration.tasks.processing_files_task': {'queue': 'normal', 'priority': 60},
+    'applications.integration.tasks.processing_rework_task': {'queue': 'normal', 'priority': 40},
+    'applications.integration.tasks.processing_defects_task': {'queue': 'normal', 'priority': 40},
+
+    'applications.integration.tasks.analyze_fast_model_task': {'queue': 'normal', 'priority': 30},
+    'applications.integration.tasks.analyze_output_task': {'queue': 'normal', 'priority': 30},
+
+    'applications.testing.tasks.add_caused_by_commits_task': {'queue': 'low', 'priority': 20},
+    'applications.testing.tasks.add_closed_by_commits_task': {'queue': 'low', 'priority': 20},
+
+    'applications.integration.tasks.analyze_slow_models_task': {'queue': 'low', 'priority': 10},
+
+    'applications.testing.tasks.build_test_prioritization_ml_models': {'queue': 'low', 'priority': 40},
+    'applications.testing.tasks.build_test_prioritization_ml_model_for_test_suite': {'queue': 'low', 'priority': 40},
+
+}
 
 CELERY_TASK_ACKS_LATE = True
 CELERY_TASK_ACKS_ON_FAILURE_OR_TIMEOUT = True
@@ -94,6 +96,6 @@ CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_BEAT_SCHEDULE = {
     "create_ml_models_for_tests_prioritization": {
         "task": "applications.testing.tasks.build_test_prioritization_ml_models",
-        "schedule": 60 * 60 * 2,  # Start task every 2 hours
+        "schedule": 60 * 60 * 6,  # Start task every 2 hours
     },
 }
