@@ -170,13 +170,34 @@ class FileLock(object):
         self.timeout = timeout
         self.delay = delay
 
+    def decode(self, n):
+        return n.decode('UTF-8')
+
     def check_process_running(self):
-        abs_path = os.path.abspath("hook.py")
-        cmd = [f'pgrep', '-af', abs_path]
+        pid_file_path = "/var/run/ssh_v2_hook.pid"
+        if not os.path.exists(pid_file_path):
+            os.mknod(pid_file_path)
+        
+        # Read the pid value
+        f = open(pid_file_path, "r")
+        saved_process = f.read().strip()
+        f.close()
+
+        # Find all running process
+        cmd = [f'ps', '-A', '-o', 'pid']
         process = subprocess.Popen(cmd, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         my_pid, err = process.communicate()
-        if len(my_pid.splitlines()) > 0:
+        list_pid = list()
+        for x in my_pid.splitlines():
+            x = self.decode(x)
+            list_pid.append(x.strip())
+        if saved_process in list_pid:
             return True
+        
+        # If process is not running, overwrite current pid and continue
+        pidfile = open(pid_file_path, 'w')
+        pidfile.write(str(os.getpid()))
+        pidfile.close()
         return False
 
     def acquire(self):
