@@ -188,7 +188,7 @@ class FileLock(object):
         """
         start_time = time.time()
         while True:
-            if self.check_process_running == False:
+            if self.check_process_running() == False:
                 break            
             if self.timeout is None:
                 raise FileLockException("Could not acquire lock on {}".format(self.file_name))
