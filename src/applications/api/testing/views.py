@@ -29,7 +29,7 @@ class StepModelViewSet(viewsets.ModelViewSet):
     queryset = Step.objects.all()
 
     serializer_class = StepSerializer
-    # filter_class = StepFilterSet
+    filter_class = StepFilterSet
 
     ordering_fields = ()
     search_fields = ('^name',)
@@ -75,7 +75,7 @@ class TestModelViewSet(viewsets.ModelViewSet):
     model = Test
     queryset = Test.objects.select_related('project')
     serializer_class = TestSerializer
-    # filter_class = TestFilterSet
+    filter_class = TestFilterSet
 
     ordering_fields = ('name',)
     search_fields = ()
@@ -140,7 +140,7 @@ class TestTypeModelViewSet(viewsets.ModelViewSet):
     model = TestType
     queryset = TestType.objects.all()
     serializer_class = TestTypeSerializer
-    # filter_class = TestTypeFilterSet
+    filter_class = TestTypeFilterSet
 
     ordering_fields = ()
     search_fields = ('^name',)
@@ -183,7 +183,7 @@ class TestSuiteModelViewSet(viewsets.ModelViewSet):
     model = TestSuite
     queryset = TestSuite.objects.select_related('project')
     serializer_class = TestSuiteSerializer
-    # filter_class = TestSuiteFilterSet
+    filter_class = TestSuiteFilterSet
 
     search_fields = ()
     ordering_fields = ()
@@ -227,7 +227,7 @@ class TestRunModelViewSet(viewsets.ModelViewSet):
 
     queryset = TestRun.objects.all()
     serializer_class = TestRunSerializer
-    # filter_class = TestRunFilterSet
+    filter_class = TestRunFilterSet
 
     search_fields = ()
     ordering_fields = ('id', 'name', 'start_date',)
@@ -273,7 +273,7 @@ class TestRunResultModelViewSet(viewsets.ModelViewSet):
 
     ordering_fields = ()
     search_fields = ()
-    # filter_class = TestRunResultFilterSet
+    filter_class = TestRunResultFilterSet
     filter_fields = ()
 
     lookup_field = 'pk'
@@ -332,7 +332,7 @@ class DefectModelViewSet(viewsets.ModelViewSet):
     model = Defect
     serializer_class = DefectSerializer
     queryset = Defect.objects.all()
-    # filter_class = DefectFilterSet
+    filter_class = DefectFilterSet
 
     search_fields = ('name',)
     ordering_fields = ()

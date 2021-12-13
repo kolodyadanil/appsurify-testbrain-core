@@ -29,7 +29,7 @@ class NotificationModelViewSet(viewsets.ModelViewSet):
     serializer_class = NotificationSerializer
     queryset = Notification.objects.all()
 
-    # filter_class = NotificationFilterSet
+    filter_class = NotificationFilterSet
 
     search_fields = ("project", )
     ordering_fields = ()

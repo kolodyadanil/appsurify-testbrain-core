@@ -120,11 +120,11 @@ class Bugspots(object):
 
             commit_date, filenames = int(time.mktime(data[0].timetuple())), set(data[1:])
 
-            for filename in itertools.ifilter(lambda s: s in head_filenames, filenames):
+            for filename in filter(lambda s: s in head_filenames, filenames):
                 files[filename].append(int(commit_date))
                 # print 'COMMIT: {} \t{}'.format(commit_date, filename)
 
-        self._get_files_cache = [File(name=k, commit_dates=v) for k, v in files.iteritems()]
+        self._get_files_cache = [File(name=k, commit_dates=v) for k, v in files.items()]
         return self._get_files_cache
 
     def _get_score(self, f, repo_start, repo_age):

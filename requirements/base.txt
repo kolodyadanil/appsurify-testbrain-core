@@ -41,7 +41,7 @@ django-grappelli
 django-extensions
 djangorestframework-recursive
 rest-framework-generic-relations
-djangorestframework-filters
+djangorestframework-filters==1.0.0.dev2
 six
 lxml
 jira

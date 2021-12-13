@@ -64,7 +64,7 @@ class AreaModelViewSet(viewsets.ModelViewSet):
     model = Area
     queryset = Area.objects.all()
     serializer_class = AreaSerializer
-    # filter_class = AreaFilterSet
+    filter_class = AreaFilterSet
 
     search_fields = ()
     ordering_fields = ('name', )
@@ -250,7 +250,7 @@ class BranchModelViewSet(viewsets.ModelViewSet):
     serializer_class = BranchSerializer
     queryset = Branch.objects.all()
 
-    # filter_class = BranchFilterSet
+    filter_class = BranchFilterSet
 
     search_fields = ()
     ordering_fields = ()
@@ -294,7 +294,7 @@ class CommitModelViewSet(viewsets.ModelViewSet):
     serializer_class = CommitSerializer
     queryset = Commit.objects.all()
 
-    # filter_class = CommitFilterSet
+    filter_class = CommitFilterSet
 
     search_fields = ()
     ordering_fields = ('timestamp',)
@@ -348,7 +348,7 @@ class TagModelViewSet(viewsets.ModelViewSet):
     serializer_class = TagSerializer
     queryset = Tag.objects.all()
 
-    # filter_class = TagFilterSet
+    filter_class = TagFilterSet
 
     search_fields = ()
     ordering_fields = ()
@@ -396,7 +396,7 @@ class FileModelViewSet(viewsets.ModelViewSet):
     ordering_fields = ()
     search_fields = ()
 
-    # filter_class = FileFilterSet
+    filter_class = FileFilterSet
     filter_fields = ('project', 'area',)
 
     lookup_field = 'pk'
