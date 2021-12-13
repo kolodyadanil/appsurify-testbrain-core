@@ -13,6 +13,7 @@ from applications.vcs.models import *
 
 
 class ListFilter(Filter):
+
     def filter(self, qs, value):
         value_list = [x.lstrip().rstrip() for x in value.split(u',')]
         return super(ListFilter, self).filter(qs, Lookup(value_list, 'in'))
@@ -34,7 +35,7 @@ class AreaReportFilterSet(FilterSet):
 
 class FileReportFilterSet(FilterSet):
 
-    area = NumberFilter(name='area', method='filter_is_associated')
+    area = NumberFilter(label='area', method='filter_is_associated')
 
     class Meta(object):
         model = File
@@ -50,7 +51,7 @@ class FileReportFilterSet(FilterSet):
 
 class CommitReportFilterSet(FilterSet):
 
-    area = NumberFilter(name='areas__id', method='filter_area')
+    area = NumberFilter(label='areas__id', method='filter_area')
 
     class Meta(object):
         model = Commit
@@ -78,9 +79,9 @@ class TestSuiteReportFilterSet(FilterSet):
 
 class TestRunReportFilterSet(FilterSet):
 
-    type = NumberFilter(name='test_run_type')
-    status = NumberFilter(name='test_run_status')
-    is_local = BooleanFilter(name='test_run_is_local')
+    type = NumberFilter(label='test_run_type')
+    status = NumberFilter(label='test_run_status')
+    is_local = BooleanFilter(label='test_run_is_local')
 
     class Meta(object):
         model = TestRunResult
@@ -88,12 +89,12 @@ class TestRunReportFilterSet(FilterSet):
 
 
 class TestReportFilterSet(FilterSet):
-    project = NumberFilter(name='project__id')
-    area = NumberFilter(name='area__id')
-    test_suite = NumberFilter(name='test_suites__id')
-    test_run = NumberFilter(name='test_runs__id')
-    # test_run = NumberFilter(name='test_runs__id')
-    # is_local = BooleanFilter(name='test_runs__is_local')
+    project = NumberFilter(label='project__id')
+    area = NumberFilter(label='area__id')
+    test_suite = NumberFilter(label='test_suites__id')
+    test_run = NumberFilter(label='test_runs__id')
+    # test_run = NumberFilter(label='test_runs__id')
+    # is_local = BooleanFilter(label='test_runs__is_local')
 
     class Meta(object):
         model = Test
@@ -109,7 +110,7 @@ class TestRunResultReportFilterSet(FilterSet):
 
 class DefectReportFilterSet(FilterSet):
 
-    test_run = NumberFilter(name='found_test_runs__id')
+    test_run = NumberFilter(label='found_test_runs__id')
 
     class Meta(object):
         model = Defect

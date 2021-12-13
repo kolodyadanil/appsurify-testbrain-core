@@ -69,7 +69,7 @@ class ProjectModelViewSet(viewsets.ModelViewSet):
 
     serializer_class = ProjectSerializer
 
-    # filter_class = ProjectFilterSet
+    filter_class = ProjectFilterSet
     queryset = Project.objects.all()
 
     permission_classes = (permissions.IsAuthenticated, IsAdminOrganizationOrReadOnly or IsOwnerOrReadOnly,)

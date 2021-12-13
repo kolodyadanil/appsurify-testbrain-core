@@ -58,7 +58,7 @@ class ProjectReportModelViewSet(MultiSerializerViewSetMixin, mixins.RetrieveMode
         'graph_add_commits': ProjectAddCommitGraphSerializer,
     }
 
-    # filter_class = ProjectReportFilterSet
+    filter_class = ProjectReportFilterSet
     filter_action_classes = {}
 
     permission_classes = (permissions.IsAuthenticated, IsOwnerOrReadOnly,)
@@ -132,9 +132,9 @@ class AreaReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
         'list': AreaReportSerializer,
     }
 
-    # filter_class = AreaReportFilterSet
+    filter_class = AreaReportFilterSet
     filter_action_classes = {
-        # 'list': AreaReportFilterSet,
+        'list': AreaReportFilterSet,
     }
 
     search_fields = ()
@@ -1122,7 +1122,7 @@ class FileReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
     ordering_fields = ()
     search_fields = ()
 
-    # filter_class = FileReportFilterSet
+    filter_class = FileReportFilterSet
     filter_fields = ('project', 'area',)
 
     lookup_field = 'pk'
@@ -1351,9 +1351,9 @@ class TestTypeReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyM
         'list': TestTypeReportSerializer,
     }
 
-    # filter_class = TestTypeReportFilterSet
+    filter_class = TestTypeReportFilterSet
     filter_action_classes = {
-        # 'list': TestTypeReportFilterSet,
+        'list': TestTypeReportFilterSet,
     }
 
     search_fields = ('^test_type_name',)
@@ -1499,9 +1499,9 @@ class TestSuiteReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnly
         'list': TestSuiteReportSerializer,
     }
 
-    # filter_class = TestSuiteReportFilterSet
+    filter_class = TestSuiteReportFilterSet
     filter_action_classes = {
-        # 'list': TestSuiteReportFilterSet,
+        'list': TestSuiteReportFilterSet,
     }
 
     ordering_fields = ()
@@ -1640,11 +1640,11 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
         'retrieve': TestRunDetailReportSerializer
     }
 
-    # filter_class = TestRunReportFilterSet
-    filter_action_classes = {
-        # 'list': TestRunReportFilterSet,
-        # 'retrieve': None
-    }
+    filter_class = TestRunReportFilterSet
+    # filter_action_classes = {
+    #     'list': TestRunReportFilterSet,
+    #     'retrieve': None
+    # }
 
     search_fields = ()
     ordering_fields = ('id', 'start_date', 'end_date',)
@@ -1841,7 +1841,7 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
 
     }
 
-    # filter_class = TestReportFilterSet
+    filter_class = TestReportFilterSet
     filter_action_classes = {}
 
     search_fields = ()
@@ -2487,7 +2487,7 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
         project_id = self.request.query_params.get('project')
         if not project_id:
             raise ValidationError({'detail': "Argument 'project' not specified"})
-        elif isinstance(project_id, (str, unicode)) and not re.match(r'^\d*$', project_id):
+        elif isinstance(project_id, str) and not re.match(r'^\d*$', project_id):
             raise ValidationError({'detail': "Argument 'project' should be integer"})
         try:
             project = Project.objects.get(id=project_id)
@@ -2500,7 +2500,7 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
             commit_arg = self.request.query_params.get(arg)
 
             if commit_arg:
-                if isinstance(commit_arg, (str, unicode)) and not re.match(r'^\d*$', commit_arg):
+                if isinstance(commit_arg, str) and not re.match(r'^\d*$', commit_arg):
                     raise ValidationError({'detail': "Argument '{0}' should be integer".format(arg)})
                 try:
                     commit_arg = Commit.objects.get(project=project, id=commit_arg)
@@ -2511,11 +2511,11 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
                     else:
                         raise APIException('Unknown argument type')
                 except Commit.DoesNotExist:
-                    raise ValidationError({'detail': "Commit from '{0}' not found".format(arg)})
+                    raise ValidationError({'detail': "Commit from '{0}' not found".format(commit_arg)})
 
         target_branch_id = self.request.query_params.get('target_branch')
         if target_branch_id:
-            if isinstance(target_branch_id, (str, unicode)) and not re.match(r'^\d*$', target_branch_id):
+            if isinstance(target_branch_id, str) and not re.match(r'^\d*$', target_branch_id):
                 raise ValidationError({'detail': "Argument 'target_branch' should be integer"})
             try:
                 target_branch = Branch.objects.get(project=project, id=target_branch_id)
@@ -3035,7 +3035,7 @@ class TestRunResultReportModelViewSet(MultiSerializerViewSetMixin, viewsets.Read
     model = TestRunResult
     serializer_class = TestRunResultReportSerializer
     queryset = TestRunResult.objects.order_by('-created')
-    # filter_class = TestRunResultReportFilterSet
+    filter_class = TestRunResultReportFilterSet
 
     search_fields = ()
     ordering_fields = ()
@@ -3079,7 +3079,7 @@ class DefectReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMod
     serializer_class = DefectReportSerializer
     queryset = Defect.objects.all()
 
-    # filter_class = DefectReportFilterSet
+    filter_class = DefectReportFilterSet
 
     search_fields = ('name',)
     ordering_fields = ('id', 'name', 'status', 'priority', 'severity', 'found_date', 'owner', 'type')

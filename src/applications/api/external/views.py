@@ -52,8 +52,8 @@ class ExternalAPIViewSet(MultiSerializerViewSetMixin, viewsets.GenericViewSet):
         'output_test_run_view': OutputTestSuiteSerializer,
     }
 
-    # filter_class = None
-    # filter_action_classes = {}
+    filter_class = None
+    filter_action_classes = {}
     # ordering_fields = ()
     # search_fields = ()
     # filter_fields = ()

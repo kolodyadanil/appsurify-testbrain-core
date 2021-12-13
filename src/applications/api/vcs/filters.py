@@ -27,7 +27,7 @@ class AreaFilterSet(FilterSet):
         if isinstance(self.data, django.http.request.QueryDict):
             setattr(self.data, '_mutable', True)
 
-        if not self.data.has_key('show_default'):
+        if 'show_default' not in self.data:
             self.data['show_default'] = False
         else:
             if self.data['show_default'] == u'':
@@ -38,7 +38,7 @@ class AreaFilterSet(FilterSet):
 
     def filter_show_default(self, qs, name, value):
         if not value:
-            qs = qs.exclude(name='Default Area')
+            qs = qs.exclude(label='Default Area')
         return qs
 
     def filter_only_empty(self, qs, name, value):
@@ -77,7 +77,7 @@ class TagFilterSet(FilterSet):
 
 class FileFilterSet(FilterSet):
 
-    area = NumberFilter(name='area', method='filter_is_associated')
+    area = NumberFilter(label='area', method='filter_is_associated')
 
     class Meta(object):
         model = File
