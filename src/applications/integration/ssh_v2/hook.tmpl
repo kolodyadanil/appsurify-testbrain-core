@@ -170,36 +170,34 @@ class FileLock(object):
         self.timeout = timeout
         self.delay = delay
 
+    def check_process_running(self):
+        abs_path = os.path.abspath("hook.py")
+        cmd = [f'pgrep', '-af', abs_path]
+        process = subprocess.Popen(cmd, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        my_pid, err = process.communicate()
+        if len(my_pid.splitlines()) > 0:
+            return True
+        return False
+
     def acquire(self):
-        """ Acquire the lock, if possible. If the lock is in use, it check again
-            every `wait` seconds. It does this until it either gets the lock or
+        """ 
+            Check if this hook script is running. If the script is running, it check again
+            every `wait` seconds. It does this until it either the check retun False or
             exceeds `timeout` number of seconds, in which case it throws
             an exception.
         """
         start_time = time.time()
         while True:
-            try:
-                self.fd = os.open(self.lockfile, os.O_CREAT | os.O_EXCL | os.O_RDWR)
-                self.is_locked = True  # moved to ensure tag only when locked
-                break
-            except OSError as e:
-                if e.errno != errno.EEXIST:
-                    raise
-                if self.timeout is None:
-                    raise FileLockException("Could not acquire lock on {}".format(self.file_name))
-                if (time.time() - start_time) >= self.timeout:
-                    raise FileLockException("Timeout occured.")
-                time.sleep(self.delay)
+            if self.check_process_running == False:
+                break            
+            if self.timeout is None:
+                raise FileLockException("Could not acquire lock on {}".format(self.file_name))
+            if (time.time() - start_time) >= self.timeout:
+                raise FileLockException("Timeout occured.")
+            time.sleep(self.delay)
 
     def release(self):
-        """ Get rid of the lock by deleting the lockfile.
-            When working in a `with` statement, this gets automatically
-            called at the end.
-        """
-        if self.is_locked:
-            os.close(self.fd)
-            os.unlink(self.lockfile)
-            self.is_locked = False
+        pass
 
     def __enter__(self):
         """ Activated when used in the with statement.
