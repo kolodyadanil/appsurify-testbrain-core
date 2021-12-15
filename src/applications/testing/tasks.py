@@ -9,7 +9,7 @@ from hashlib import md5
 from contextlib import contextmanager
 
 from django.core.cache import cache
-from celery_locked_task.locked_task import LockedTask
+# from celery_locked_task.locked_task import LockedTask
 
 
 @app.task(bind=True)
@@ -50,8 +50,7 @@ def add_closed_by_commits_task(self, defect_id, commit_id, test_suite_id):
     defect.add_closed_by_commits(commit, test_suite)
 
 
-@app.task(bind=True, base=LockedTask, unique_on=['test_suite_id', ], lock_expires=60 * 60,
-          requeue_on_duplicate=False)
+@app.task(bind=True)
 def build_test_prioritization_ml_model_for_test_suite(self, test_suite_id):
     import pytz
     import datetime
@@ -67,7 +66,7 @@ def build_test_prioritization_ml_model_for_test_suite(self, test_suite_id):
         return e.message
 
 
-@app.task(bind=True, base=LockedTask, lock_expires=60 * 60, requeue_on_duplicate=False)
+@app.task(bind=True)
 def build_test_prioritization_ml_models(self):
     import pytz
     import datetime

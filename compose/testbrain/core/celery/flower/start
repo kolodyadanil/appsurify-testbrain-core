@@ -9,4 +9,5 @@ set -o nounset
 
 # >&2 echo 'Celery Workers is available'
 
-/usr/local/bin/flower -A system
+# /usr/local/bin/flower -A system
+/usr/local/bin/celery -A system flower

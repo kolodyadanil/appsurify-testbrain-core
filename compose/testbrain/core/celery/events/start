@@ -4,5 +4,5 @@ set -o errexit
 set -o nounset
 
 rm -f '/opt/app/pids/celery-events.pid'
-/usr/local/bin/celery events -A system --camera django_celery_monitor.camera.Camera --frequency=15.0 --loglevel=INFO \
+/usr/local/bin/celery -A system events --camera django_celery_monitor.camera.Camera --frequency=15.0 --loglevel=INFO \
 --pidfile /opt/app/pids/celery-events.pid

@@ -4,7 +4,7 @@ import os
 from celery import Celery
 
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "testbrain.settings")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "system.settings")
 
 app = Celery("testbrain")
 
@@ -18,4 +18,4 @@ def debug(self, a=1, r=2, g=3, timeout=15):
     print(f"{a}\tRequest: {self.request!r}")
     import time
     time.sleep(timeout)
-    return a
+    return {"a": a, "r": r, "g": g, "timeout": timeout}

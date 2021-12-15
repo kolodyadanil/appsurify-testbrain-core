@@ -4,7 +4,7 @@ from __future__ import absolute_import
 from system.celery_app import app
 from celery import group
 
-from celery_locked_task.locked_task import LockedTask
+# from celery_locked_task.locked_task import LockedTask
 
 from datetime import datetime, timedelta
 
@@ -150,8 +150,7 @@ def make_analytics_workflow(project_id, repository_id, model_name, data=None, si
     return workflow
 
 
-@app.task(bind=True, base=LockedTask, unique_on=['project_id', 'repository_id', 'model_name'], lock_expires=60 * 5,
-          rerun_on_duplicate=False, raise_on_duplicate=False)
+@app.task(bind=True)
 def clone_repository_task(self, project_id=None, repository_id=None, model_name=None, force=True):
     try:
         RepositoryModel = get_repository_model(model_name)
@@ -162,8 +161,7 @@ def clone_repository_task(self, project_id=None, repository_id=None, model_name=
         raise self.retry(exc=exc, countdown=5, max_retries=3)
 
 
-@app.task(bind=True, base=LockedTask, unique_on=['project_id', 'repository_id', 'model_name'], lock_expires=60 * 5,
-          rerun_on_duplicate=True)
+@app.task(bind=True)
 def fetch_repository_task(self, project_id=None, repository_id=None, model_name=None, data=None):
     try:
         RepositoryModel = get_repository_model(model_name)
@@ -181,8 +179,7 @@ def fetch_repository_task(self, project_id=None, repository_id=None, model_name=
         raise self.retry(exc=exc, countdown=5, max_retries=3)
 
 
-@app.task(bind=True, base=LockedTask, unique_on=['project_id', 'repository_id', 'model_name', 'since_time'],
-          lock_expires=60 * 10, rerun_on_duplicate=True)
+@app.task(bind=True)
 def processing_commits_task(self, project_id=None, repository_id=None, model_name=None, data=None, since_time=None):
 
     RepositoryModel = get_repository_model(model_name)
@@ -200,8 +197,7 @@ def processing_commits_task(self, project_id=None, repository_id=None, model_nam
     return {'project_id': project_id, 'repository_id': repository_id, 'model_name': model_name}
 
 
-@app.task(bind=True, base=LockedTask, unique_on=['project_id', 'repository_id', 'model_name'], lock_expires=60 * 10,
-          rerun_on_duplicate=True)
+@app.task(bind=True)
 def processing_files_task(self, project_id=None, repository_id=None, model_name=None, data=None, since_time=None):
     RepositoryModel = get_repository_model(model_name)
     repository = RepositoryModel.objects.get(id=repository_id)
@@ -219,8 +215,7 @@ def processing_files_task(self, project_id=None, repository_id=None, model_name=
     return {'project_id': project_id, 'repository_id': repository_id, 'model_name': model_name}
 
 
-@app.task(bind=True, base=LockedTask, unique_on=['project_id', 'repository_id', 'model_name'], lock_expires=60 * 10,
-          rerun_on_duplicate=True)
+@app.task(bind=True)
 def processing_rework_task(self, project_id=None, repository_id=None, model_name=None, data=None, since_time=None):
     RepositoryModel = get_repository_model(model_name)
     repository = RepositoryModel.objects.get(id=repository_id)
@@ -239,8 +234,7 @@ def processing_rework_task(self, project_id=None, repository_id=None, model_name
     return {'project_id': project_id, 'repository_id': repository_id, 'model_name': model_name}
 
 
-@app.task(bind=True, base=LockedTask, unique_on=['project_id', 'repository_id', 'model_name'], lock_expires=60 * 10,
-          rerun_on_duplicate=True)
+@app.task(bind=True)
 def processing_defects_task(self, project_id=None, repository_id=None, model_name=None, data=None, since_time=None):
     RepositoryModel = get_repository_model(model_name)
     repository = RepositoryModel.objects.get(id=repository_id)
@@ -274,22 +268,19 @@ def processing_defects_task(self, project_id=None, repository_id=None, model_nam
     return {'project_id': project_id, 'repository_id': repository_id, 'model_name': model_name}
 
 
-@app.task(bind=True, base=LockedTask, unique_on=['project_id', 'repository_id', 'model_name'], lock_expires=60 * 5,
-          rerun_on_duplicate=True)
+@app.task(bind=True)
 def analyze_fast_model_task(self, project_id=None, repository_id=None, model_name=None):
     result = fast_model_analyzer(project_id=project_id)
     return {'project_id': project_id, 'repository_id': repository_id, 'model_name': model_name}
 
 
-@app.task(bind=True, base=LockedTask, unique_on=['project_id', 'repository_id', 'model_name'], lock_expires=60 * 10,
-          rerun_on_duplicate=True)
+@app.task(bind=True)
 def analyze_slow_models_task(self, project_id=None, repository_id=None, model_name=None):
     result = slow_model_analyzer(project_id=project_id)
     return {'project_id': project_id, 'repository_id': repository_id, 'model_name': model_name}
 
 
-@app.task(bind=True, base=LockedTask, unique_on=['project_id', 'repository_id', 'model_name'], lock_expires=60 * 5,
-          rerun_on_duplicate=True)
+@app.task(bind=True)
 def analyze_output_task(self, project_id=None, repository_id=None, model_name=None):
     result = output_analyze(project_id=project_id)
     return {'project_id': project_id, 'repository_id': repository_id, 'model_name': model_name}
