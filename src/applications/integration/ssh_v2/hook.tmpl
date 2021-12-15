@@ -57,6 +57,7 @@ COMMIT_COUNT = 50
 
 DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), u'.testbrain.db')
 CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), u'.testbrain.cache')
+PID_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), u'.testbrain.pid')
 
 LOGGING_CONFIG = {
     'version': 1,
@@ -170,16 +171,12 @@ class FileLock(object):
         self.timeout = timeout
         self.delay = delay
 
-    def decode(self, n):
-        return n.decode('UTF-8')
-
     def check_process_running(self):
-        pid_file_path = "/var/run/ssh_v2_hook.pid"
-        if not os.path.exists(pid_file_path):
-            os.mknod(pid_file_path)
-        
+        if not os.path.exists(PID_FILE):
+            os.mknod(PID_FILE)
+
         # Read the pid value
-        f = open(pid_file_path, "r")
+        f = open(PID_FILE, "r")
         saved_process = f.read().strip()
         f.close()
 
@@ -189,13 +186,14 @@ class FileLock(object):
         my_pid, err = process.communicate()
         list_pid = list()
         for x in my_pid.splitlines():
-            x = self.decode(x)
+            if is_py3:
+                x = x.decode('UTF-8')
             list_pid.append(x.strip())
         if saved_process in list_pid:
             return True
-        
+
         # If process is not running, overwrite current pid and continue
-        pidfile = open(pid_file_path, 'w')
+        pidfile = open(PID_FILE, 'w')
         pidfile.write(str(os.getpid()))
         pidfile.close()
         return False
@@ -218,6 +216,10 @@ class FileLock(object):
             time.sleep(self.delay)
 
     def release(self):
+        """ Get rid of the lock by deleting the lockfile.
+            When working in a `with` statement, this gets automatically
+            called at the end.
+        """
         pass
 
     def __enter__(self):
@@ -633,10 +635,14 @@ def _set_last_commit_sha(key, val):
 # COMMUNICATION FUNCTIONS
 def execute(commandLine):
     process = subprocess.Popen(commandLine, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    out = process.stdout.read().strip()
-    out = filter(lambda x: x in string.printable, out)
-    error = process.stderr.read().strip()
-    error = filter(lambda x: x in string.printable, error)
+    if is_py3:
+        out = process.stdout.read().strip().decode("UTF-8")
+        error = process.stderr.read().strip().decode("UTF-8")
+    else:
+        out = process.stdout.read().strip()
+        out = filter(lambda x: x in string.printable, out)
+        error = process.stderr.read().strip()
+        error = filter(lambda x: x in string.printable, error)
     if error:
         process.kill()
         if DEBUG:
@@ -1422,7 +1428,10 @@ if __name__ == "__main__":
     current_script_name = os.path.basename(__file__)
 
     if "install" in sys.argv:
-        git_path = raw_input('Enter Full GIT path [{}]: '.format(os.path.join(os.getcwd(), '.git')))
+        if is_py3:
+            git_path = input('Enter Full GIT path [{}]: '.format(os.path.join(os.getcwd(), '.git')))
+        else:
+            git_path = raw_input('Enter Full GIT path [{}]: '.format(os.path.join(os.getcwd(), '.git')))
         if not git_path:
             git_path = os.path.join(os.getcwd(), '.git')
         result = performInstall(git_path)
