@@ -118,6 +118,7 @@ COMMAND_COMMIT_FILE_BLAME_FIX = u"git log --pretty=%H -1 {}^ -- {}"
 COMMAND_COMMIT_BRANCH = u"git branch --contains {}"
 COMMAND_COMMIT_REMOTES = u"git branch -r --contains {}"
 COMMAND_FILE_TREE = u"git diff --name-only {} {}"
+COMMAND_GET_ALL_PROCESS = u"ps -A -o pid"
 
 # PATTERNS
 RE_OCTAL_BYTE = re.compile(br"""\\\\([0-9]{3})""")
@@ -181,8 +182,7 @@ class FileLock(object):
         f.close()
 
         # Find all running process
-        cmd = [f'ps', '-A', '-o', 'pid']
-        process = subprocess.Popen(cmd, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        process = subprocess.Popen(COMMAND_GET_ALL_PROCESS, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         my_pid, err = process.communicate()
         list_pid = list()
         for x in my_pid.splitlines():
@@ -206,13 +206,12 @@ class FileLock(object):
             an exception.
         """
         start_time = time.time()
+        is_process_running = self.check_process_running()
         while True:
-            if self.check_process_running() == False:
-                break            
-            if self.timeout is None:
-                raise FileLockException("Could not acquire lock on {}".format(self.file_name))
-            if (time.time() - start_time) >= self.timeout:
-                raise FileLockException("Timeout occured.")
+            if is_process_running == False:
+                break
+            if self.timeout is None or (time.time() - start_time) >= self.timeout:
+                raise Exception("Timeout occured.")
             time.sleep(self.delay)
 
     def release(self):
