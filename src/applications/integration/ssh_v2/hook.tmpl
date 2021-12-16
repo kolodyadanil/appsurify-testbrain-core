@@ -174,7 +174,8 @@ class FileLock(object):
 
     def check_process_running(self):
         if not os.path.exists(PID_FILE):
-            os.mknod(PID_FILE)
+            # os.mknod(PID_FILE)  # TODO: OSError: [Errno 1] Operation not permitted
+            open(PID_FILE, 'w+').close()
 
         # Read the pid value
         f = open(PID_FILE, "r")
