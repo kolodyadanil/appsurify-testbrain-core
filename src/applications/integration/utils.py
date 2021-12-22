@@ -2,8 +2,8 @@
 from __future__ import absolute_import
 
 import os
-import re
 import time
+import re
 from datetime import datetime, timedelta
 from django.apps import apps as django_apps
 from django.conf import settings
