@@ -376,8 +376,8 @@ def processing_rework(project=None, repository=None, ref=None, before=None, afte
                 commits
             )
 
-        for commit in commits:
-            result = calculate_rework(project=project, repository=repository, repo=repo, refspec=refspec, commit=commit)
+        # for commit in commits:
+        #     result = calculate_rework(project=project, repository=repository, repo=repo, refspec=refspec, commit=commit)
 
     return None
 
