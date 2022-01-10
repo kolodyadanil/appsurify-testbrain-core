@@ -97,13 +97,13 @@ class ProjMeta(ModelBase):
             cls.module_registry[module]['ProjUserModel']._meta.get_field('user')
         except FieldDoesNotExist:
             cls.module_registry[module]['ProjUserModel'].add_to_class('user',
-                models.ForeignKey(USER_MODEL, related_name='%(app_label)s_%(class)s', on_delete=models.DO_NOTHING))
+                models.ForeignKey(USER_MODEL, related_name='%(app_label)s_%(class)s', on_delete=models.CASCADE))
         try:
             cls.module_registry[module]['ProjUserModel']._meta.get_field('project')
         except FieldDoesNotExist:
             cls.module_registry[module]['ProjUserModel'].add_to_class('project',
                 models.ForeignKey(cls.module_registry[module]['ProjModel'],
-                        related_name='project_users', on_delete=models.DO_NOTHING))
+                        related_name='project_users', on_delete=models.CASCADE))
 
     def update_proj_owner(cls, module):
         """
@@ -113,13 +113,13 @@ class ProjMeta(ModelBase):
             cls.module_registry[module]['ProjOwnerModel']._meta.get_field('project_user')
         except FieldDoesNotExist:
             cls.module_registry[module]['ProjOwnerModel'].add_to_class('project_user',
-                models.OneToOneField(cls.module_registry[module]['ProjUserModel'], on_delete=models.DO_NOTHING))
+                models.OneToOneField(cls.module_registry[module]['ProjUserModel'], on_delete=models.CASCADE))
         try:
             cls.module_registry[module]['ProjOwnerModel']._meta.get_field('project')
         except FieldDoesNotExist:
             cls.module_registry[module]['ProjOwnerModel'].add_to_class('project',
                 models.OneToOneField(cls.module_registry[module]['ProjModel'],
-                        related_name='owner', on_delete=models.DO_NOTHING))
+                        related_name='owner', on_delete=models.CASCADE))
 
 
 class AbstractBaseProject(UnicodeMixin, models.Model):

@@ -23,9 +23,9 @@ ref_pattern = re.compile(
 
 class GitRepository(models.Model):
     project = models.OneToOneField('project.Project', related_name='git_repository', null=False,
-                                   on_delete=models.DO_NOTHING)
+                                   on_delete=models.CASCADE)
     git_repository_name = models.CharField(max_length=255, blank=False, null=False)
-    user = models.ForeignKey(User, related_name='local_repository', null=False, on_delete=models.DO_NOTHING)
+    user = models.ForeignKey(User, related_name='local_repository', null=False, on_delete=models.CASCADE)
     host = models.CharField(max_length=255, blank=False, null=False)
     port = models.CharField(max_length=6, blank=True, null=False, default=str(22))
     login = models.CharField(max_length=255, blank=False, null=False)

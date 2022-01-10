@@ -17,8 +17,8 @@ ref_pattern = re.compile(
 
 class GitSSHv2Repository(models.Model):
     project = models.OneToOneField('project.Project', related_name='git_ssh_v2_repository', null=False,
-                                   on_delete=models.DO_NOTHING)
-    user = models.ForeignKey(User, related_name='git_ssh_v2_repository', null=False, on_delete=models.DO_NOTHING)
+                                   on_delete=models.CASCADE)
+    user = models.ForeignKey(User, related_name='git_ssh_v2_repository', null=False, on_delete=models.CASCADE)
 
     repository_name = models.CharField(max_length=255, blank=False, null=False)
     is_installed_hook = models.BooleanField(default=False)

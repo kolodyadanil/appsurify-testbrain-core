@@ -34,7 +34,7 @@ class Area(models.Model):
     )
 
     project = models.ForeignKey('project.Project', related_name='areas', blank=False, null=False,
-                                on_delete=models.DO_NOTHING)
+                                on_delete=models.CASCADE)
 
     name = models.CharField(max_length=255, blank=False, null=False)
     usage = models.CharField(max_length=255, blank=True, null=False)
@@ -187,7 +187,7 @@ class File(MPTTModel):
 
     """
     project = models.ForeignKey('project.Project', related_name='files', blank=False, null=False,
-                                on_delete=models.DO_NOTHING)
+                                on_delete=models.CASCADE)
     areas = models.ManyToManyField('Area', related_name='files', blank=True)
     parent = TreeForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='children')
 
@@ -326,8 +326,8 @@ class FileChange(models.Model):
         (STATUS_RENAMED, 'renamed'),
     )
 
-    commit = models.ForeignKey('Commit', blank=False, null=False, on_delete=models.DO_NOTHING)
-    file = models.ForeignKey('File', blank=False, null=False, on_delete=models.DO_NOTHING)
+    commit = models.ForeignKey('Commit', blank=False, null=False, on_delete=models.CASCADE)
+    file = models.ForeignKey('File', blank=False, null=False, on_delete=models.CASCADE)
 
     additions = models.IntegerField(default=0, blank=False, null=False)
     deletions = models.IntegerField(default=0, blank=False, null=False)
@@ -356,7 +356,7 @@ class Branch(models.Model):
 
     """
     project = models.ForeignKey('project.Project', related_name='branches', blank=False, null=False,
-                                on_delete=models.DO_NOTHING)
+                                on_delete=models.CASCADE)
 
     name = models.CharField(max_length=255, default='master', blank=False, null=False)
     sha = models.CharField(max_length=255, default='', blank=True, null=False)
@@ -395,10 +395,10 @@ class Commit(models.Model):
     """
 
     """
-    sender = models.ForeignKey(User, related_name='commits', blank=True, null=True, on_delete=models.DO_NOTHING)
+    sender = models.ForeignKey(User, related_name='commits', blank=True, null=True, on_delete=models.CASCADE)
 
     project = models.ForeignKey('project.Project', related_name='commits', blank=False, null=False,
-                                on_delete=models.DO_NOTHING)
+                                on_delete=models.CASCADE)
     areas = models.ManyToManyField('Area', related_name='commits', blank=True)
 
     branches = models.ManyToManyField('Branch', related_name='commits', blank=True)
@@ -514,8 +514,8 @@ class ParentCommit(models.Model):
     """
     
     """
-    to_commit = models.ForeignKey('Commit', related_name='to_commits', on_delete=models.DO_NOTHING)
-    from_commit = models.ForeignKey('Commit', related_name='from_commits', on_delete=models.DO_NOTHING)
+    to_commit = models.ForeignKey('Commit', related_name='to_commits', on_delete=models.CASCADE)
+    from_commit = models.ForeignKey('Commit', related_name='from_commits', on_delete=models.CASCADE)
     index_number = models.IntegerField(default=0, blank=False, null=False)
 
     created = models.DateTimeField(auto_now_add=True)
@@ -541,10 +541,10 @@ class Tag(models.Model):
     its creation and return to the user in the archive.
     """
 
-    sender = models.ForeignKey(User, related_name='tags', blank=True, null=True, on_delete=models.DO_NOTHING)
+    sender = models.ForeignKey(User, related_name='tags', blank=True, null=True, on_delete=models.CASCADE)
 
     project = models.ForeignKey('project.Project', related_name='tags', blank=False, null=False,
-                                on_delete=models.DO_NOTHING)
+                                on_delete=models.CASCADE)
     areas = models.ManyToManyField('Area', related_name='tags', blank=True)
 
     tag = models.CharField(max_length=255, default='0.0.1', blank=False, null=False)
