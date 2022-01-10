@@ -21,9 +21,9 @@ ref_pattern = re.compile(
 
 class PerforceRepository(models.Model):
     project = models.OneToOneField('project.Project', related_name='perforce_repository', null=False,
-                                   on_delete=models.DO_NOTHING)
+                                   on_delete=models.CASCADE)
     user = models.ForeignKey(User, related_name='perforce_repository', null=False,
-                             on_delete=models.DO_NOTHING)
+                             on_delete=models.CASCADE)
 
     host = models.CharField(max_length=255, blank=False, null=False)
     port = models.CharField(max_length=6, blank=True, null=False, default=str(1666))

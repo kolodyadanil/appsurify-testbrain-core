@@ -7,11 +7,10 @@ channels
 channels_redis
 uvicorn[standard]
 uvloop
-celery[redis]>=5.2.0
+celery[redis]>=4.4.0,<5.0
 django-filter>=21.0
 django-cors-headers
-django-celery-beat
-django-celery-results
+django-celery-beat<2.2.1
 requests
 pexpect
 pandas
@@ -23,8 +22,8 @@ textdistance
 cryptography
 PyGithub
 # Legacy
-# django-celery-monitor
-flower
+gitpython
+django-celery-monitor
 gunicorn
 django-polymorphic
 django-mptt

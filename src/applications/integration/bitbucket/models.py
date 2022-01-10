@@ -26,10 +26,10 @@ ref_pattern = re.compile(
 
 class BitbucketRepository(models.Model):
     project = models.OneToOneField('project.Project', related_name='bitbucket_repository', null=False,
-                                   on_delete=models.DO_NOTHING)
+                                   on_delete=models.CASCADE)
     bitbucket_repository_name = models.CharField(max_length=255, blank=False, null=False)
-    user = models.ForeignKey(User, related_name='bitbucket_repository', null=False, on_delete=models.DO_NOTHING)
-    social_token = models.ForeignKey(SocialToken, on_delete=models.DO_NOTHING)
+    user = models.ForeignKey(User, related_name='bitbucket_repository', null=False, on_delete=models.CASCADE)
+    social_token = models.ForeignKey(SocialToken, on_delete=models.CASCADE)
 
     updated = models.DateTimeField(auto_now=True)
     created = models.DateTimeField(auto_now_add=True)
@@ -246,7 +246,7 @@ class BitbucketRepository(models.Model):
 
 class BitbucketHook(models.Model):
     project = models.OneToOneField('project.Project', related_name='bitbucket_web_hook', null=False,
-                                   on_delete=models.DO_NOTHING)
+                                   on_delete=models.CASCADE)
     id_hook = models.CharField(blank=False, null=False, max_length=38)
     created_at = models.DateTimeField()
     updated_at = models.DateTimeField()
@@ -262,7 +262,7 @@ class BitbucketHook(models.Model):
 
 class BitbucketIssue(models.Model):
     defect = models.ForeignKey('testing.Defect', related_name='_bitbicket_issue', null=False,
-                               on_delete=models.DO_NOTHING)
+                               on_delete=models.CASCADE)
     issue_number = models.IntegerField(blank=False, null=False)
 
     updated = models.DateTimeField(auto_now=True)

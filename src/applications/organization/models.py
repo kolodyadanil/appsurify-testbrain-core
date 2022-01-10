@@ -26,7 +26,7 @@ class Organization(AbstractOrganization):
 
     type = models.CharField(max_length=128, default=TYPE_SAAS, choices=TYPE_CHOICE, blank=False, null=False)
 
-    site = models.OneToOneField(Site, related_name='organization', on_delete=models.DO_NOTHING)
+    site = models.OneToOneField(Site, related_name='organization', on_delete=models.CASCADE)
 
     class Meta(AbstractOrganization.Meta):
         abstract = False

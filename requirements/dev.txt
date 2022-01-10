@@ -1,6 +1,6 @@
 -r base.txt
-./packages/GitPython
-./packages/gitdb2
-# ./packages/flower
-# ./packages/celery-locked-task
-# ./packages/django-celery-monitor
+# ./packages/GitPython
+# ./packages/gitdb2
+./packages/flower
+./packages/celery-locked-task
+./packages/django-celery-monitor

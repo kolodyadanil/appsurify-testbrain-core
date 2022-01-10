@@ -43,10 +43,10 @@ DEBUG = True
 F_NULL = open(os.devnull, "w")
 
 # VARIABLES AND CONSTANTS
-POST_URL = "{{HOOK_URL}}"
-USERNAME = "{{USERNAME}}"
-REPOSITORY = "{{PROJECT}}"
-API_KEY = "{{API_KEY}}"
+POST_URL = "http://127.0.0.1/api/ssh_v2/hook/1/"
+USERNAME = "james_farriertrimblecom"
+REPOSITORY = "ctctproduct"
+API_KEY = "MTpZY3BOY1pCU0ljbnQzWjRuSm5WS2w2cXNFWjA"
 
 EVENT_INSTALL = u'install'
 EVENT_PUSH = u'push'
@@ -57,6 +57,7 @@ COMMIT_COUNT = 50
 
 DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), u'.testbrain.db')
 CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), u'.testbrain.cache')
+PID_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), u'.testbrain.pid')
 
 LOGGING_CONFIG = {
     'version': 1,
@@ -117,6 +118,7 @@ COMMAND_COMMIT_FILE_BLAME_FIX = u"git log --pretty=%H -1 {}^ -- {}"
 COMMAND_COMMIT_BRANCH = u"git branch --contains {}"
 COMMAND_COMMIT_REMOTES = u"git branch -r --contains {}"
 COMMAND_FILE_TREE = u"git diff --name-only {} {}"
+COMMAND_GET_ALL_PROCESS = u"ps -A -o pid"
 
 # PATTERNS
 RE_OCTAL_BYTE = re.compile(br"""\\\\([0-9]{3})""")
@@ -170,36 +172,55 @@ class FileLock(object):
         self.timeout = timeout
         self.delay = delay
 
+    def check_process_running(self):
+        if not os.path.exists(PID_FILE):
+            # os.mknod(PID_FILE)  # TODO: OSError: [Errno 1] Operation not permitted
+            open(PID_FILE, 'w+').close()
+
+        # Read the pid value
+        f = open(PID_FILE, "r")
+        saved_process = f.read().strip()
+        f.close()
+
+        # Find all running process
+        process = subprocess.Popen(COMMAND_GET_ALL_PROCESS, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        my_pid, err = process.communicate()
+        list_pid = list()
+        for x in my_pid.splitlines():
+            if is_py3:
+                x = x.decode('UTF-8')
+            list_pid.append(x.strip())
+        if saved_process in list_pid:
+            return True
+
+        # If process is not running, overwrite current pid and continue
+        pidfile = open(PID_FILE, 'w')
+        pidfile.write(str(os.getpid()))
+        pidfile.close()
+        return False
+
     def acquire(self):
-        """ Acquire the lock, if possible. If the lock is in use, it check again
-            every `wait` seconds. It does this until it either gets the lock or
+        """ 
+            Check if this hook script is running. If the script is running, it check again
+            every `wait` seconds. It does this until it either the check retun False or
             exceeds `timeout` number of seconds, in which case it throws
             an exception.
         """
         start_time = time.time()
+        is_process_running = self.check_process_running()
         while True:
-            try:
-                self.fd = os.open(self.lockfile, os.O_CREAT | os.O_EXCL | os.O_RDWR)
-                self.is_locked = True  # moved to ensure tag only when locked
+            if is_process_running == False:
                 break
-            except OSError as e:
-                if e.errno != errno.EEXIST:
-                    raise
-                if self.timeout is None:
-                    raise FileLockException("Could not acquire lock on {}".format(self.file_name))
-                if (time.time() - start_time) >= self.timeout:
-                    raise FileLockException("Timeout occured.")
-                time.sleep(self.delay)
+            if self.timeout is None or (time.time() - start_time) >= self.timeout:
+                raise Exception("Timeout occured.")
+            time.sleep(self.delay)
 
     def release(self):
         """ Get rid of the lock by deleting the lockfile.
             When working in a `with` statement, this gets automatically
             called at the end.
         """
-        if self.is_locked:
-            os.close(self.fd)
-            os.unlink(self.lockfile)
-            self.is_locked = False
+        pass
 
     def __enter__(self):
         """ Activated when used in the with statement.
@@ -614,10 +635,14 @@ def _set_last_commit_sha(key, val):
 # COMMUNICATION FUNCTIONS
 def execute(commandLine):
     process = subprocess.Popen(commandLine, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    out = process.stdout.read().strip()
-    out = filter(lambda x: x in string.printable, out)
-    error = process.stderr.read().strip()
-    error = filter(lambda x: x in string.printable, error)
+    if is_py3:
+        out = process.stdout.read().strip().decode("UTF-8")
+        error = process.stderr.read().strip().decode("UTF-8")
+    else:
+        out = process.stdout.read().strip()
+        out = filter(lambda x: x in string.printable, out)
+        error = process.stderr.read().strip()
+        error = filter(lambda x: x in string.printable, error)
     if error:
         process.kill()
         if DEBUG:
@@ -1403,7 +1428,10 @@ if __name__ == "__main__":
     current_script_name = os.path.basename(__file__)
 
     if "install" in sys.argv:
-        git_path = raw_input('Enter Full GIT path [{}]: '.format(os.path.join(os.getcwd(), '.git')))
+        if is_py3:
+            git_path = input('Enter Full GIT path [{}]: '.format(os.path.join(os.getcwd(), '.git')))
+        else:
+            git_path = raw_input('Enter Full GIT path [{}]: '.format(os.path.join(os.getcwd(), '.git')))
         if not git_path:
             git_path = os.path.join(os.getcwd(), '.git')
         result = performInstall(git_path)

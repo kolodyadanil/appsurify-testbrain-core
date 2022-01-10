@@ -117,7 +117,7 @@ class Notification(models.Model):
     )
 
     project = models.ForeignKey('project.Project', related_name='notifications', blank=False, null=False,
-                                on_delete=models.DO_NOTHING)
+                                on_delete=models.CASCADE)
 
     period = models.IntegerField(default=PERIOD_IMMEDIATELY, choices=PERIOD_CHOICE, blank=True, null=False)
     type = models.IntegerField(default=TYPE_DEFECT, choices=TYPE_CHOICE, blank=True, null=False)
