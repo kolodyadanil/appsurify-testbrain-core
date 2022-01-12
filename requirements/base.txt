@@ -7,10 +7,10 @@ channels
 channels_redis
 uvicorn[standard]
 uvloop
-celery[redis]>=4.4.0,<5.0
+celery[redis]>=5.2.0
 django-filter>=21.0
 django-cors-headers
-django-celery-beat<2.2.1
+django-celery-beat
 requests
 pexpect
 pandas
@@ -23,10 +23,11 @@ cryptography
 PyGithub
 # Legacy
 gitpython
-django-celery-monitor
+#django-celery-monitor
+flower
 gunicorn
 django-polymorphic
-django-mptt
+django-mptt==0.13
 requests-oauthlib
 requests-toolbelt
 xmltodict
@@ -43,6 +44,6 @@ django-extensions
 djangorestframework-recursive
 rest-framework-generic-relations
 djangorestframework-filters==1.0.0.dev2
-six
+django-utils-six
 lxml
 jira

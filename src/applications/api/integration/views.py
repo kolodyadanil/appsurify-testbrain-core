@@ -552,7 +552,7 @@ class RepositoryHookViewSet(RepositoryGenericViewSet):
 
     @action(methods=['POST', ], detail=False, permission_classes=[permissions.AllowAny,],
             url_name='receive', url_path=r'(?P<project_id>[0-9]+)(/(?P<repository_id>[0-9]+))?')
-    def receive(self, request, project_id, repository_id, *args, **kwargs):
+    def receive(self, request, project_id, repository_id=None, *args, **kwargs):
         repository = self.get_repository(*args, **kwargs)
         data = repository.hook_receive(project_id, repository_id, *args, **kwargs)
         if data['status'] is False:
@@ -568,7 +568,7 @@ class RepositoryHookViewSet(RepositoryGenericViewSet):
 
     @action(methods=['GET', 'POST', ], detail=False, url_name='generate',
             url_path=r'(?P<project_id>[0-9]+)(/(?P<repository_id>[0-9]+))?/generate')
-    def generate(self, request, project_id, repository_id, *args, **kwargs):
+    def generate(self, request, project_id, repository_id=None, *args, **kwargs):
         repository = self.get_repository(*args, **kwargs)
         data = repository.hook_generate(project_id, repository_id, *args, **kwargs)
         # return response.Response(status=status.HTTP_200_OK, data=data['data'], content_type=data['content_type'])
