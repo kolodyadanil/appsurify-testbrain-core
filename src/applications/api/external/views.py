@@ -158,9 +158,9 @@ class ExternalAPIViewSet(MultiSerializerViewSetMixin, viewsets.GenericViewSet):
             request.query_params['test_suite'] = test_suite.id
 
             organization = get_current_organization(request=request)
-            pay_flag = check_usage(organization=organization, test_suite_id=test_suite.id)
-            if pay_flag:
-                raise APIException('Number of minutes has been met for the month.')
+            # pay_flag = check_usage(organization=organization, test_suite_id=test_suite.id)
+            # if pay_flag:
+            #     raise APIException('Number of minutes has been met for the month.')
 
         # COMMITS
         # validate commit params in request query params
