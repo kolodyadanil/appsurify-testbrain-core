@@ -79,26 +79,26 @@ class TestSuiteReportFilterSet(FilterSet):
 
 class TestRunReportFilterSet(FilterSet):
 
-    type = NumberFilter(label='test_run_type')
+    test_run_type = NumberFilter(label='test_run_type')
     status = NumberFilter(label='test_run_status')
     is_local = BooleanFilter(label='test_run_is_local')
 
     class Meta(object):
         model = TestRunResult
-        fields = ('project', 'test_suite', 'type', 'status', 'is_local')
+        fields = ('project', 'test_suite', 'test_run_type', 'status', 'is_local')
 
 
 class TestReportFilterSet(FilterSet):
     project = NumberFilter(label='project__id')
     area = NumberFilter(label='area__id')
-    test_suite = NumberFilter(label='test_suites__id')
+    test_suites = NumberFilter(label='test_suites__id')
     test_run = NumberFilter(label='test_runs__id')
     # test_run = NumberFilter(label='test_runs__id')
     # is_local = BooleanFilter(label='test_runs__is_local')
 
     class Meta(object):
         model = Test
-        fields = ('project', 'area', 'test_suite', 'test_run', )
+        fields = ('project', 'area', 'test_suites', 'test_run', )
 
 
 class TestRunResultReportFilterSet(FilterSet):

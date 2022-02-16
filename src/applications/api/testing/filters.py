@@ -31,12 +31,12 @@ class TestRunFilterSet(FilterSet):
 
 class TestFilterSet(FilterSet):
 
-    test_suite = NumberFilter(label='test_suites__id', method='filter_test_suite')
+    test_suites = NumberFilter(label='test_suites__id', method='filter_test_suite')
     test_run = NumberFilter(label='test_runs__id', method='filter_test_run')
 
     class Meta(object):
         model = Test
-        fields = ('project', 'area', 'test_run', 'test_suite', )
+        fields = ('project', 'area', 'test_run', 'test_suites', )
 
     def filter_test_run(self, qs, name, value):
         lookup_expr = LOOKUP_SEP.join([name, ])
