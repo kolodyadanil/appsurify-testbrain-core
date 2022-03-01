@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
 
+from django.db.models.expressions import Value
 from urllib.parse import urlunsplit
 
 from applications.allauth.account.serializers import UserRelatedSerializer
@@ -9,6 +9,7 @@ from applications.testing.models import *
 from applications.testing.tools import SpecFlow
 from .stop_words import stop_words
 from .wordinflector import WordInflector
+from applications.vcs.utils.analysis import find_similarity_in_name, similarity
 
 
 class TestTypeSerializer(DynamicFieldsModelSerializer):

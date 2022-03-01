@@ -33,6 +33,8 @@ PRIORITY_READY_DEFECT = 6
 PRIORITY_OPEN_DEFECT = 7
 PRIORITY_TOP20 = 8
 PRIORITY_PERCENT = 9
+PRIORITY_FOR_TEST = 10
+PRIORITY_FOR_TEST_WITH_DAY = 11
 
 
 class ExternalAPIViewSet(MultiSerializerViewSetMixin, viewsets.GenericViewSet):
@@ -52,8 +54,8 @@ class ExternalAPIViewSet(MultiSerializerViewSetMixin, viewsets.GenericViewSet):
         'output_test_run_view': OutputTestSuiteSerializer,
     }
 
-    filter_class = None
-    filter_action_classes = {}
+    # filter_class = None
+    # filter_action_classes = {}
     # ordering_fields = ()
     # search_fields = ()
     # filter_fields = ()
@@ -265,8 +267,10 @@ class ExternalAPIViewSet(MultiSerializerViewSetMixin, viewsets.GenericViewSet):
                 queryset = test_view.get_top20_queryset(queryset=filtered_queryset)
             elif priority == PRIORITY_PERCENT:
                 queryset = test_view.get_top_by_percent_queryset(queryset=filtered_queryset)
+            elif priority == PRIORITY_FOR_TEST or priority == PRIORITY_FOR_TEST_WITH_DAY:
+                queryset = test_view.get_all_queryset(queryset=filtered_queryset)
             else:
-                raise APIException('Please choice priority from 1 to 9.')
+                raise APIException('Please choice priority from 1 to 11.')
         except NotFound:
             raise APIException(
                 "No one commit in branch '{0}' has not associated test runs in specified test suite '{1}'".format(

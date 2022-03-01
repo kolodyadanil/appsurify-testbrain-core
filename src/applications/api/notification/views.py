@@ -31,7 +31,7 @@ class NotificationModelViewSet(viewsets.ModelViewSet):
 
     filter_class = NotificationFilterSet
 
-    search_fields = ("project", )
+    search_fields = ()
     ordering_fields = ()
     filter_fields = ()
 

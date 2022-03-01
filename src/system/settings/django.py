@@ -41,12 +41,13 @@ THIRD_PARTY_APPS = [
     "grappelli",
     "django_celery_beat",
     # "django_celery_monitor",
-    # "django_celery_results",
+    "django_celery_results",
     "django_filters",
     "mptt",
     "rest_framework",
     "rest_framework.authtoken",
     # "rest_framework_filters",
+    "drf_yasg",
 
 ]
 

@@ -50,6 +50,23 @@ END;
 $$ LANGUAGE plpgsql;
 
 
+CREATE OR REPLACE FUNCTION normalize_filepath_string(arr text[])
+    RETURNS text[]
+    LANGUAGE plpgsql
+AS $function$
+DECLARE
+    i integer;
+    arr_out text[];
+BEGIN
+    FOR i IN 1 .. array_upper(arr, 1) LOOP
+        arr_out[i] := rtrim(ltrim(regexp_replace(lower(replace(arr[i], ' ', '_')), E'[\n\r]+', '', 'g')));
+    END LOOP;
+    
+    RETURN arr_out;
+END;
+$function$;
+
+
 CREATE OR REPLACE FUNCTION full_trim
 (
     str text

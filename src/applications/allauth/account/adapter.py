@@ -235,7 +235,7 @@ class DefaultAccountAdapter(object):
 
     def get_reset_password_confirmation_redirect_url(self, request):
         redirect_url = None
-        if request.user.is_anonymous():
+        if request.user.is_anonymous:
             messages.add_message(request, level=messages.ERROR, message='Invalid token')
             redirect_url = app_settings.EMAIL_CONFIRMATION_ANONYMOUS_REDIRECT_URL
         else:

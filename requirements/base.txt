@@ -23,7 +23,7 @@ cryptography
 PyGithub
 # Legacy
 gitpython
-django-celery-monitor
+django-celery-results
 gunicorn
 django-polymorphic
 django-mptt
@@ -45,4 +45,5 @@ rest-framework-generic-relations
 djangorestframework-filters==1.0.0.dev2
 six
 lxml
+user_agents
 jira

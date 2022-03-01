@@ -253,7 +253,7 @@ class File(MPTTModel):
 
         return current_filename_instance
 
-    def add_changes(self, commit, additions, deletions, changes, status, patch=u'', blame=u'', previous_filename=u''):
+    def add_changes(self, commit, additions, deletions, changes, status, patch='', blame='', previous_filename=u''):
         """
         Method for adding information about file changes in a specific commit.
         An entry is created in the FileChange model.
@@ -268,33 +268,25 @@ class File(MPTTModel):
         :param previous_filename:
         :return:
         """
+        if isinstance(patch, bytes):
+            patch = patch.decode('utf8', errors='replace')
 
-        if isinstance(patch, str):
-            try:
-                patch = unicode(patch, encoding='utf-8')
-            except UnicodeDecodeError:
-                patch = ''
+        if isinstance(blame, bytes):
+            blame = blame.decode('utf8', errors='replace')
 
-        if isinstance(blame, str):
-            try:
-                blame = unicode(blame, encoding='utf-8')
-            except UnicodeDecodeError:
-                blame = ''
-
-        if isinstance(previous_filename, str):
-            try:
-                previous_filename = unicode(previous_filename, encoding='utf-8')
-            except UnicodeDecodeError:
-                previous_filename = ''
+        if isinstance(previous_filename, bytes):
+            previous_filename = previous_filename.decode('utf8', errors='replace')
 
         project_file_changes, created = FileChange.objects.get_or_create(file=self, commit=commit)
         project_file_changes.additions = additions
         project_file_changes.deletions = deletions
         project_file_changes.changes = changes
         project_file_changes.status = status
-        project_file_changes.patch = patch.replace(chr(0x00), u'')
-        project_file_changes.blame = blame.replace(chr(0x00), u'')
-        project_file_changes.previous_filename = previous_filename.replace(chr(0x00), u'')
+
+        project_file_changes.patch = patch.replace(chr(0x00), '')
+        project_file_changes.blame = blame.replace(chr(0x00), '')
+        project_file_changes.previous_filename = previous_filename.replace(chr(0x00), '')
+
         project_file_changes.save()
 
         return project_file_changes
