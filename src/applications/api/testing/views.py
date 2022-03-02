@@ -403,3 +403,13 @@ class DefectModelViewSet(viewsets.ModelViewSet):
 
         return queryset
 
+class NumberTestRunModelViewSet(viewsets.ModelViewSet):
+    serializer_class = TestRunSerializer
+    queryset = TestRun.objects.all()
+
+    def get_queryset(self):
+        queryset = TestRun.objects.filter(
+            project_id=self.request.query_params.get('project_id'), 
+            test_suite_id=self.request.query_params.get('test_suite_id')
+        )
+        return queryset
