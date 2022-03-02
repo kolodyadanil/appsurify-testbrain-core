@@ -368,7 +368,7 @@ def find_similarity_in_name(listObj):
     result = dict()
     for arg in ['name', 'class_name', 'testsuite_name']:
         matched = list(
-                filter(lambda x: x[arg + '_similarity'] > 0, listObj))
+                filter(lambda x: x[arg + '_similarity'] > 0, listObj))    
         if len(matched) > 0:
             matched = sorted(
                     matched, key=lambda x: x[arg + '_similarity'], reverse=True)
@@ -376,5 +376,5 @@ def find_similarity_in_name(listObj):
             matched = list(
                 filter(lambda x: x[arg + '_similarity'] >= 0.7 * max_score, matched))[:5]
         result[arg] = matched
-
+        
     return result
