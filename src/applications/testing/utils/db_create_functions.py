@@ -128,7 +128,7 @@ $$ LANGUAGE 'plpgsql' IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION test_similarnamed
 (
-    project int,
+    project bigint,
     test_name text,
     test_class_name text
 ) RETURNS text[] AS $$
@@ -148,7 +148,7 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION test_area_similarnamed
 (
-    project int,
+    project bigint,
     area_name text
 ) RETURNS text[] AS $$
 BEGIN

@@ -17,6 +17,7 @@ from applications.api.common.views import MultiSerializerViewSetMixin
 from applications.api.report.views import TestReportModelViewSet
 from applications.testing.models import Test, Defect, TestRunResult, TestRun
 # from applications.license.utils import check_usage
+from applications.organization.models import Organization
 from applications.organization.utils import get_current_organization
 from applications.vcs.models import Branch
 
@@ -160,9 +161,9 @@ class ExternalAPIViewSet(MultiSerializerViewSetMixin, viewsets.GenericViewSet):
             request.query_params['test_suite'] = test_suite.id
 
             organization = get_current_organization(request=request)
-            pay_flag = check_usage(organization=organization, test_suite_id=test_suite.id)
-            if pay_flag:
-                raise APIException('Number of minutes has been met for the month.')
+            # pay_flag = check_usage(organization=organization, test_suite_id=test_suite.id)
+            # if pay_flag:
+            #     raise APIException('Number of minutes has been met for the month.')
 
         # COMMITS
         # validate commit params in request query params
@@ -177,7 +178,7 @@ class ExternalAPIViewSet(MultiSerializerViewSetMixin, viewsets.GenericViewSet):
 
                 try:
                     if repo_type == 'perforce':
-                        if isinstance(commit_sha, (str, unicode)):
+                        if isinstance(commit_sha, (str, bytes)):
                             if not commit_sha.isdigit():
                                 raise APIException("Incorrect params 'commit' {commit_sha} "
                                                    "with param 'repo' = 'perforce'".format(commit_sha=commit_sha))

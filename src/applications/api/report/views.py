@@ -1842,8 +1842,8 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
 
     }
 
-    filter_class = TestReportFilterSet
-    filter_action_classes = {}
+    # filter_class = TestReportFilterSet
+    # filter_action_classes = {}
 
     search_fields = ()
     ordering_fields = ()
@@ -2971,7 +2971,7 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
             default_queryset.extend(list(test_ids))
 
         _count = queryset.count()
-        _per = percent * _count / 100
+        _per = int(percent * _count / 100)
         _ids = default_queryset[:_per]
 
         return Test.objects.filter(id__in=_ids).distinct('name')
