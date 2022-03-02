@@ -116,7 +116,7 @@ CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_BEAT_SCHEDULE = {
     "create_ml_models_for_tests_prioritization": {
         "task": "applications.testing.tasks.build_test_prioritization_ml_models",
-        "schedule": 60 * 60 * 6,  # Start task every 2 hours
+        "schedule": 60 * 60 * 2,  # Start task every 2 hours
     },
     'periodic_add_association': {
         'task': 'applications.testing.tasks.periodic_add_association',
