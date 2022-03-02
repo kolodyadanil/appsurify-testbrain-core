@@ -5,7 +5,6 @@ from celery import group
 
 import functools
 import time
-import monotonic
 
 from celery.exceptions import Reject
 from hashlib import md5
@@ -94,7 +93,7 @@ def build_test_prioritization_ml_model_for_test_suite(self, test_suite_id):
 
 
 @app.task(bind=True)
-def build_test_prioritization_ml_models(self):
+def build_test_prioritization_ml_models(self, count=1000):
     import pytz
     import datetime
     from django.db.models import Q
@@ -134,9 +133,11 @@ def build_test_prioritization_ml_models(self):
         FROM testing_testsuite
         WHERE (testing_testsuite.ml_model_last_time_created > '{one_day_before_from_now}'::timestamptz)
         GROUP BY testing_testsuite.id
-        LIMIT 1000;
+        LIMIT {count};
     """.format(minimal_number_associated_test_runs=minimal_number_associated_test_runs,
-               one_day_before_from_now=one_day_before_from_now, minimal_number_test_run_results=minimal_number_test_run_results))
+               one_day_before_from_now=one_day_before_from_now,
+               minimal_number_test_run_results=minimal_number_test_run_results,
+               count=count))
     test_suites_list = list([t.id for t in test_suites])
     for test_suite_id in test_suites_list:
         try:
