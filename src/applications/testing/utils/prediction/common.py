@@ -14,9 +14,9 @@ def save_model(model, project_id, model_prefix=''):
     if not os.path.exists(directory_path):
         os.makedirs(directory_path)
 
-    with open(model_path, 'wb') as outfile:
-        pickle.dump(model, outfile, protocol=pickle.HIGHEST_PROTOCOL)
-        # pickle.dump(model, outfile, protocol=pickle.HIGHEST_PROTOCOL)
+    outfile = open(model_path, 'wb')
+    pickle.dump(model, outfile, protocol=pickle.HIGHEST_PROTOCOL)
+    # pickle.dump(model, outfile, protocol=pickle.HIGHEST_PROTOCOL)
 
     return model
 
@@ -30,7 +30,7 @@ def load_model(project_id, model_prefix=''):
     if not os.path.exists(model_path):
         return None
 
-    with open(model_path, 'rb') as infile:
-        model = pickle.load(infile)  # TODO if pickle.load not working, try to change pickle.dump protocol
+    infile = open(model_path, 'rb')
+    model = pickle.load(infile)  # TODO if pickle.load not working, try to change pickle.dump protocol
 
     return model

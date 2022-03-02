@@ -74,8 +74,8 @@ def create_initial_output_model(project_id):
     if not os.path.exists(directory_path):
         os.makedirs(directory_path)
 
-    with open(model_path, 'wb') as outfile:
-        pickle.dump(model, outfile, protocol=pickle.HIGHEST_PROTOCOL)
+    outfile = open(model_path, 'wb')
+    pickle.dump(model, outfile, protocol=pickle.HIGHEST_PROTOCOL)
 
     return model
 
