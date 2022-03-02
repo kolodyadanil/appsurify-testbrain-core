@@ -3,7 +3,6 @@ from django.apps import AppConfig
 from django.utils.translation import ugettext_lazy as _
 from django.db.models.signals import pre_migrate
 from django.db.transaction import atomic
-import signals
 
 
 def delete_duplicated_sha(**kwargs):

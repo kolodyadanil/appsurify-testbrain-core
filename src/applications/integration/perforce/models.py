@@ -175,7 +175,7 @@ class PerforceRepository(models.Model):
         try:
             message = event_push(self.id)
         except Exception as exc:
-            status, message = False, exc.message
+            status, message = False, repr(exc)
         return status, message
 
 

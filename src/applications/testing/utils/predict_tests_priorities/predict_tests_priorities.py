@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 import os
 import django
-import cPickle
+import _pickle as cPickle
+import os
+import warnings
+
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import GridSearchCV
@@ -13,7 +16,6 @@ from django.db import connection
 
 from applications.testing.models import TestSuite, Test
 
-import warnings
 warnings.filterwarnings("ignore")
 
 
