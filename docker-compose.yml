@@ -19,13 +19,14 @@ x-testbrain-docker: &testbrian
   env_file:
     - ./docker-compose.env
   volumes:
-    - ./src:/opt/app/python
+    # - ./src:/opt/app/python
     - data_storage:/opt/app/storage
 
 services:
   webapp:
     image: appsurifyinc/testbrain-frontend:1.5.4
     container_name: testbrain-webapp
+    restart: always
     env_file:
       - ./docker-compose.env
     ports:
@@ -36,12 +37,24 @@ services:
   api:
     <<: *testbrian
     container_name: testbrain-api
+    restart: always
     command: /start-api
     ports:
       - 9000:9000
 
+  worker-spec:
+    <<: *testbrian
+    container_name: testbrain-worker-spec
+    command: celery worker -E -A system --loglevel=INFO --queues immediate,processing
+    depends_on:
+      - api
+      - postgres
+      - rabbitmq
+      - redis
+
   worker:
     <<: *testbrian
+    restart: always
     command: /start-worker
     depends_on:
       - api
@@ -52,6 +65,7 @@ services:
   beat:
     <<: *testbrian
     container_name: testbrain-beat
+    restart: always
     command: /start-beat
     depends_on:
       - api
@@ -62,6 +76,7 @@ services:
   flower:
     <<: *testbrian
     container_name: testbrain-flower
+    restart: always
     command: /start-flower
     ports:
       - 5555:5555
@@ -77,6 +92,7 @@ services:
       dockerfile: ./compose/postgres/Dockerfile
     image: appsurifyinc/testbrain-postgres:1.5.4
     container_name: testbrain-postgres
+    restart: always
     volumes:
       - data_postgres:/var/lib/postgresql/data:Z
       - data_postgres_backups:/backups:z
@@ -91,6 +107,7 @@ services:
       dockerfile: ./compose/rabbitmq/Dockerfile
     image: appsurifyinc/testbrain-rabbitmq:1.5.4
     container_name: testbrain-rabbitmq
+    restart: always
     volumes:
       - data_rabbitmq:/var/lib/rabbitmq:Z
     ports:
@@ -102,6 +119,7 @@ services:
   redis:
     image: redis:6.2.5-alpine
     container_name: testbrain-redis
+    restart: always
     volumes:
       - data_redis:/data:Z
     ports:
