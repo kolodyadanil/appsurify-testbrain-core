@@ -69,8 +69,11 @@ CELERY_TASK_ROUTES = {
 
     # analyze 2
     'applications.integration.tasks.analyze_fast_model_task': {'queue': 'analyze', 'priority': 80},
+    'applications.integration.ssh_v2.tasks.fast_model_analyzer_task': {'queue': 'analyze', 'priority': 80},
     'applications.integration.tasks.analyze_slow_models_task': {'queue': 'analyze', 'priority': 70},
+    'applications.integration.ssh_v2.tasks.slow_models_analyzer_task': {'queue': 'analyze', 'priority': 70},
     'applications.integration.tasks.analyze_output_task': {'queue': 'analyze', 'priority': 60},
+    'applications.integration.ssh_v2.tasks.output_analyse_task': {'queue': 'analyze', 'priority': 60},
     'applications.testing.tasks.add_association_for_test': {'queue': 'analyze', 'priority': 50},
 
     # common
