@@ -32,6 +32,9 @@ def get_buggy_commits(repo, corrective_commit):
             continue
 
         patch = diff.diff
+        if isinstance(patch, bytes):
+            patch = patch.decode('utf8', errors='replace')
+
         patch_strings = patch.split('\n')
 
         current_string_number = 0
