@@ -10,3 +10,5 @@ class GitSSHv2Config(AppConfig):
     label = 'git_ssh_v2_integration'
     verbose_name = _('Git SSH v2 integration')
 
+    def ready(self):
+        import applications.integration.ssh_v2.signals

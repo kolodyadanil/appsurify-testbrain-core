@@ -864,7 +864,7 @@ def get_parent_list(sha_list, remotes=False, blame=False, once=False):
 
         for filename in set(filename_list_1 + filename_list_2 + filename_list_3):
 
-            if isinstance(filename, str):
+            if isinstance(filename, bytes):
                 filename = filename.decode('utf-8', errors='ignore')
 
             try:
@@ -998,7 +998,7 @@ def get_commit_list(sha_list, remotes=False, blame=False, once=False):
 
         for filename in set(filename_list_1 + filename_list_2 + filename_list_3):
 
-            if isinstance(filename, str):
+            if isinstance(filename, bytes):
                 filename = filename.decode('utf-8', errors='ignore')
 
             try:
@@ -1298,7 +1298,7 @@ def performSync(remotes=False, force=False, blame=False):
                 branch, end_sha, e.message), exc_info=DEBUG)
             time.sleep(15)
 
-    time.sleep(10)
+    time.sleep(15)
     try:
         tags = get_tag_list()
 
@@ -1324,7 +1324,7 @@ def performSync(remotes=False, force=False, blame=False):
             if status_code in [200, 201]:
                 _set_last_commit_sha(tag, end_sha)
 
-            time.sleep(10)
+            time.sleep(15)
 
     except Exception as e:
         pass

@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+import tempfile
 from datetime import datetime, timedelta
-
+from dateutil import parser as datetimeparser
 import hmac
 import json
 import pytz
@@ -11,8 +12,7 @@ import socket
 from django.conf import settings
 from django.http import HttpResponseForbidden, HttpResponseServerError, HttpResponse
 from django.utils import dateparse, timezone
-from dateutil import parser as datetimeparser
-
+from django.utils.dateparse import parse_datetime
 from django.utils.encoding import force_bytes
 from hashlib import sha1, md5
 from django.db import models
@@ -199,7 +199,7 @@ def create_commit(project=None, repository=None, commit=None, branch_list=None, 
             parent_commit.branches.add(*branch_list)
             new_commit.add_parent(parent_commit, index_number)
     except TypeError as e:
-        raise TypeError(e.message)
+        raise TypeError(e)
 
     return new_commit
 

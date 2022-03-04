@@ -150,8 +150,8 @@ class GitSSHRepository(models.Model):
         status, message = True, ''
         try:
             message = event_push(request.data, self.id)
-        except Exception as exc:
-            status, message = False, repr(exc)
+        except Exception as e:
+            status, message = False, e
         return status, message
 
     def handling_webhook(self, data=None):

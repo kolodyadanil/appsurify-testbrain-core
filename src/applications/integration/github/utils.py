@@ -2,15 +2,17 @@
 
 import requests
 import tempfile
+from datetime import datetime, timedelta
+from dateutil import parser as datetimeparser
 from django.conf import settings
 from django.http import HttpResponseForbidden, HttpResponseServerError, HttpResponse
 from django.utils.encoding import force_bytes
-from dateutil import parser as datetimeparser
 from hashlib import sha1, sha256
 from hmac import HMAC, compare_digest
 
 from applications.allauth.account.utils import user_username, user_email, user_field
 from applications.allauth.utils import valid_email_or_none
+
 from applications.vcs.models import Branch, Commit, File, FileChange, Area
 
 

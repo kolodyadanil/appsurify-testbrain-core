@@ -11,7 +11,8 @@ from applications.integration.github.utils import populate_user
 from applications.testing.models import Defect
 from applications.vcs.models import Branch, Commit, Tag
 
-from applications.integration.tasks import make_processing_workflow
+from applications.integration.tasks import make_processing_workflow, processing_commits_fast_task
+
 
 
 User = get_user_model()

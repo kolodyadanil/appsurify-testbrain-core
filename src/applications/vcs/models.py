@@ -125,7 +125,7 @@ class Area(models.Model):
                     area, _ = cls.objects.get_or_create(project=project, name=area_name, type=cls.TYPE_CODE)
                     areas.append(area)
         except Exception as e:
-            # print("DEBUG Print: {}".format(e.message))
+            # print("DEBUG Print: {}".format(e))
             pass
         return areas
 
