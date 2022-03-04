@@ -11,7 +11,8 @@ import socket
 from django.conf import settings
 from django.http import HttpResponseForbidden, HttpResponseServerError, HttpResponse
 from django.utils import dateparse, timezone
-from django.utils.dateparse import parse_datetime
+from dateutil import parser as datetimeparser
+
 from django.utils.encoding import force_bytes
 from hashlib import sha1, md5
 from django.db import models
@@ -298,4 +299,58 @@ def calculate_rework_one_commit_v2(commit_id):
     if max_lines:
         commit.rework = int((rework_lines / max_lines) * 100)
     commit.save()
+    return True
+
+
+def processing_commits_fast(project=None, repository=None, data=None):
+
+    if data is None:
+        return False
+
+    if repository is None:
+        return False
+
+    if project is None:
+        project = repository.project
+
+    ref = data.get('ref', 'master')
+    commits = data.get('commits', [])
+
+    branch = prepare_branch(project, ref)
+
+    for commit in commits:
+        sha = commit['sha']
+        display_id = commit['sha'][:7]
+        message = commit['message'][:255]
+        timestamp = datetimeparser.parse(commit['date'])
+        author = commit['author']
+        committer = commit['committer']
+        url = ''
+
+        defaults = {
+            'repo_id': sha,
+            'display_id': display_id,
+            'message': message,
+            'author': author,
+            'committer': committer,
+            'stats': {
+                'deletions': 0,
+                'additions': 0,
+                'total': 0
+            },
+            'timestamp': timestamp.strftime('%Y-%m-%dT%H:%M:%S'),
+            'url': url
+        }
+        new_commit, created = Commit.objects.get_or_create(
+            project=project,
+            sha=sha,
+            defaults=defaults
+        )
+        area_default = Area.get_default(project=project)
+        area_through_model = Commit.areas.through
+        area_through_model.objects.update_or_create(commit_id=new_commit.id, area_id=area_default.id)
+
+        branch_through_model = Commit.branches.through
+        branch_through_model.objects.update_or_create(commit_id=new_commit.id, branch_id=branch.id)
+
     return True

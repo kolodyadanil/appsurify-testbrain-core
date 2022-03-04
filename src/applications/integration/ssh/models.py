@@ -171,3 +171,7 @@ class GitSSHRepository(models.Model):
             after = None
 
         return {'ref': ref, 'before': before, 'after': after}
+
+    @staticmethod
+    def processing_commits_fast(project, repository, data):
+        return True

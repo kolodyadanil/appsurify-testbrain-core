@@ -205,3 +205,6 @@ class GitRepository(models.Model):
 
         return status, message
 
+    @staticmethod
+    def processing_commits_fast(project, repository, data):
+        return True

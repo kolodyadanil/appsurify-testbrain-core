@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 import json
 import re
 import urllib
+import urllib.parse
 from django.db import models
 from django.db.models import F, Value, CharField
 from django.db.models.functions import Concat
@@ -100,8 +101,8 @@ class ExternalAPIViewSet(MultiSerializerViewSetMixin, viewsets.GenericViewSet):
             raise APIException("TestSuite matching query does not exist.")
         except Commit.DoesNotExist:
             raise APIException("Commit matching query does not exist.")
-        except Exception as e:
-            raise APIException(e)
+        # except Exception as e:
+        #     raise APIException(e)
 
     @action(methods=['GET', ], detail=False, url_path=r'prioritized-tests')  # TODO: rename url path
     def prioritized_tests_view(self, request, *args, **kwargs):
@@ -172,7 +173,7 @@ class ExternalAPIViewSet(MultiSerializerViewSetMixin, viewsets.GenericViewSet):
                 commit_sha = request.query_params.get(arg)
 
                 try:
-                    commit_sha = urllib.unquote_plus(commit_sha)
+                    commit_sha = urllib.parse.unquote_plus(commit_sha)
                 except Exception:
                     pass
 

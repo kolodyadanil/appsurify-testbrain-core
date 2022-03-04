@@ -19,7 +19,7 @@ x-testbrain-docker: &testbrian
   env_file:
     - ./docker-compose.env
   volumes:
-    # - ./src:/opt/app/python
+    - ./src:/opt/app/python
     - data_storage:/opt/app/storage
 
 services:

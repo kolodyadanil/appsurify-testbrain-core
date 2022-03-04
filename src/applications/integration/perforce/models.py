@@ -178,5 +178,6 @@ class PerforceRepository(models.Model):
             status, message = False, repr(exc)
         return status, message
 
-
-
+    @staticmethod
+    def processing_commits_fast(project, repository, data):
+        return True
