@@ -66,10 +66,6 @@ COPY ./compose/testbrain/core/celery/flower/start /start-flower
 RUN sed -i 's/\r$//g' /start-flower
 RUN chmod +x /start-flower
 
-COPY ./compose/testbrain/core/celery/events/start /start-events
-RUN sed -i 's/\r$//g' /start-events
-RUN chmod +x /start-events
-
 COPY ./compose/testbrain/core/api/start /start-api
 RUN sed -i 's/\r$//g' /start-api
 RUN chmod +x /start-api

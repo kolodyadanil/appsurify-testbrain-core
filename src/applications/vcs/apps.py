@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-
 from django.apps import AppConfig
 from django.utils.translation import ugettext_lazy as _
 from django.db.models.signals import pre_migrate
 from django.db.transaction import atomic
+
 
 def delete_duplicated_sha(**kwargs):
     from django.db.models import Count
@@ -39,6 +38,6 @@ class VCSConfig(AppConfig):
     name = 'applications.vcs'
     verbose_name = _('VCS (Version Control System)')
     
-    # def ready(self):
-    #     import signals
-    #     pre_migrate.connect(delete_duplicated_sha, sender=self)
+    def ready(self):
+        import applications.vcs.signals
+        pre_migrate.connect(delete_duplicated_sha, sender=self)

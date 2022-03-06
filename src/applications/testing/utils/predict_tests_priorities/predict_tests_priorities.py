@@ -1,15 +1,18 @@
 # -*- coding: utf-8 -*-
+import os
+import django
 import _pickle as cPickle
 import os
 import warnings
 
-import numpy as np
 import pandas as pd
+import numpy as np
+from sklearn.model_selection import GridSearchCV
+from sklearn.ensemble import ExtraTreesClassifier
+from sklearn.preprocessing import MultiLabelBinarizer
+
 from django.conf import settings
 from django.db import connection
-from sklearn.ensemble import ExtraTreesClassifier
-from sklearn.model_selection import GridSearchCV
-from sklearn.preprocessing import MultiLabelBinarizer
 
 from applications.testing.models import TestSuite, Test
 
@@ -319,40 +322,34 @@ class MLPredictor(MLHolder):
         return tests_ids_by_priorities
 
     def get_test_prioritization_top_by_percent(self, test_queryset, commit_queryset, percent):
-        tests_by_priority = self._predict_tests_priority_top_by_percent(test_queryset, commit_queryset)
-
-        if len(tests_by_priority) == 0:
-            return Test.objects.none()
-
-        tests_by_priority_filtered = filter(lambda x: x[0] > 0.3, tests_by_priority)
-
-        _count = test_queryset.count()
-        _per_count = percent * _count / 100
-        _ids = [x[1] for x in tests_by_priority_filtered]
-
         result = Test.objects.none()
 
-        if len(tests_by_priority_filtered) > _per_count:
-            result = Test.objects.filter(id__in=_ids)
+        test_from_ml = self._predict_tests_priority_top_by_percent(test_queryset, commit_queryset)
+        test_from_ml.sort(key=lambda x: x[0])
+        test_from_ml_ids = list(set([x[1] for x in test_from_ml]))
 
-        elif len(tests_by_priority_filtered) == 0 and _per_count == 0:
-            tests_by_priority_filtered = tests_by_priority
-            tests_by_priority_filtered.sort(key=lambda x: x[0])
+        if len(test_from_ml) == 0:
+            return result
 
-            if _count < 10:
-                _count = _count * 10
-            _per_count = percent * _count / 100
-            _ids = [x[1] for x in tests_by_priority_filtered]
-            _needed_count = _per_count - len(_ids)
-            _ids.extend([x[1] for x in tests_by_priority_filtered[:_needed_count]])
-            result = Test.objects.filter(id__in=set(_ids))
+        test_count = test_queryset.distinct('id').count()
+        if test_count < 10:
+            test_count = test_count * 10
+
+        count_by_percent = (percent * test_count) / 100
+
+        test_from_ml_normal_filtered = filter(lambda x: x[0] > 0.3, test_from_ml)
+        test_from_ml_normal_filtered.sort(key=lambda x: x[0])
+        test_from_ml_normal_filtered_ids = list(set([x[1] for x in test_from_ml_normal_filtered]))
+
+        test_from_ml_low_filtered = filter(lambda x: x[0] <= 0.3, test_from_ml)
+        test_from_ml_low_filtered.sort(key=lambda x: x[0])
+        test_from_ml_low_filtered_ids = list(set([x[1] for x in test_from_ml_low_filtered]))
+
+        if len(test_from_ml_normal_filtered_ids) >= count_by_percent:
+            test_ids = test_from_ml_normal_filtered_ids[:count_by_percent]
         else:
-            tests_by_priority_filtered = filter(lambda x: x[0] <= 0.3, tests_by_priority)
-            tests_by_priority_filtered.sort(key=lambda x: x[0])
+            test_ids = test_from_ml_ids[:count_by_percent]
 
-            _needed_count = _per_count - len(_ids)
-            _ids.extend([x[1] for x in tests_by_priority_filtered[:_needed_count]])
-
-            result = Test.objects.filter(id__in=_ids)
+        result = Test.objects.filter(id__in=test_ids)
 
         return result.distinct('name')

@@ -15,10 +15,11 @@ from rest_framework import viewsets, mixins
 from rest_framework.decorators import action
 from rest_framework.exceptions import *
 from rest_framework.response import Response
+from datetime import timedelta, date
 
 from applications.api.common.views import MultiSerializerViewSetMixin
 from applications.project.permissions import IsOwnerOrReadOnly
-from applications.vcs.utils.analysis import calculate_user_analysis, calculate_user_analysis_by_range, avg_per_range
+from applications.vcs.utils.analysis import calculate_user_analysis, calculate_user_analysis_by_range, avg_per_range, calculate_similar_by_commit
 from applications.vcs.utils.bugspots import Bugspots
 from .filters import *
 from .serializers import *
@@ -1641,10 +1642,10 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
     }
 
     filter_class = TestRunReportFilterSet
-    # filter_action_classes = {
-    #     'list': TestRunReportFilterSet,
-    #     'retrieve': None
-    # }
+    filter_action_classes = {
+        'list': TestRunReportFilterSet,
+        'retrieve': None
+    }
 
     search_fields = ()
     ordering_fields = ('id', 'start_date', 'end_date',)
@@ -1841,8 +1842,8 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
 
     }
 
-    filter_class = TestReportFilterSet
-    filter_action_classes = {}
+    # filter_class = TestReportFilterSet
+    # filter_action_classes = {}
 
     search_fields = ()
     ordering_fields = ()
@@ -2860,12 +2861,27 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
         else:
             return self.get_default_low_queryset(queryset, commits_ids)
 
-    def get_default_top20_queryset(self, queryset, commits_ids):
+    def get_default_top20_queryset(self, queryset, commits_ids, percent):
         default_queryset = list()
+
+        commit_id = self.request.query_params.get('commit', None)
+        if commit_id is None:
+            commit_id = self.request.query_params.get('from_commit', None)
+        result = calculate_similar_by_commit(queryset, commit_id, percent=percent)
+        test_ids = result['tests']
+
         default_queryset.extend(list(self.get_default_high_queryset(queryset, commits_ids).values_list('id', flat=True)))
         default_queryset.extend(list(self.get_default_medium_queryset(queryset, commits_ids).values_list('id', flat=True)))
         default_queryset.extend(list(self.get_unassigned_queryset(queryset).values_list('id', flat=True)))
+        if len(test_ids) > 0:
+            default_queryset.extend(list(test_ids))
+
         _ids = default_queryset
+
+        _count = queryset.count()
+        _per = percent * _count / 100
+        _ids = default_queryset[:_per]
+
         return Test.objects.filter(id__in=_ids).distinct('name')
 
     def get_top20_queryset(self, queryset):
@@ -2893,17 +2909,69 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
                 tests = ml_predictor.get_test_prioritization_top_by_percent(queryset, commits_queryset, percent)
                 return tests
         else:
-            return self.get_default_top20_queryset(queryset, commits_ids)
+            return self.get_default_top20_queryset(queryset, commits_ids, percent)
+
+    # def get_test_name_for_testsuite(self, queryset):
+    #     priority_param   = self.request.query_params.get('priority')
+    #     project_id_param = self.request.query_params.get('project')
+    #     day              = self.request.query_params.get('day')
+    #     try:
+    #         list_name_test_suite = TestSuite.objects.filter(project_id = project_id_param, priority = priority_param)
+    #         name_for_search = list()
+    #         name_test = Test.objects.values_list('name', 'created').filter(priority = priority_param, project_id = project_id_param)
+    #         if list_name_test_suite:
+    #             for name_test_suite in list_name_test_suite:
+    #                 name_for_search.append(name_test_suite.name)
+    #             name_test = name_test.filter(testsuite_name__in = name_for_search)
+
+    #         if day is not None and int(priority_param) == 11:
+    #             to_date   = datetime.datetime.now()
+    #             from_date = to_date - timedelta(days=int(day))
+    #             name_test  = name_test.filter(created__range=(from_date, to_date))
+    #     except:
+    #         raise APIException('Test not found!')
+
+    #     return name_test
+
+    def get_all_queryset(self, queryset):
+        """
+        This function returns all tests queryset.
+
+        :param queryset:
+        :return queryset:
+        """
+        priority = self.request.query_params.get('priority')
+        day      = self.request.query_params.get('day')
+        queryset = self.filter_queryset(queryset)
+        if day is not None and int(priority) == 11:
+            try:
+                day_val = int(day)
+                if day_val < 0:
+                    raise APIException('Please enter a valid number of days.')
+            except ValueError:
+                raise APIException('Please enter a valid number of days.')
+            to_date   = datetime.datetime.now()
+            from_date = to_date - timedelta(days=day_val)
+            queryset = queryset.filter(created__range=(from_date, to_date))
+        return queryset.distinct('name')
 
     def get_default_by_percent_queryset(self, queryset, commits_ids, percent):
         default_queryset = list()
+        commit_id = self.request.query_params.get('commit', None)
+        if commit_id is None:
+            commit_id = self.request.query_params.get('from_commit', None)
+        result = calculate_similar_by_commit(queryset, commit_id, percent=percent)
+        test_ids = result['tests']
+
         default_queryset.extend(list(self.get_default_high_queryset(queryset, commits_ids).values_list('id', flat=True)))
         default_queryset.extend(list(self.get_default_medium_queryset(queryset, commits_ids).values_list('id', flat=True)))
         default_queryset.extend(list(self.get_default_low_queryset(queryset, commits_ids).values_list('id', flat=True)))
         default_queryset.extend(list(self.get_unassigned_queryset(queryset).values_list('id', flat=True)))
+        if len(test_ids) > 0:
+            default_queryset.extend(list(test_ids))
 
         _count = queryset.count()
-        _per = percent * _count / 100
+        _per = int(percent * _count / 100)
         _ids = default_queryset[:_per]
 
         return Test.objects.filter(id__in=_ids).distinct('name')
@@ -2913,7 +2981,13 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
         queryset = self.filter_queryset(queryset)
 
         test_suite_id = self.request.query_params.get('test_suite', None)
-        percent = int(self.request.query_params.get('percent', 20))
+
+        if 'percent' in self.request.query_params:
+            percent = int(self.request.query_params.get('percent', 20))
+        elif 'percentage' in self.request.query_params:
+            percent = int(self.request.query_params.get('percentage', 20))
+        else:
+            percent = 20
 
         if test_suite_id is not None:
             try:

@@ -57,10 +57,8 @@ def get_diff_type(diff):
 
 
 def prepare_path(path):
-    if isinstance(path, str):
-        path = path.replace('"', '').decode('string_escape').decode('utf8')
-    else:
-        path = path.replace('"', '')
+
+    path = path.replace('"', '')
 
     if '=>' not in path:
         return path
@@ -77,7 +75,7 @@ def prepare_path(path):
     return path
 
 
-def processing_commits(task=None, project=None, repository=None, ref=None, before=None, after=None, since_time=None):
+def processing_commits(project=None, repository=None, ref=None, before=None, after=None, since_time=None):
 
     repo = repository.get_repo(ref=ref, before=before, after=after, force=True)
 
@@ -92,8 +90,6 @@ def processing_commits(task=None, project=None, repository=None, ref=None, befor
     new_commits = []
 
     for refspec in refs:
-        if task:
-            task.lock_extend(task.lock_expire_at / 2, replace_ttl=True)
 
         branch, _ = Branch.objects.get_or_create(project=project, name=refspec)
         try:
@@ -215,7 +211,7 @@ def create_commit(project=None, repository=None, branch=None, refspec=None, comm
     return new_commit, created
 
 
-def processing_files(task=None, project=None, repository=None, ref=None, before=None, after=None, since_time=None):
+def processing_files(project=None, repository=None, ref=None, before=None, after=None, since_time=None):
 
     repo = repository.get_repo(ref=ref, before=before, after=after)
 
@@ -231,9 +227,6 @@ def processing_files(task=None, project=None, repository=None, ref=None, before=
     commits_changed_files = []
 
     for refspec in refs:
-
-        if task:
-            task.lock_extend(task.lock_expire_at / 2, replace_ttl=True)
 
         try:
             commits = repository.get_commits(ref=ref, before=before, after=after, refspec=refspec)

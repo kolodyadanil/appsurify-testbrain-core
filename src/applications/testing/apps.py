@@ -11,6 +11,6 @@ class TestingConfig(AppConfig):
     name = 'applications.testing'
     verbose_name = _('Testing')
     
-    # def ready(self):
-    #     import signals
-    #     post_migrate.connect(create_functions, sender=self)
+    def ready(self):
+        import applications.testing.signals
+        # post_migrate.connect(create_functions, sender=self)

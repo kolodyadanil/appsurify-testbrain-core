@@ -126,7 +126,7 @@ def processing_commits_task(self, project_id=None, repository_id=None, model_nam
             webhook_data = repository.handling_push_webhook_payload(data=data)
             ref, before, after = webhook_data['ref'], webhook_data['before'], webhook_data['after']
 
-        result = processing_commits(task=self, project=repository.project, repository=repository,
+        result = processing_commits(project=repository.project, repository=repository,
                                     ref=ref, before=before, after=after, since_time=since_time)
         return {'project_id': project_id, 'repository_id': repository_id, 'model_name': model_name}
     except Exception as exc:
@@ -144,7 +144,7 @@ def processing_files_task(self, project_id=None, repository_id=None, model_name=
             webhook_data = repository.handling_push_webhook_payload(data=data)
             ref, before, after = webhook_data['ref'], webhook_data['before'], webhook_data['after']
 
-        result = processing_files(task=self, project=repository.project, repository=repository,
+        result = processing_files(project=repository.project, repository=repository,
                                   ref=ref, before=before, after=after, since_time=since_time)
 
         return {'project_id': project_id, 'repository_id': repository_id, 'model_name': model_name}
