@@ -62,6 +62,7 @@ LOCAL_APPS = [
     "applications.project",
     "applications.vcs",
     "applications.testing",
+    "applications.ml",
     "applications.notification",
     "applications.integration",
     "applications.integration.github",

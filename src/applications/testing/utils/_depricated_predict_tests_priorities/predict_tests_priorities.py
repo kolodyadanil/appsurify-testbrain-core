@@ -1,21 +1,21 @@
 # -*- coding: utf-8 -*-
 import os
 import django
-import _pickle as cPickle
-import os
-import warnings
-
+import pickle
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import GridSearchCV
-from sklearn.ensemble import ExtraTreesClassifier
+# from sklearn.model_selection import GridSearchCV
+from catboost import CatBoostClassifier
+# from sklearn.ensemble import ExtraTreesClassifier
 from sklearn.preprocessing import MultiLabelBinarizer
+from sklearn.model_selection import cross_val_score
 
 from django.conf import settings
 from django.db import connection
 
 from applications.testing.models import TestSuite, Test
 
+import warnings
 warnings.filterwarnings("ignore")
 
 
@@ -84,7 +84,6 @@ class MLHolder(object):
             self.model_path = os.path.join(self.base_models_dir, '{}.model'.format(self.test_suite_id))
 
 
-
 class MLTrainer(MLHolder):
 
     encode_columns = [
@@ -117,7 +116,7 @@ class MLTrainer(MLHolder):
             os.makedirs(self.base_models_dir)
 
         with open(self.model_path, 'wb') as outfile:
-            cPickle.dump(self.ml_model, outfile)
+            pickle.dump(self.ml_model, outfile)
 
     def train(self):
         sql_template = open(self.dataset_sql_script_path, 'r').read()
@@ -125,7 +124,9 @@ class MLTrainer(MLHolder):
         data = load_data(sql)
 
         df = pd.DataFrame(data)
-        df.dropna(axis=1, how='all')
+        # df = pd.read_csv('/mnt/testbrain-datasets/datasets/forbes/469/{}.csv'.format(self.test_suite_id))
+
+        df.dropna(axis=1, how='all', inplace=True)
 
         if df.empty:
             raise DatasetError('Empty dataset for this TestSuite id: "{}"'.format(self.test_suite_id))
@@ -135,23 +136,34 @@ class MLTrainer(MLHolder):
 
         self.ml_model = TestPriorityMLModel()
 
+        df_chunks = [df['test_changed']]
         for column_name, new_columns_prefix in self.encode_columns:
-            binalizer = getattr(self.ml_model, column_name + '_binarizer')
+            binarizer = getattr(self.ml_model, column_name + '_binarizer')
 
-            df = df.join(
-                pd.DataFrame(
-                    binalizer.fit_transform(df.pop(column_name)),
-                    columns=(new_columns_prefix + u'_{}'.format(i) for i in binalizer.classes_),
+            df_chunks.append(pd.DataFrame(
+                    binarizer.fit_transform(df.pop(column_name)),
+                    columns=(new_columns_prefix + u'_{}'.format(i) for i in binarizer.classes_),
                     index=df.index
-                )
-            )
+                ))
+
+        df = pd.concat(df_chunks, axis=1)
 
         y = df['test_changed'].values
         x = df.drop('test_changed', axis=1).values
-        clf = ExtraTreesClassifier(class_weight='balanced_subsample', max_features=None, random_state=0)
-        gscv = GridSearchCV(clf, {'n_estimators': [10, 20, 30]}, scoring='recall_weighted', verbose=3, cv=5)
-        gscv.fit(x, y)
-        self.ml_model.classifier = gscv.best_estimator_
+
+        clf = CatBoostClassifier(auto_class_weights='Balanced', random_state=0, verbose=False)
+        clf.fit(x, y)
+        self.ml_model.classifier = clf
+
+        # clf = ExtraTreesClassifier(class_weight='balanced_subsample', max_features=None, random_state=0)
+        # gscv = GridSearchCV(clf, {'n_estimators': [10, 20, 30]}, scoring='recall_weighted', verbose=3, cv=5)
+        # gscv.fit(x, y)
+        # clf = gscv.best_estimator_
+        # self.ml_model.classifier = gscv.best_estimator_
+
+        cv = 10
+        print(cross_val_score(clf, x, y, cv=cv, scoring='recall'))
+        print(cross_val_score(clf, x, y, cv=cv))
 
         if self.auto_save:
             self.save()
@@ -198,7 +210,7 @@ class MLPredictor(MLHolder):
     def load(self):
         try:
             with open(self.model_path, 'rb') as infile:
-                model = cPickle.load(infile)
+                model = pickle.load(infile)
             self.ml_model = model
         except IOError:
             self.ml_model = None
@@ -265,7 +277,7 @@ class MLPredictor(MLHolder):
             tests_ids_by_priorities['u'] = test_queryset
             return tests_ids_by_priorities
 
-        df.dropna(axis=1, how='all')
+        df.dropna(axis=1, how='all', inplace=True)
 
         for test_id in df['test_id'].unique():
 
@@ -307,7 +319,7 @@ class MLPredictor(MLHolder):
                 tests_ids_by_priorities.append((0.0, test_id))
             return tests_ids_by_priorities
 
-        df.dropna(axis=1, how='all')
+        df.dropna(axis=1, how='all', inplace=True)
 
         for test_id in df['test_id'].unique():
             max_prediction = 0

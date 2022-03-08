@@ -82,10 +82,7 @@ CELERY_TASK_ROUTES = {
 
     # default
     'applications.testing.tasks.periodic_add_association': {'queue': 'default', 'priority': 50},
-    'applications.testing.tasks.build_test_prioritization_ml_models': {'queue': 'default', 'priority': 50},
 
-    # build
-    'applications.testing.tasks.build_test_prioritization_ml_model_for_test_suite': {'queue': 'build', 'priority': 100},
 }
 
 CELERY_TASK_ACKS_LATE = True
@@ -117,12 +114,8 @@ CELERY_ENABLE_REMOTE_CONTROL = True
 
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_BEAT_SCHEDULE = {
-    "create_ml_models_for_tests_prioritization": {
-        "task": "applications.testing.tasks.build_test_prioritization_ml_models",
-        "schedule": 60 * 60 * 2,  # Start task every 2 hours
-    },
-    'periodic_add_association': {
-        'task': 'applications.testing.tasks.periodic_add_association',
-        'schedule': crontab(hour=8, minute=0, day_of_week='saturday'),
-    },
+    # "periodic_add_association": {
+    #     "task": "applications.testing.tasks.periodic_add_association",
+    #     "schedule": crontab(hour=8, minute=0, day_of_week="saturday"),
+    # },
 }
