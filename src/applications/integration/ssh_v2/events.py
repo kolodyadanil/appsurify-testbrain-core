@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
 
+import traceback
 from django.contrib.auth import get_user_model
 
 from applications.integration.ssh_v2.models import GitSSHv2Repository
 from applications.integration.ssh_v2.tasks import fetch_commits_task_v2
+from applications.integration.tasks import processing_commits_fast_task
 from applications.vcs.models import Branch, Commit, Tag
 
 User = get_user_model()
@@ -38,8 +39,19 @@ def event_tag(data, repository_id):
 
 def event_commit(data, repository_id):
     repository = GitSSHv2Repository.objects.get(id=repository_id)
-    fetch_commits_task_v2(project_id=repository.project_id, repository_id=repository.id, model_name=repository._meta.model_name, data=data)
-    return 'success'
+    try:
+        repository.processing_commits_fast(project=repository.project, repository=repository, data=data)
+        # processing_commits_fast_task(
+        #     project_id=repository.project_id,
+        #     repository_id=repository.id,
+        #     model_name=repository._meta.model_name,
+        #     data=data
+        # )
+    except Exception:
+        print(traceback.format_exc())
+    task = fetch_commits_task_v2.delay(project_id=repository.project_id,
+                                       repository_id=repository.id, model_name=repository._meta.model_name, data=data)
+    return task.status
 
 
 def event_delete(data, repository_id):

@@ -35,7 +35,7 @@ class TestType(models.Model):
     """
 
     project = models.ForeignKey('project.Project', related_name='test_types', blank=False, null=False,
-                                on_delete=models.DO_NOTHING)
+                                on_delete=models.CASCADE)
 
     name = models.CharField(max_length=255, blank=False, null=False)
 
@@ -90,14 +90,14 @@ class Test(models.Model):
     )
 
     project = models.ForeignKey('project.Project', related_name='tests', blank=False, null=False,
-                                on_delete=models.DO_NOTHING)
+                                on_delete=models.CASCADE)
 
-    area = models.ForeignKey('vcs.Area', related_name='tests', blank=True, null=True, on_delete=models.DO_NOTHING)
+    area = models.ForeignKey('vcs.Area', related_name='tests', blank=True, null=True, on_delete=models.CASCADE)
 
     associated_files = models.ManyToManyField('vcs.File', related_name='associated_files', blank=True)
     associated_areas = models.ManyToManyField('vcs.Area', related_name='associated_areas', blank=True)
 
-    author = models.ForeignKey(User, related_name='tests', blank=True, null=True, on_delete=models.DO_NOTHING)
+    author = models.ForeignKey(User, related_name='tests', blank=True, null=True, on_delete=models.CASCADE)
 
     name = models.CharField(max_length=1000, default='Test #', blank=True, null=True)
     mix_name = models.CharField(max_length=1000, blank=True, null=True)
@@ -198,8 +198,8 @@ class TestStep(models.Model):
     """
     Test step model.
     """
-    test = models.ForeignKey('Test', on_delete=models.DO_NOTHING)
-    step = models.ForeignKey('Step', on_delete=models.DO_NOTHING)
+    test = models.ForeignKey('Test', on_delete=models.CASCADE)
+    step = models.ForeignKey('Step', on_delete=models.CASCADE)
 
     index_number = models.IntegerField(default=0, blank=False, null=False, db_index=True)
 
@@ -214,7 +214,7 @@ class TestStep(models.Model):
 
 class Step(models.Model):
     project = models.ForeignKey('project.Project', related_name='steps', blank=False, null=False,
-                                on_delete=models.DO_NOTHING)
+                                on_delete=models.CASCADE)
 
     name = models.CharField(max_length=255, blank=False, null=False)
 
@@ -245,10 +245,10 @@ class TestSuite(models.Model):
     name = models.CharField(max_length=255, blank=False, null=False)
     description = models.TextField(max_length=4000, blank=True, null=True)
 
-    project = models.ForeignKey('project.Project', related_name='test_suites', on_delete=models.DO_NOTHING)
+    project = models.ForeignKey('project.Project', related_name='test_suites', on_delete=models.CASCADE)
 
     test_type = models.ForeignKey('TestType', related_name='test_suites', blank=True, null=True,
-                                  on_delete=models.DO_NOTHING)
+                                  on_delete=models.CASCADE)
 
     tests = models.ManyToManyField('Test', related_name='test_suites', blank=True)
 
@@ -334,18 +334,18 @@ class TestRun(MPTTModel):
     # previous_test_run = models.ForeignKey('self', blank=True, null=True)
     previous_test_run = TreeForeignKey('self', blank=True, null=True, on_delete=models.SET_NULL)
 
-    author = models.ForeignKey(User, related_name='test_runs', blank=True, null=True, on_delete=models.DO_NOTHING)
+    author = models.ForeignKey(User, related_name='test_runs', blank=True, null=True, on_delete=models.CASCADE)
 
     project = models.ForeignKey('project.Project', related_name='test_runs', blank=False, null=True,
-                                on_delete=models.DO_NOTHING)
+                                on_delete=models.CASCADE)
 
     areas = models.ManyToManyField('vcs.Area', related_name='test_runs', blank=True)
 
     commit = models.ForeignKey('vcs.Commit', related_name='test_runs', blank=True, null=True,
-                               on_delete=models.DO_NOTHING)
+                               on_delete=models.CASCADE)
 
     test_suite = models.ForeignKey('TestSuite', related_name='test_runs', blank=False, null=False,
-                                   on_delete=models.DO_NOTHING)
+                                   on_delete=models.CASCADE)
 
     tests = models.ManyToManyField('Test', related_name='test_runs', blank=True)
 
@@ -386,13 +386,13 @@ class TestRun(MPTTModel):
     @property
     def execution_time(self):
         aggregate_data = self.test_run_results.aggregate(
-            sum_execution=functions.Coalesce(models.Sum('execution_time'), 0))
+            sum_execution=functions.Coalesce(models.Sum('execution_time'), 0, output_field=models.FloatField()))
         return aggregate_data['sum_execution']
 
     @property
     def execution_time_avg(self):
         aggregate_data = self.test_run_results.aggregate(
-            avg_execution=functions.Coalesce(models.Avg('execution_time'), 0))
+            avg_execution=functions.Coalesce(models.Avg('execution_time'), 0, output_field=models.FloatField()))
         return aggregate_data['avg_execution']
 
     @property
@@ -844,15 +844,15 @@ class TestRunResult(models.Model):
     )
 
     project = models.ForeignKey('project.Project', related_name='test_run_results', blank=False, null=False,
-                                on_delete=models.DO_NOTHING)
+                                on_delete=models.CASCADE)
     project_name = models.CharField(max_length=200, blank=False, null=False)
 
     test_type = models.ForeignKey('TestType', related_name='test_run_results', blank=False, null=False,
-                                  on_delete=models.DO_NOTHING)
+                                  on_delete=models.CASCADE)
     test_type_name = models.CharField(max_length=200, blank=False, null=False)
 
     test_suite = models.ForeignKey('TestSuite', related_name='test_run_results', blank=False, null=False,
-                                   on_delete=models.DO_NOTHING)
+                                   on_delete=models.CASCADE)
     test_suite_name = models.CharField(max_length=255, blank=False, null=False)
     test_suite_target_type = models.IntegerField(default=TestSuite.TARGET_TYPE_COMMIT)
     test_suite_created = models.DateTimeField(blank=False, null=False, db_index=True)

@@ -10,7 +10,7 @@ from applications.api.common.serializers import DynamicFieldsModelSerializer
 class TaskResultSerializer(serializers.Serializer):
     status = serializers.ReadOnlyField()
     state = serializers.ReadOnlyField()
-    result = serializers.ReadOnlyField()
+    # result = serializers.ReadOnlyField()
     id = serializers.ReadOnlyField()
     task_id = serializers.ReadOnlyField()
 

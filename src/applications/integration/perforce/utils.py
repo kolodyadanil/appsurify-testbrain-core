@@ -33,7 +33,7 @@ def test_connection(host, user, password=None, port=None):
 
         return True, 'Successful connection'
     except SSHException as e:
-        return False, e.message
+        return False, e
     except socket.error as e:
         return False, e
 
@@ -43,7 +43,7 @@ def install_hook(host, login, password, port, path, hook, force):
         transport = Transport((host, int(port)))
         transport.connect(username=login, password=password)
     except SSHException as e:
-        return False, e.message
+        return False, e
 
     sftp_client = SFTPClient.from_transport(transport)
     receive = '''#!/bin/bash\npython ./hooks/hook.py'''

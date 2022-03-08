@@ -17,8 +17,8 @@ ref_pattern = re.compile(
 
 class GitSSHv2Repository(models.Model):
     project = models.OneToOneField('project.Project', related_name='git_ssh_v2_repository', null=False,
-                                   on_delete=models.DO_NOTHING)
-    user = models.ForeignKey(User, related_name='git_ssh_v2_repository', null=False, on_delete=models.DO_NOTHING)
+                                   on_delete=models.CASCADE)
+    user = models.ForeignKey(User, related_name='git_ssh_v2_repository', null=False, on_delete=models.CASCADE)
 
     repository_name = models.CharField(max_length=255, blank=False, null=False)
     is_installed_hook = models.BooleanField(default=False)
@@ -70,7 +70,7 @@ class GitSSHv2Repository(models.Model):
         try:
             message = event_func(request.data, self.id)
         except Exception as exc:
-            status, message = False, exc.message
+            status, message = False, repr(exc)
 
         return status, message
 
@@ -89,3 +89,9 @@ class GitSSHv2Repository(models.Model):
         hook_url = request.build_absolute_uri(reverse('hook-receive', args=('ssh_v2', project.id,)))
         hook = generate_hook(hook_url, username, repo_name, api_key)
         return hook
+
+    @staticmethod
+    def processing_commits_fast(project, repository, data):
+        from applications.integration.ssh_v2.utils import processing_commits_fast
+        result = processing_commits_fast(project=project, repository=repository, data=data)
+        return result

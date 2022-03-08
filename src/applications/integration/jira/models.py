@@ -13,10 +13,8 @@ from applications.testing.models import Defect
 import sys
 import jira
 
-PY2 = sys.version_info[0] == 2
-PY3 = sys.version_info[0] == 3
-
 # Building module urlparse deprecated in Python 3.x
+from urllib.parse import urlparse
 
 
 User = get_user_model()
@@ -99,8 +97,8 @@ class JiraCredential(models.Model):
 
     """
     organization = models.ForeignKey('organization.Organization', related_name='jira_credentials', blank=False,
-                                     null=False, on_delete=models.DO_NOTHING)
-    user = models.ForeignKey(User, related_name='jira_credentials', null=False, on_delete=models.DO_NOTHING)
+                                     null=False, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, related_name='jira_credentials', null=False, on_delete=models.CASCADE)
 
     url = models.URLField(blank=False, null=False, help_text='Jira server url')
     username = models.CharField(max_length=255, blank=False, null=False, help_text='Jira username')
@@ -162,13 +160,13 @@ class JiraCredential(models.Model):
 
 
 class JiraProject(models.Model):
-    user = models.ForeignKey(User, related_name='jira_projects', null=False, on_delete=models.DO_NOTHING)
+    user = models.ForeignKey(User, related_name='jira_projects', null=False, on_delete=models.CASCADE)
 
     project = models.OneToOneField('project.Project', related_name='jira_project', null=False,
-                                   on_delete=models.DO_NOTHING)
+                                   on_delete=models.CASCADE)
 
     credential = models.ForeignKey(JiraCredential, related_name='jira_projects', null=False,
-                                   on_delete=models.DO_NOTHING)
+                                   on_delete=models.CASCADE)
     extra_data = JSONField(blank=False, null=False)
 
     updated = models.DateTimeField(auto_now=True)
@@ -261,9 +259,9 @@ class JiraProject(models.Model):
 
 
 class JiraIssue(models.Model):
-    defect = models.OneToOneField('testing.Defect', related_name='jira_issue', null=False, on_delete=models.DO_NOTHING)
+    defect = models.OneToOneField('testing.Defect', related_name='jira_issue', null=False, on_delete=models.CASCADE)
 
-    jira_project = models.ForeignKey(JiraProject, related_name='jira_issues', null=False, on_delete=models.DO_NOTHING)
+    jira_project = models.ForeignKey(JiraProject, related_name='jira_issues', null=False, on_delete=models.CASCADE)
     issue_id = models.PositiveIntegerField(blank=False, null=False)
 
     extra_data = JSONField(blank=False, null=False)

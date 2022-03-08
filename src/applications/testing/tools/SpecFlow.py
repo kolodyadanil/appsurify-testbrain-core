@@ -36,6 +36,15 @@ def preprocessing_dict(xmldict):
     return xmldict
 
 
+def preprocessing_area_dict(xmldict):
+    new_xmldict = dict()
+    keys = xmldict.keys()
+    for key in keys:
+        if key[0] == '@':
+            new_xmldict[key[1:]] = xmldict.get(key)
+    return new_xmldict
+
+
 def external_processor(xslt, source):
     xslt_fd, xslt_filename = mkstemp()
     xslt_file = open(xslt_filename, 'w')
@@ -104,9 +113,10 @@ class ImportUtils(object):
                 transform = ET.XSLT(xslt)
                 dom = ET.parse(self.file_obj)
                 new_dom = transform(dom)
-                infile = unicode((ET.tostring(new_dom, pretty_print=True)))
+                new_dom_str = ET.tostring(new_dom, pretty_print=True)
+                infile = new_dom_str
             except XMLSyntaxError as e:
-                return {'error': 'XMLSyntaxError: {}'.format(e.message)}
+                return {'error': 'XMLSyntaxError: {}'.format(e)}
             except Exception:
                 return {'error': 'XMLError: Error convert nunit3 to Junit'}
         elif self.type_xml == 'trx':
@@ -117,19 +127,33 @@ class ImportUtils(object):
                 # new_dom = transform(dom)
                 # infile = unicode((ET.tostring(new_dom, pretty_print=True)))
                 xslt = open(os.path.join(settings.BASE_DIR, 'applications/testing/tools/mstest-to-junit.xsl'), 'r').read()
+
+                if isinstance(xslt, bytes):
+                    xslt = xslt.decode('utf-8', errors='replace')
+
                 source = self.file_obj.read()
+
+                if isinstance(source, bytes):
+                    source = source.decode('utf-8', errors='replace')
+
                 result = external_processor(xslt=xslt, source=source)
+
+                if isinstance(result, bytes):
+                    result = result.decode('utf-8', errors='replace')
+
                 infile = result
             except XMLSyntaxError as e:
-                return {'error': 'XMLSyntaxError: {}'.format(e.message)}
+                return {'error': 'XMLSyntaxError: {}'.format(e)}
             except Exception as e:
                 return {'error': 'XMLError: Error convert trx to Junit'}
         else:
             infile = self.file_obj.read()
+            if isinstance(infile, bytes):
+                infile = infile.decode('utf-8', errors='replace')
         try:
             xml_dict = xmltodict.parse(infile)
         except Exception as e:
-            return {'error': 'XMLParse: {}'.format(e.message)}
+            return {'error': 'XMLParse: {}'.format(e)}
 
         try:
             ts = self.data.get('test_suite', None)
@@ -212,11 +236,12 @@ class ImportUtils(object):
 
         areas = root.get('testsuite', [])
         test_run_results = []
+
         if isinstance(areas, OrderedDict):
             areas = [areas]
 
         for area in areas:
-            area = preprocessing_dict(area)
+            area = preprocessing_area_dict(area)
             area_obj, created = Area.objects.get_or_create(project=self.project, name=area.get('name')[:255])
             test_run_results = list()
             if isinstance(area.get('testcase'), OrderedDict):

@@ -72,7 +72,7 @@ class ImportReportSerializer(serializers.Serializer):
 
             if repo_type == 'perforce':
 
-                if isinstance(commit_sha, (str, unicode)):
+                if isinstance(commit_sha, (str, bytes)):
 
                     if not commit_sha.isdigit():
                         raise serializers.ValidationError(
@@ -112,7 +112,7 @@ class ImportReportSerializer(serializers.Serializer):
         try:
             commit = Commit.objects.get(project_id=project, sha=commit_sha)
         except (Commit.DoesNotExist, Commit.MultipleObjectsReturned) as e:
-            return {'error': 'XMLError: {}'.format(e.message)}
+            return {'error': 'XMLError: {}'.format(e)}
         utils = SpecFlow.ImportUtils(
             type_xml=type,
             file_obj=file,

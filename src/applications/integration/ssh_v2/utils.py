@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+import tempfile
 from datetime import datetime, timedelta
-
+from dateutil import parser as datetimeparser
 import hmac
 import json
 import pytz
@@ -198,7 +199,7 @@ def create_commit(project=None, repository=None, commit=None, branch_list=None, 
             parent_commit.branches.add(*branch_list)
             new_commit.add_parent(parent_commit, index_number)
     except TypeError as e:
-        raise TypeError(e.message)
+        raise TypeError(e)
 
     return new_commit
 
@@ -298,4 +299,58 @@ def calculate_rework_one_commit_v2(commit_id):
     if max_lines:
         commit.rework = int((rework_lines / max_lines) * 100)
     commit.save()
+    return True
+
+
+def processing_commits_fast(project=None, repository=None, data=None):
+
+    if data is None:
+        return False
+
+    if repository is None:
+        return False
+
+    if project is None:
+        project = repository.project
+
+    ref = data.get('ref', 'master')
+    commits = data.get('commits', [])
+
+    branch = prepare_branch(project, ref)
+
+    for commit in commits:
+        sha = commit['sha']
+        display_id = commit['sha'][:7]
+        message = commit['message'][:255]
+        timestamp = datetimeparser.parse(commit['date'])
+        author = commit['author']
+        committer = commit['committer']
+        url = ''
+
+        defaults = {
+            'repo_id': sha,
+            'display_id': display_id,
+            'message': message,
+            'author': author,
+            'committer': committer,
+            'stats': {
+                'deletions': 0,
+                'additions': 0,
+                'total': 0
+            },
+            'timestamp': timestamp.strftime('%Y-%m-%dT%H:%M:%S'),
+            'url': url
+        }
+        new_commit, created = Commit.objects.get_or_create(
+            project=project,
+            sha=sha,
+            defaults=defaults
+        )
+        area_default = Area.get_default(project=project)
+        area_through_model = Commit.areas.through
+        area_through_model.objects.update_or_create(commit_id=new_commit.id, area_id=area_default.id)
+
+        branch_through_model = Commit.branches.through
+        branch_through_model.objects.update_or_create(commit_id=new_commit.id, branch_id=branch.id)
+
     return True

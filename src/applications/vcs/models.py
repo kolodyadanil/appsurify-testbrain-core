@@ -34,7 +34,7 @@ class Area(models.Model):
     )
 
     project = models.ForeignKey('project.Project', related_name='areas', blank=False, null=False,
-                                on_delete=models.DO_NOTHING)
+                                on_delete=models.CASCADE)
 
     name = models.CharField(max_length=255, blank=False, null=False)
     usage = models.CharField(max_length=255, blank=True, null=False)
@@ -125,7 +125,7 @@ class Area(models.Model):
                     area, _ = cls.objects.get_or_create(project=project, name=area_name, type=cls.TYPE_CODE)
                     areas.append(area)
         except Exception as e:
-            # print("DEBUG Print: {}".format(e.message))
+            # print("DEBUG Print: {}".format(e))
             pass
         return areas
 
@@ -187,7 +187,7 @@ class File(MPTTModel):
 
     """
     project = models.ForeignKey('project.Project', related_name='files', blank=False, null=False,
-                                on_delete=models.DO_NOTHING)
+                                on_delete=models.CASCADE)
     areas = models.ManyToManyField('Area', related_name='files', blank=True)
     parent = TreeForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='children')
 
@@ -253,7 +253,7 @@ class File(MPTTModel):
 
         return current_filename_instance
 
-    def add_changes(self, commit, additions, deletions, changes, status, patch=u'', blame=u'', previous_filename=u''):
+    def add_changes(self, commit, additions, deletions, changes, status, patch='', blame='', previous_filename=u''):
         """
         Method for adding information about file changes in a specific commit.
         An entry is created in the FileChange model.
@@ -268,33 +268,25 @@ class File(MPTTModel):
         :param previous_filename:
         :return:
         """
+        if isinstance(patch, bytes):
+            patch = patch.decode('utf8', errors='replace')
 
-        if isinstance(patch, str):
-            try:
-                patch = unicode(patch, encoding='utf-8')
-            except UnicodeDecodeError:
-                patch = ''
+        if isinstance(blame, bytes):
+            blame = blame.decode('utf8', errors='replace')
 
-        if isinstance(blame, str):
-            try:
-                blame = unicode(blame, encoding='utf-8')
-            except UnicodeDecodeError:
-                blame = ''
-
-        if isinstance(previous_filename, str):
-            try:
-                previous_filename = unicode(previous_filename, encoding='utf-8')
-            except UnicodeDecodeError:
-                previous_filename = ''
+        if isinstance(previous_filename, bytes):
+            previous_filename = previous_filename.decode('utf8', errors='replace')
 
         project_file_changes, created = FileChange.objects.get_or_create(file=self, commit=commit)
         project_file_changes.additions = additions
         project_file_changes.deletions = deletions
         project_file_changes.changes = changes
         project_file_changes.status = status
-        project_file_changes.patch = patch.replace(chr(0x00), u'')
-        project_file_changes.blame = blame.replace(chr(0x00), u'')
-        project_file_changes.previous_filename = previous_filename.replace(chr(0x00), u'')
+
+        project_file_changes.patch = patch.replace(chr(0x00), '')
+        project_file_changes.blame = blame.replace(chr(0x00), '')
+        project_file_changes.previous_filename = previous_filename.replace(chr(0x00), '')
+
         project_file_changes.save()
 
         return project_file_changes
@@ -326,8 +318,8 @@ class FileChange(models.Model):
         (STATUS_RENAMED, 'renamed'),
     )
 
-    commit = models.ForeignKey('Commit', blank=False, null=False, on_delete=models.DO_NOTHING)
-    file = models.ForeignKey('File', blank=False, null=False, on_delete=models.DO_NOTHING)
+    commit = models.ForeignKey('Commit', blank=False, null=False, on_delete=models.CASCADE)
+    file = models.ForeignKey('File', blank=False, null=False, on_delete=models.CASCADE)
 
     additions = models.IntegerField(default=0, blank=False, null=False)
     deletions = models.IntegerField(default=0, blank=False, null=False)
@@ -356,7 +348,7 @@ class Branch(models.Model):
 
     """
     project = models.ForeignKey('project.Project', related_name='branches', blank=False, null=False,
-                                on_delete=models.DO_NOTHING)
+                                on_delete=models.CASCADE)
 
     name = models.CharField(max_length=255, default='master', blank=False, null=False)
     sha = models.CharField(max_length=255, default='', blank=True, null=False)
@@ -395,10 +387,10 @@ class Commit(models.Model):
     """
 
     """
-    sender = models.ForeignKey(User, related_name='commits', blank=True, null=True, on_delete=models.DO_NOTHING)
+    sender = models.ForeignKey(User, related_name='commits', blank=True, null=True, on_delete=models.CASCADE)
 
     project = models.ForeignKey('project.Project', related_name='commits', blank=False, null=False,
-                                on_delete=models.DO_NOTHING)
+                                on_delete=models.CASCADE)
     areas = models.ManyToManyField('Area', related_name='commits', blank=True)
 
     branches = models.ManyToManyField('Branch', related_name='commits', blank=True)
@@ -514,8 +506,8 @@ class ParentCommit(models.Model):
     """
     
     """
-    to_commit = models.ForeignKey('Commit', related_name='to_commits', on_delete=models.DO_NOTHING)
-    from_commit = models.ForeignKey('Commit', related_name='from_commits', on_delete=models.DO_NOTHING)
+    to_commit = models.ForeignKey('Commit', related_name='to_commits', on_delete=models.CASCADE)
+    from_commit = models.ForeignKey('Commit', related_name='from_commits', on_delete=models.CASCADE)
     index_number = models.IntegerField(default=0, blank=False, null=False)
 
     created = models.DateTimeField(auto_now_add=True)
@@ -541,10 +533,10 @@ class Tag(models.Model):
     its creation and return to the user in the archive.
     """
 
-    sender = models.ForeignKey(User, related_name='tags', blank=True, null=True, on_delete=models.DO_NOTHING)
+    sender = models.ForeignKey(User, related_name='tags', blank=True, null=True, on_delete=models.CASCADE)
 
     project = models.ForeignKey('project.Project', related_name='tags', blank=False, null=False,
-                                on_delete=models.DO_NOTHING)
+                                on_delete=models.CASCADE)
     areas = models.ManyToManyField('Area', related_name='tags', blank=True)
 
     tag = models.CharField(max_length=255, default='0.0.1', blank=False, null=False)

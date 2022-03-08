@@ -11,15 +11,24 @@ class ConfirmationHMAC(object):
 
     @property
     def key(self):
-        payload = bytes(signing.Signer(salt=settings.TOKEN_SALT).sign(value=self.organization.pk), "utf-8")
+        payload = signing.Signer(salt=settings.TOKEN_SALT).sign(value=self.organization.id)
+        if isinstance(payload, str):
+            payload = payload.encode('utf-8')
         key = signing.b64_encode(payload)
+        if isinstance(key, bytes):
+            key = key.decode('utf-8')
         return key
 
     @classmethod
     def from_key(cls, key):
+        if isinstance(key, str):
+            key = key.encode('utf-8')
         try:
-            pk = signing.Signer(salt=settings.TOKEN_SALT).unsign(signing.b64_decode(key))
-            ret = Organization.objects.get(pk=pk)
+            payload = signing.b64_decode(key)
+            if isinstance(payload, bytes):
+                payload = payload.decode('utf-8')
+            organization_id = signing.Signer(salt=settings.TOKEN_SALT).unsign(payload)
+            ret = Organization.objects.get(id=organization_id)
         except (signing.BadSignature, Organization.DoesNotExist):
             ret = None
         return ret

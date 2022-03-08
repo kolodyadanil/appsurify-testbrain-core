@@ -4,5 +4,6 @@ set -o errexit
 set -o nounset
 
 rm -f '/opt/app/pids/celery-beat.pid'
-service postfix start && service cron start && /usr/local/bin/celery beat -A system -S django --max-interval 5 --loglevel=INFO \
+service postfix start && service cron start && \
+/usr/local/bin/celery -A system beat -S django --max-interval 5 --loglevel=INFO \
 --pidfile /opt/app/pids/celery-beat.pid

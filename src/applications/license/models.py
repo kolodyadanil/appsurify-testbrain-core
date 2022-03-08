@@ -79,7 +79,7 @@ class LicenseKey(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, unique=True)
 
     organization = models.ForeignKey('organization.Organization', related_name='license_keys', blank=False, null=False,
-                                     on_delete=models.DO_NOTHING)
+                                     on_delete=models.CASCADE)
     user = models.ForeignKey(User, related_name='license_keys', blank=True, null=True, on_delete=models.SET_NULL)
 
     default = models.BooleanField(default=False)

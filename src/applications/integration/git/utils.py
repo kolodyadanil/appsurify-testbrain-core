@@ -195,7 +195,9 @@ def verify_secret_hook(request):
     return True, HttpResponse(status=204)
 
 
-def sync_full_commits(repository_credential, data={}):
+def sync_full_commits(repository_credential, data=None):
+    if data is None:
+        data = {}
     host = repository_credential.host
     login = repository_credential.login
     password = repository_credential.password
@@ -350,7 +352,7 @@ def sync_full_commits(repository_credential, data={}):
 
         return new_hashes
     except SSHException as e:
-        print(False, e.message)
+        print(False, e)
     except socket.error as e:
         print(False, e)
     except Exception as e:

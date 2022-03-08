@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import pickle
 
@@ -13,8 +14,9 @@ def save_model(model, project_id, model_prefix=''):
     if not os.path.exists(directory_path):
         os.makedirs(directory_path)
 
-    with open(model_path, 'wb') as outfile:
-        pickle.dump(model, outfile, protocol=pickle.HIGHEST_PROTOCOL)  # pickle.dump(model, outfile, protocol=pickle.HIGHEST_PROTOCOL)
+    outfile = open(model_path, 'wb')
+    pickle.dump(model, outfile, protocol=pickle.HIGHEST_PROTOCOL)
+    # pickle.dump(model, outfile, protocol=pickle.HIGHEST_PROTOCOL)
 
     return model
 
@@ -24,11 +26,16 @@ def load_model(project_id, model_prefix=''):
     directory_path = os.path.join(storage_path, 'models', 'predict_bugs', model_prefix)
     model_name = '{project_id}.model'.format(project_id=project_id)
     model_path = os.path.join(directory_path, model_name)
+    model = None
 
     if not os.path.exists(model_path):
-        return None
+        return model
 
-    with open(model_path, 'rb') as infile:
-        model = pickle.load(infile)  # TODO if pickle.load not working, try to change pickle.dump protocol
-
+    if os.path.getsize(model_path) > 0:
+        try:
+            infile = open(model_path, 'rb')
+            unpickler = pickle.Unpickler(infile)
+            model = unpickler.load()  # TODO if pickle.load not working, try to change pickle.dump protocol
+        except Exception as e:
+            print(e)
     return model

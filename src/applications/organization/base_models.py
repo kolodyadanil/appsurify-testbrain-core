@@ -94,11 +94,11 @@ class OrgMeta(ModelBase):
         try:
             cls.module_registry[module]['OrgUserModel']._meta.get_field('user')
         except FieldDoesNotExist:
-            cls.module_registry[module]['OrgUserModel'].add_to_class('user', models.ForeignKey(USER_MODEL, related_name='%(app_label)s_%(class)s', on_delete=models.DO_NOTHING))
+            cls.module_registry[module]['OrgUserModel'].add_to_class('user', models.ForeignKey(USER_MODEL, related_name='%(app_label)s_%(class)s', on_delete=models.CASCADE))
         try:
             cls.module_registry[module]['OrgUserModel']._meta.get_field('organization')
         except FieldDoesNotExist:
-            cls.module_registry[module]['OrgUserModel'].add_to_class('organization', models.ForeignKey(cls.module_registry[module]['OrgModel'], related_name='organization_users', on_delete=models.DO_NOTHING))
+            cls.module_registry[module]['OrgUserModel'].add_to_class('organization', models.ForeignKey(cls.module_registry[module]['OrgModel'], related_name='organization_users', on_delete=models.CASCADE))
 
     def update_org_owner(cls, module):
         """
@@ -110,7 +110,7 @@ class OrgMeta(ModelBase):
             cls.module_registry[module]['OrgOwnerModel'].add_to_class('organization_user',
                                                                       models.OneToOneField(
                                                                           cls.module_registry[module]['OrgUserModel'],
-                                                                          on_delete=models.DO_NOTHING))
+                                                                          on_delete=models.CASCADE))
         try:
             cls.module_registry[module]['OrgOwnerModel']._meta.get_field('organization')
         except FieldDoesNotExist:
@@ -118,7 +118,7 @@ class OrgMeta(ModelBase):
                                                                       models.OneToOneField(
                                                                           cls.module_registry[module]['OrgModel'],
                                                                           related_name='owner',
-                                                                          on_delete=models.DO_NOTHING))
+                                                                          on_delete=models.CASCADE))
 
 
 class AbstractBaseOrganization(UnicodeMixin, models.Model):

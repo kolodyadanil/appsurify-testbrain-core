@@ -11,7 +11,6 @@ celery[redis]>=4.4.0,<5.0
 django-filter>=21.0
 django-cors-headers
 django-celery-beat<2.2.1
-django-celery-results
 requests
 pexpect
 pandas
@@ -23,7 +22,8 @@ textdistance
 cryptography
 PyGithub
 # Legacy
-# django-celery-monitor
+gitpython
+django-celery-results
 gunicorn
 django-polymorphic
 django-mptt
@@ -45,5 +45,8 @@ rest-framework-generic-relations
 djangorestframework-filters==1.0.0.dev2
 six
 lxml
+user_agents
 jira
-gitpython
+catboost
+psutil
+pid

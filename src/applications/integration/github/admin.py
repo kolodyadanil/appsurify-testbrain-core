@@ -5,6 +5,13 @@ from django.contrib import admin
 
 from .models import *
 
-admin.site.register(GithubRepository)
+
+
+class GitHubRepositoryAdmin(admin.ModelAdmin):
+    list_display = ['id', 'github_repository_name', 'project', ]
+    list_display_links = ['id', ]
+
+
+admin.site.register(GithubRepository, GitHubRepositoryAdmin)
 admin.site.register(GithubHook)
 admin.site.register(GithubIssue)

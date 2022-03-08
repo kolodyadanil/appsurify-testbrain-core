@@ -26,9 +26,9 @@ ref_pattern = re.compile(r"(^(refs/(remotes/|heads/)(origin/)?|remotes/(origin/)
 
 class GithubRepository(models.Model):
     project = models.OneToOneField('project.Project', related_name='github_repository', null=False,
-                                   on_delete=models.DO_NOTHING)
+                                   on_delete=models.CASCADE)
     github_repository_name = models.CharField(max_length=255, blank=False, null=False)
-    user = models.ForeignKey(User, related_name='github_repository', null=False, on_delete=models.DO_NOTHING)
+    user = models.ForeignKey(User, related_name='github_repository', null=False, on_delete=models.CASCADE)
     token = models.CharField(max_length=50, blank=False, null=False)
 
     updated = models.DateTimeField(auto_now=True)
@@ -202,13 +202,19 @@ class GithubRepository(models.Model):
         try:
             message = event_func(request.data, self.id)
         except Exception as exc:
-            status, message = False, exc.message
+            status, message = False, repr(exc)
 
         return status, message
 
+    @staticmethod
+    def processing_commits_fast(project, repository, data):
+        from applications.integration.github.utils import processing_commits_fast
+        result = processing_commits_fast(project=project, repository=repository, data=data)
+        return result
+
 
 class GithubHook(models.Model):
-    project = models.OneToOneField('project.Project', related_name='web_hook', null=False, on_delete=models.DO_NOTHING)
+    project = models.OneToOneField('project.Project', related_name='web_hook', null=False, on_delete=models.CASCADE)
     id_hook = models.IntegerField(blank=False, null=False)
     created_at = models.DateTimeField()
     updated_at = models.DateTimeField()
@@ -223,7 +229,7 @@ class GithubHook(models.Model):
 
 
 class GithubIssue(models.Model):
-    defect = models.ForeignKey('testing.Defect', related_name='issue', null=False, on_delete=models.DO_NOTHING)
+    defect = models.ForeignKey('testing.Defect', related_name='issue', null=False, on_delete=models.CASCADE)
     issue_number = models.IntegerField(blank=False, null=False)
 
     updated = models.DateTimeField(auto_now=True)

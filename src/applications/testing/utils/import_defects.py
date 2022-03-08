@@ -32,6 +32,9 @@ def get_buggy_commits(repo, corrective_commit):
             continue
 
         patch = diff.diff
+        if isinstance(patch, bytes):
+            patch = patch.decode('utf8', errors='replace')
+
         patch_strings = patch.split('\n')
 
         current_string_number = 0
@@ -145,7 +148,7 @@ def import_defects(project=None, repository=None, repo=None, corrective_commits=
         defect.save()
 
         caused_by_commits = Commit.objects.filter(sha__in=buggy_commits, project=project)
-        defect.caused_by_commits = caused_by_commits
+        defect.caused_by_commits.set(list(caused_by_commits))
 
         fixing_commit_number = closed_commit.display_id
         bug_commit_number = ','.join([bug_commit.display_id for bug_commit in caused_by_commits])

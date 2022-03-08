@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
 
 import os
 import re
@@ -21,9 +20,9 @@ ref_pattern = re.compile(
 
 class PerforceRepository(models.Model):
     project = models.OneToOneField('project.Project', related_name='perforce_repository', null=False,
-                                   on_delete=models.DO_NOTHING)
+                                   on_delete=models.CASCADE)
     user = models.ForeignKey(User, related_name='perforce_repository', null=False,
-                             on_delete=models.DO_NOTHING)
+                             on_delete=models.CASCADE)
 
     host = models.CharField(max_length=255, blank=False, null=False)
     port = models.CharField(max_length=6, blank=True, null=False, default=str(1666))
@@ -174,9 +173,10 @@ class PerforceRepository(models.Model):
         status, message = True, ''
         try:
             message = event_push(self.id)
-        except Exception as exc:
-            status, message = False, exc.message
+        except Exception as e:
+            status, message = False, e
         return status, message
 
-
-
+    @staticmethod
+    def processing_commits_fast(project, repository, data):
+        return True
