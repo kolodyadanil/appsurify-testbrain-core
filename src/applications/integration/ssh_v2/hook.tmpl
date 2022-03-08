@@ -18,8 +18,7 @@ import logging.config
 try:
     import requests
     from requests.adapters import HTTPAdapter
-    from requests.sessions import Session
-    from requests.adapters import Retry
+    from urllib3.util.retry import Retry
 except ImportError:
     warnings.warn("Please install 'requests'. 'pip install requests'")
     sys.exit(1)
@@ -43,17 +42,17 @@ DEBUG = True
 F_NULL = open(os.devnull, "w")
 
 # VARIABLES AND CONSTANTS
-POST_URL = "http://127.0.0.1/api/ssh_v2/hook/1/"
-USERNAME = "james_farriertrimblecom"
-REPOSITORY = "ctctproduct"
-API_KEY = "MTpZY3BOY1pCU0ljbnQzWjRuSm5WS2w2cXNFWjA"
+POST_URL = "{{HOOK_URL}}"
+USERNAME = "{{USERNAME}}"
+REPOSITORY = "{{PROJECT}}"
+API_KEY = "{{API_KEY}}"
 
 EVENT_INSTALL = u'install'
 EVENT_PUSH = u'push'
 EVENT_CREATE = u'create'
 EVENT_DELETE = u'delete'
 
-COMMIT_COUNT = 50
+COMMIT_COUNT = 10
 
 DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), u'.testbrain.db')
 CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), u'.testbrain.cache')
@@ -200,7 +199,7 @@ class FileLock(object):
         return False
 
     def acquire(self):
-        """ 
+        """
             Check if this hook script is running. If the script is running, it check again
             every `wait` seconds. It does this until it either the check retun False or
             exceeds `timeout` number of seconds, in which case it throws
@@ -650,14 +649,29 @@ def execute(commandLine):
         raise Exception(error)
     return out
 
+def requests_retry_session(
+    retries=3,
+    backoff_factor=0.3,
+    status_forcelist=(500, 502, 503, 504),
+    session=None,
+):
+    session = session or requests.Session()
+    retry = Retry(
+        total=retries,
+        read=retries,
+        connect=retries,
+        backoff_factor=backoff_factor,
+        status_forcelist=status_forcelist,
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    return session
 
 def request(event, data):
     headers = {"Content-Type": "application/json", "X-Git-Event": event, "token": API_KEY}
     try:
-        session = Session()
-        session.mount('http://', HTTPAdapter(max_retries=3))
-        session.mount('https://', HTTPAdapter(max_retries=3))
-        resp = session.post(url=POST_URL, data=data, headers=headers, verify=False, allow_redirects=True)
+        resp = requests_retry_session().post(url=POST_URL, data=data, headers=headers, verify=False, allow_redirects=True)
         result = (resp.status_code, resp.reason)
     except Exception as e:
         print("Request error: ", e)
@@ -864,7 +878,7 @@ def get_parent_list(sha_list, remotes=False, blame=False, once=False):
 
         for filename in set(filename_list_1 + filename_list_2 + filename_list_3):
 
-            if isinstance(filename, str):
+            if isinstance(filename, bytes):
                 filename = filename.decode('utf-8', errors='ignore')
 
             try:
@@ -998,7 +1012,7 @@ def get_commit_list(sha_list, remotes=False, blame=False, once=False):
 
         for filename in set(filename_list_1 + filename_list_2 + filename_list_3):
 
-            if isinstance(filename, str):
+            if isinstance(filename, bytes):
                 filename = filename.decode('utf-8', errors='ignore')
 
             try:
@@ -1299,31 +1313,35 @@ def performSync(remotes=False, force=False, blame=False):
             time.sleep(15)
 
     time.sleep(15)
-    tags = get_tag_list()
+    try:
+        tags = get_tag_list()
 
-    for (tag_sha, tag) in tags:
-        end_sha = tag_sha
+        for (tag_sha, tag) in tags:
+            end_sha = tag_sha
 
-        commit_list = get_tag_sha_list('tags/' + tag)
+            commit_list = get_tag_sha_list('tags/' + tag)
 
-        if len(commit_list) > 0:
-            end_sha = commit_list[-1]
+            if len(commit_list) > 0:
+                end_sha = commit_list[-1]
 
-        last_sha = _get_last_commit_sha(tag)
+            last_sha = _get_last_commit_sha(tag)
 
-        if last_sha == end_sha and force is False:
-            continue
+            if last_sha == end_sha and force is False:
+                continue
 
-        data = wrap_tag_event(tag, end_sha)
-        logging.debug("Tag '{}' send wrapped data '{}'".format(tag, data))
+            data = wrap_tag_event(tag, end_sha)
+            logging.debug("Tag '{}' send wrapped data '{}'".format(tag, data))
 
-        status_code, content = request(EVENT_CREATE, data)
-        logging.debug(
-            "Tag '{}' commit '{}' status '{}' response '{}'".format(tag, end_sha, status_code, content))
-        if status_code in [200, 201]:
-            _set_last_commit_sha(tag, end_sha)
+            status_code, content = request(EVENT_CREATE, data)
+            logging.debug(
+                "Tag '{}' commit '{}' status '{}' response '{}'".format(tag, end_sha, status_code, content))
+            if status_code in [200, 201]:
+                _set_last_commit_sha(tag, end_sha)
 
-        time.sleep(10)
+            time.sleep(15)
+
+    except Exception as e:
+        pass
 
     end_time = time.time()
     logging.debug("Total {} seconds".format(end_time - start_time))

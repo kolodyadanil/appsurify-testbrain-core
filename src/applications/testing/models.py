@@ -386,13 +386,13 @@ class TestRun(MPTTModel):
     @property
     def execution_time(self):
         aggregate_data = self.test_run_results.aggregate(
-            sum_execution=functions.Coalesce(models.Sum('execution_time'), 0))
+            sum_execution=functions.Coalesce(models.Sum('execution_time'), 0, output_field=models.FloatField()))
         return aggregate_data['sum_execution']
 
     @property
     def execution_time_avg(self):
         aggregate_data = self.test_run_results.aggregate(
-            avg_execution=functions.Coalesce(models.Avg('execution_time'), 0))
+            avg_execution=functions.Coalesce(models.Avg('execution_time'), 0, output_field=models.FloatField()))
         return aggregate_data['avg_execution']
 
     @property

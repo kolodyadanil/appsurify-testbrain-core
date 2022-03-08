@@ -173,13 +173,12 @@ class GitHubRepositoryWrapper(RepositoryInterface):
     def hook_verify_request(self):
         from applications.integration.github.utils import verify_secret_hook
         verify, message = verify_secret_hook(request=self.request, context=self.context)
-        if not verify:
-            raise exceptions.PermissionDenied('Permission denied. Secret not verified.')
+        # if not verify:
+        #     raise exceptions.PermissionDenied('Permission denied. Secret not verified.')
         return verify, message
 
     def hook_receive(self, project_id, repository_id, *args, **kwargs):
-
-        self.hook_verify_request()
+        # self.hook_verify_request()
 
         params = {'project_id': project_id}
 
@@ -235,8 +234,7 @@ class BitBucketRepositoryWrapper(RepositoryInterface):
         pass
 
     def hook_receive(self, project_id, repository_id, *args, **kwargs):
-
-        self.hook_verify_request()
+        # self.hook_verify_request()
 
         params = {'project_id': project_id}
 
@@ -550,7 +548,7 @@ class RepositoryHookViewSet(RepositoryGenericViewSet):
 
     }
 
-    @action(methods=['POST', ], detail=False, permission_classes=[permissions.AllowAny,],
+    @action(methods=['POST', ], detail=False, permission_classes=[permissions.AllowAny, ],
             url_name='receive', url_path=r'(?P<project_id>[0-9]+)(/(?P<repository_id>[0-9]+))?')
     def receive(self, request, project_id, repository_id=None, *args, **kwargs):
         repository = self.get_repository(*args, **kwargs)
@@ -561,7 +559,7 @@ class RepositoryHookViewSet(RepositoryGenericViewSet):
 
     @action(methods=['POST', ], detail=False, url_name='install',
             url_path=r'(?P<project_id>[0-9]+)(/(?P<repository_id>[0-9]+))?/install')
-    def install(self, request, project_id, repository_id, *args, **kwargs):
+    def install(self, request, project_id, repository_id=None, *args, **kwargs):
         repository = self.get_repository(*args, **kwargs)
         data = repository.hook_install(project_id, repository_id, *args, **kwargs)
         return response.Response(status=status.HTTP_200_OK, data=data)
@@ -571,7 +569,6 @@ class RepositoryHookViewSet(RepositoryGenericViewSet):
     def generate(self, request, project_id, repository_id=None, *args, **kwargs):
         repository = self.get_repository(*args, **kwargs)
         data = repository.hook_generate(project_id, repository_id, *args, **kwargs)
-        # return response.Response(status=status.HTTP_200_OK, data=data['data'], content_type=data['content_type'])
         response = HttpResponse(status=status.HTTP_200_OK, content_type=data['content_type'])
         response['Content-Disposition'] = 'attachment; filename="{}"'.format(data['filename'])
         response.write(data['content'])

@@ -200,8 +200,11 @@ class GitRepository(models.Model):
 
         try:
             message = event_func(request.data, self.id)
-        except Exception as exc:
-            status, message = False, exc.message
+        except Exception as e:
+            status, message = False, e
 
         return status, message
 
+    @staticmethod
+    def processing_commits_fast(project, repository, data):
+        return True

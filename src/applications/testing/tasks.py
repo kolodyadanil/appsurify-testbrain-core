@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from system.celery_app import app
 
+from celery import group
+
 import functools
 import time
 
@@ -9,7 +11,9 @@ from hashlib import md5
 from contextlib import contextmanager
 
 from django.core.cache import cache
-# from celery_locked_task.locked_task import LockedTask
+
+
+from applications.vcs.utils.association import find_and_associate_areas, find_and_association_files
 
 
 @app.task(bind=True)
@@ -51,44 +55,22 @@ def add_closed_by_commits_task(self, defect_id, commit_id, test_suite_id):
 
 
 @app.task(bind=True)
-def build_test_prioritization_ml_model_for_test_suite(self, test_suite_id):
-    import pytz
-    import datetime
-    from applications.testing.models import TestSuite
-    from applications.testing.utils.predict_tests_priorities.predict_tests_priorities import MLTrainer, DatasetError
-
-    try:
-        mlt = MLTrainer(test_suite_id=test_suite_id)
-        mlt.train()
-        current_time = datetime.datetime.now().replace(tzinfo=pytz.timezone('UTC'))
-        TestSuite.objects.filter(id=test_suite_id).update(ml_model_last_time_created=current_time)
-    except DatasetError as e:
-        return e.message
+def add_association_for_test(self, test_id):
+    from applications.testing.models import Test
+    tests = Test.objects.filter(id=test_id)
+    for test in tests:
+        result_areas = find_and_associate_areas(test)
+        result_files = find_and_association_files(test)
 
 
 @app.task(bind=True)
-def build_test_prioritization_ml_models(self):
-    import pytz
-    import datetime
-    from django.db.models import Q
-    from applications.testing.models import TestSuite
-
-    current_time = datetime.datetime.now().replace(tzinfo=pytz.timezone('UTC'))
-    one_day_before_from_now = current_time - datetime.timedelta(days=1)
-    minimal_number_associated_test_runs = 50
-    minimal_number_test_run_results = 100
-
-    test_suites = TestSuite.objects.filter(
-        test_runs__gte=minimal_number_associated_test_runs,
-        test_run_results__gte=minimal_number_test_run_results
-    ).filter(
-        Q(ml_model_last_time_created__isnull=True) |
-        Q(ml_model_last_time_created__lte=one_day_before_from_now)
-    ).distinct('id')[:1000]
-    # For each test_suite in result start celery task for building model
-    test_suites_list = list(set(test_suites.values_list('id', flat=True)))
-    for test_suite_id in test_suites_list:
-        try:
-            build_test_prioritization_ml_model_for_test_suite.delay(test_suite_id)
-        except Exception as exc:
-            print(exc.message)
+def periodic_add_association(self, chunk_size=20):
+    from applications.project.models import Project
+    from celery.utils.functional import chunks
+    test_ids = list(Project.objects.order_by('-id').exclude(tests__isnull=True)
+                    .values_list('tests__id', flat=True).distinct())
+    for chunk in chunks(test_ids, chunk_size):
+        # add_association_for_test.delay(chunk)
+        job = group([add_association_for_test.s(test_id) for test_id in chunk])
+        result = job.apply_async()
+        time.sleep(0.5)

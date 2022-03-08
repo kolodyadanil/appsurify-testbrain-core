@@ -239,9 +239,13 @@ class BitbucketRepository(models.Model):
         try:
             message = event_func(request.data, self.id)
         except Exception as exc:
-            status, message = False, exc.message
+            status, message = False, repr(exc)
 
         return status, message
+
+    @staticmethod
+    def processing_commits_fast(project, repository, data):
+        return True
 
 
 class BitbucketHook(models.Model):

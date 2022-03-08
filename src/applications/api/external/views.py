@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 import json
 import re
 import urllib
+import urllib.parse
 from django.db import models
 from django.db.models import F, Value, CharField
 from django.db.models.functions import Concat
@@ -17,6 +18,7 @@ from applications.api.common.views import MultiSerializerViewSetMixin
 from applications.api.report.views import TestReportModelViewSet
 from applications.testing.models import Test, Defect, TestRunResult, TestRun
 # from applications.license.utils import check_usage
+from applications.organization.models import Organization
 from applications.organization.utils import get_current_organization
 from applications.vcs.models import Branch
 
@@ -33,6 +35,8 @@ PRIORITY_READY_DEFECT = 6
 PRIORITY_OPEN_DEFECT = 7
 PRIORITY_TOP20 = 8
 PRIORITY_PERCENT = 9
+PRIORITY_FOR_TEST = 10
+PRIORITY_FOR_TEST_WITH_DAY = 11
 
 
 class ExternalAPIViewSet(MultiSerializerViewSetMixin, viewsets.GenericViewSet):
@@ -52,8 +56,8 @@ class ExternalAPIViewSet(MultiSerializerViewSetMixin, viewsets.GenericViewSet):
         'output_test_run_view': OutputTestSuiteSerializer,
     }
 
-    filter_class = None
-    filter_action_classes = {}
+    # filter_class = None
+    # filter_action_classes = {}
     # ordering_fields = ()
     # search_fields = ()
     # filter_fields = ()
@@ -97,8 +101,8 @@ class ExternalAPIViewSet(MultiSerializerViewSetMixin, viewsets.GenericViewSet):
             raise APIException("TestSuite matching query does not exist.")
         except Commit.DoesNotExist:
             raise APIException("Commit matching query does not exist.")
-        except Exception as e:
-            raise APIException(e)
+        # except Exception as e:
+        #     raise APIException(e)
 
     @action(methods=['GET', ], detail=False, url_path=r'prioritized-tests')  # TODO: rename url path
     def prioritized_tests_view(self, request, *args, **kwargs):
@@ -158,9 +162,9 @@ class ExternalAPIViewSet(MultiSerializerViewSetMixin, viewsets.GenericViewSet):
             request.query_params['test_suite'] = test_suite.id
 
             organization = get_current_organization(request=request)
-            pay_flag = check_usage(organization=organization, test_suite_id=test_suite.id)
-            if pay_flag:
-                raise APIException('Number of minutes has been met for the month.')
+            # pay_flag = check_usage(organization=organization, test_suite_id=test_suite.id)
+            # if pay_flag:
+            #     raise APIException('Number of minutes has been met for the month.')
 
         # COMMITS
         # validate commit params in request query params
@@ -169,13 +173,13 @@ class ExternalAPIViewSet(MultiSerializerViewSetMixin, viewsets.GenericViewSet):
                 commit_sha = request.query_params.get(arg)
 
                 try:
-                    commit_sha = urllib.unquote_plus(commit_sha)
+                    commit_sha = urllib.parse.unquote_plus(commit_sha)
                 except Exception:
                     pass
 
                 try:
                     if repo_type == 'perforce':
-                        if isinstance(commit_sha, (str, unicode)):
+                        if isinstance(commit_sha, (str, bytes)):
                             if not commit_sha.isdigit():
                                 raise APIException("Incorrect params 'commit' {commit_sha} "
                                                    "with param 'repo' = 'perforce'".format(commit_sha=commit_sha))
@@ -265,8 +269,10 @@ class ExternalAPIViewSet(MultiSerializerViewSetMixin, viewsets.GenericViewSet):
                 queryset = test_view.get_top20_queryset(queryset=filtered_queryset)
             elif priority == PRIORITY_PERCENT:
                 queryset = test_view.get_top_by_percent_queryset(queryset=filtered_queryset)
+            elif priority == PRIORITY_FOR_TEST or priority == PRIORITY_FOR_TEST_WITH_DAY:
+                queryset = test_view.get_all_queryset(queryset=filtered_queryset)
             else:
-                raise APIException('Please choice priority from 1 to 9.')
+                raise APIException('Please choice priority from 1 to 11.')
         except NotFound:
             raise APIException(
                 "No one commit in branch '{0}' has not associated test runs in specified test suite '{1}'".format(

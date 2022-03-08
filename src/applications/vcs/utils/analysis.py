@@ -9,9 +9,9 @@ from django.contrib.auth import get_user_model
 from django.db import models
 from django.db.models import Avg, Q
 
-from applications.testing.models import Defect
-from applications.vcs.models import Commit
-from applications.testing.models import Test
+# from applications.testing.models import Defect
+# from applications.vcs.models import Commit
+# from applications.testing.models import Test
 import textdistance
 
 User = get_user_model()
@@ -26,6 +26,7 @@ def count_weekday(start_date):
 
 
 def calculate_user_analysis(queryset):
+    from applications.testing.models import Defect
     result_by_hour = {
         'defects': list(),
         'commits': list(),
@@ -317,7 +318,9 @@ def avg_per_day(list_items, count_day, day_of_week, item_name):
     return avg_value
 
 
-def calculate_similar_by_commit(queryset, commit_id, percent=0):
+def calculate_similar_by_commit(queryset, commit_id, percent=20):
+    from applications.vcs.models import Commit
+    from applications.testing.models import Test
     result = {
         'similar_areas': [],
         'similar_folders': [],
@@ -359,3 +362,19 @@ def similarity(value1, value2):
     return textdistance.damerau_levenshtein.normalized_similarity(value1, value2) +\
         textdistance.sorensen_dice.normalized_similarity(value1, value2) +\
         textdistance.lcsseq.normalized_similarity(value1, value2)
+
+
+def find_similarity_in_name(listObj):
+    result = dict()
+    for arg in ['name', 'class_name', 'testsuite_name']:
+        matched = list(
+                filter(lambda x: x[arg + '_similarity'] > 0, listObj))    
+        if len(matched) > 0:
+            matched = sorted(
+                    matched, key=lambda x: x[arg + '_similarity'], reverse=True)
+            max_score = matched[0][arg + '_similarity']
+            matched = list(
+                filter(lambda x: x[arg + '_similarity'] >= 0.7 * max_score, matched))[:5]
+        result[arg] = matched
+        
+    return result

@@ -70,7 +70,7 @@ class GitSSHv2Repository(models.Model):
         try:
             message = event_func(request.data, self.id)
         except Exception as exc:
-            status, message = False, exc.message
+            status, message = False, repr(exc)
 
         return status, message
 
@@ -89,3 +89,9 @@ class GitSSHv2Repository(models.Model):
         hook_url = request.build_absolute_uri(reverse('hook-receive', args=('ssh_v2', project.id,)))
         hook = generate_hook(hook_url, username, repo_name, api_key)
         return hook
+
+    @staticmethod
+    def processing_commits_fast(project, repository, data):
+        from applications.integration.ssh_v2.utils import processing_commits_fast
+        result = processing_commits_fast(project=project, repository=repository, data=data)
+        return result

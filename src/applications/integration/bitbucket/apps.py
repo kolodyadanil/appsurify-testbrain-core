@@ -10,3 +10,5 @@ class BitbucketConfig(AppConfig):
     label = 'bitbucket_integration'
     verbose_name = _('Bitbucket integration')
 
+    def ready(self):
+        import applications.integration.bitbucket.signals

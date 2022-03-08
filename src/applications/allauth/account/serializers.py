@@ -308,7 +308,7 @@ class OrganizationSignupSerializer(serializers.Serializer):
             try:
                 email = self._validate_unique_email(email)
             except ValidationError as e:
-                raise serializers.ValidationError({'email': e.message})
+                raise serializers.ValidationError({'email': e})
 
         if allauth_settings.SIGNUP_EMAIL_ENTER_TWICE:
             if not attrs.has_key('email2'):
@@ -323,7 +323,7 @@ class OrganizationSignupSerializer(serializers.Serializer):
             try:
                 get_adapter().clean_password(password, user=None)
             except ValidationError as e:
-                raise serializers.ValidationError({'password': e.message})
+                raise serializers.ValidationError({'password': e})
             if allauth_settings.SIGNUP_PASSWORD_ENTER_TWICE:
                 if not attrs.has_key('password2'):
                     raise serializers.ValidationError({'password': 'The password fields didn\'t match.'})
@@ -463,7 +463,7 @@ class SignupSerializer(serializers.Serializer):
             try:
                 email = self._validate_unique_email(email)
             except ValidationError as e:
-                raise serializers.ValidationError({'email': e.message})
+                raise serializers.ValidationError({'email': e})
 
         if allauth_settings.SIGNUP_EMAIL_ENTER_TWICE:
             if not attrs.has_key('email2'):
@@ -478,7 +478,7 @@ class SignupSerializer(serializers.Serializer):
             try:
                 get_adapter().clean_password(password, user=None)
             except ValidationError as e:
-                raise serializers.ValidationError({'password': e.message})
+                raise serializers.ValidationError({'password': e})
             if allauth_settings.SIGNUP_PASSWORD_ENTER_TWICE:
                 if not attrs.has_key('password2'):
                     raise serializers.ValidationError({'password': 'The password fields didn\'t match.'})
@@ -597,7 +597,7 @@ class PasswordSetSerializer(serializers.Serializer):
             try:
                 get_adapter().clean_password(password, user=None)
             except ValidationError as e:
-                raise serializers.ValidationError({'password': e.message})
+                raise serializers.ValidationError({'password': e})
 
             password2 = attrs.get('password2')
             if (password and password2) and password != password2:

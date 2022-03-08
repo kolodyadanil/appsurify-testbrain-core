@@ -2,8 +2,8 @@
 from __future__ import absolute_import
 
 import os
-import re
 import time
+import re
 from datetime import datetime, timedelta
 from django.apps import apps as django_apps
 from django.conf import settings
@@ -57,10 +57,8 @@ def get_diff_type(diff):
 
 
 def prepare_path(path):
-    if isinstance(path, str):
-        path = path.replace('"', '').decode('string_escape').decode('utf8')
-    else:
-        path = path.replace('"', '')
+
+    path = path.replace('"', '')
 
     if '=>' not in path:
         return path
@@ -77,7 +75,7 @@ def prepare_path(path):
     return path
 
 
-def processing_commits(task=None, project=None, repository=None, ref=None, before=None, after=None, since_time=None):
+def processing_commits(project=None, repository=None, ref=None, before=None, after=None, since_time=None):
 
     repo = repository.get_repo(ref=ref, before=before, after=after, force=True)
 
@@ -92,8 +90,6 @@ def processing_commits(task=None, project=None, repository=None, ref=None, befor
     new_commits = []
 
     for refspec in refs:
-        if task:
-            task.lock_extend(task.lock_expire_at / 2, replace_ttl=True)
 
         branch, _ = Branch.objects.get_or_create(project=project, name=refspec)
         try:
@@ -108,24 +104,29 @@ def processing_commits(task=None, project=None, repository=None, ref=None, befor
                 commits
             )
 
-        db_exist_commits = list(
-            Commit.objects.filter(
-                project=project,
-                sha__in=map(lambda x: str(x.hexsha), commits)).values_list('sha', flat=True)
-        )
-
-        for commit in filter(lambda x: str(x.hexsha) not in db_exist_commits, commits):
-            new_commit, _ = create_commit(project=repository.project, repository=repository, branch=branch,
-                                          refspec=refspec, commit=commit)
+        for commit in commits:
+            new_commit, _ = create_or_update_commit(project=repository.project, repository=repository, branch=branch,
+                                                    refspec=refspec, commit=commit)
             new_commits.append(new_commit)
 
-        update_commits_queryset = Commit.objects.filter(project=repository.project, sha__in=db_exist_commits)
-
-        through_model = Commit.branches.through
-        through_model.objects.bulk_create([
-            through_model(commit_id=id, branch_id=branch.id)
-            for id in update_commits_queryset.exclude(branches__id=branch.id).values_list('id', flat=True)
-        ])
+        # db_exist_commits = list(
+        #     Commit.objects.filter(
+        #         project=project,
+        #         sha__in=map(lambda x: str(x.hexsha), commits)).values_list('sha', flat=True)
+        # )
+        #
+        # for commit in filter(lambda x: str(x.hexsha) not in db_exist_commits, commits):
+        #     new_commit, _ = create_or_update_commit(project=repository.project, repository=repository, branch=branch,
+        #                                             refspec=refspec, commit=commit)
+        #     new_commits.append(new_commit)
+        #
+        # update_commits_queryset = Commit.objects.filter(project=repository.project, sha__in=db_exist_commits)
+        #
+        # through_model = Commit.branches.through
+        # through_model.objects.bulk_create([
+        #     through_model(commit_id=id, branch_id=branch.id)
+        #     for id in update_commits_queryset.exclude(branches__id=branch.id).values_list('id', flat=True)
+        # ])
 
     return new_commits
 
@@ -215,6 +216,92 @@ def create_commit(project=None, repository=None, branch=None, refspec=None, comm
     return new_commit, created
 
 
+def create_or_update_commit(project=None, repository=None, branch=None, refspec=None, commit=None, is_parent=False):
+
+    defaults = {
+        'repo_id': commit.hexsha,
+        'display_id': commit.hexsha[:7],
+        'author': {
+            'email': commit.author.email,
+            'name': commit.author.name,
+            'date': datetime.fromtimestamp(commit.authored_date).strftime('%Y-%m-%dT%H:%M:%SZ'),
+        },
+        'committer': {
+            'email': commit.committer.email,
+            'name': commit.committer.name,
+            'date': datetime.fromtimestamp(commit.committed_date).strftime('%Y-%m-%dT%H:%M:%SZ'),
+        },
+        'message': commit.message[:255],
+        'stats': {
+            'deletions': commit.stats.total.get('deletions', 0),
+            'additions': commit.stats.total.get('insertions', 0),
+            'total': commit.stats.total.get('lines', 0)
+        },
+        'timestamp': datetime.fromtimestamp(commit.authored_date).strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'url': repository.url_commit(commit.hexsha)
+    }
+
+    new_commit, created = Commit.objects.get_or_create(
+        project=project,
+        sha=commit.hexsha,
+        defaults=defaults
+    )
+
+    if not branch:
+        branch, _ = Branch.objects.get_or_create(project=repository.project, name=refspec)
+
+    area_default = Area.get_default(project=project)
+    area_through_model = Commit.areas.through
+    area_through_model.objects.update_or_create(commit_id=new_commit.id, area_id=area_default.id)
+
+    branch_through_model = Commit.branches.through
+    branch_through_model.objects.update_or_create(commit_id=new_commit.id, branch_id=branch.id)
+
+    if is_parent:
+        return new_commit
+
+    index_number = 0
+    for parent in commit.parents:
+        index_number += 1
+
+        parent_defaults = {
+            'repo_id': parent.hexsha,
+            'display_id': parent.hexsha[:7],
+            'author': {
+                'email': parent.author.email,
+                'name': parent.author.name,
+                'date': datetime.fromtimestamp(parent.authored_date).strftime('%Y-%m-%dT%H:%M:%SZ'),
+            },
+            'committer': {
+                'email': parent.committer.email,
+                'name': parent.committer.name,
+                'date': datetime.fromtimestamp(parent.committed_date).strftime('%Y-%m-%dT%H:%M:%SZ'),
+            },
+            'message': parent.message[:255],
+            'stats': {
+                'deletions': parent.stats.total.get('deletions', 0),
+                'additions': parent.stats.total.get('insertions', 0),
+                'total': parent.stats.total.get('lines', 0)
+            },
+            'timestamp': datetime.fromtimestamp(parent.authored_date).strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'url': repository.url_commit(parent.hexsha)
+        }
+
+        parent_commit, parent_created = Commit.objects.get_or_create(
+            project=project,
+            sha=parent.hexsha,
+            defaults=parent_defaults
+        )
+
+        area_through_model = Commit.areas.through
+        area_through_model.objects.update_or_create(commit_id=parent_commit.id, area_id=area_default.id)
+
+        branch_through_model = Commit.branches.through
+        branch_through_model.objects.update_or_create(commit_id=parent_commit.id, branch_id=branch.id)
+
+    return new_commit, created
+
+
 def processing_files(task=None, project=None, repository=None, ref=None, before=None, after=None, since_time=None):
 
     repo = repository.get_repo(ref=ref, before=before, after=after)
@@ -231,9 +318,6 @@ def processing_files(task=None, project=None, repository=None, ref=None, before=
     commits_changed_files = []
 
     for refspec in refs:
-
-        if task:
-            task.lock_extend(task.lock_expire_at / 2, replace_ttl=True)
 
         try:
             commits = repository.get_commits(ref=ref, before=before, after=after, refspec=refspec)
@@ -376,8 +460,8 @@ def processing_rework(project=None, repository=None, ref=None, before=None, afte
                 commits
             )
 
-        for commit in commits:
-            result = calculate_rework(project=project, repository=repository, repo=repo, refspec=refspec, commit=commit)
+        # for commit in commits:
+        #     result = calculate_rework(project=project, repository=repository, repo=repo, refspec=refspec, commit=commit)
 
     return None
 
