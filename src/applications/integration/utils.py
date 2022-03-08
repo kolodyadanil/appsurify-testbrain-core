@@ -2,8 +2,8 @@
 from __future__ import absolute_import
 
 import os
-import re
 import time
+import re
 from datetime import datetime, timedelta
 from django.apps import apps as django_apps
 from django.conf import settings
@@ -460,8 +460,8 @@ def processing_rework(project=None, repository=None, ref=None, before=None, afte
                 commits
             )
 
-        for commit in commits:
-            result = calculate_rework(project=project, repository=repository, repo=repo, refspec=refspec, commit=commit)
+        # for commit in commits:
+        #     result = calculate_rework(project=project, repository=repository, repo=repo, refspec=refspec, commit=commit)
 
     return None
 

@@ -148,7 +148,7 @@ def processing_commits_task(self, project_id=None, repository_id=None, model_nam
         ref, before, after = None, None, None
         if data:
             webhook_data = repository.handling_push_webhook_payload(data=data)
-            ref, before, after = webhook_data['ref'], webhook_data['before'], webhook_data['after']
+            refspec, before, after = webhook_data['ref'], webhook_data['before'], webhook_data['after']
 
         result = processing_commits(project=repository.project, repository=repository,
                                     ref=ref, before=before, after=after, since_time=since_time)
