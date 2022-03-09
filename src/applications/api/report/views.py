@@ -2302,7 +2302,7 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
         newest_test_run = TestRun.objects.filter(
             id__in=set(list(queryset.values_list('test_runs__id', flat=True)))).order_by('-created').first()
 
-        if request.query_params.has_key('test_run'):
+        if 'test_run' in request.query_params:
             value = request.query_params['test_run']
             try:
                 newest_test_run = TestRun.objects.get(id=value)

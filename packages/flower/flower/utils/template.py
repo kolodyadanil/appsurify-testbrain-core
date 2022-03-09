@@ -8,7 +8,6 @@ try:
 except ImportError:
     from urllib.parse import urlencode
 
-
 from humanize import naturaltime
 from pytz import timezone, utc
 

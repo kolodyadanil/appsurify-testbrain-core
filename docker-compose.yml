@@ -38,14 +38,14 @@ services:
     <<: *testbrian
     container_name: testbrain-api
     restart: always
-    command: /start-api
+    command: python manage.py runserver 0.0.0.0:9000
     ports:
       - 9000:9000
 
   worker-spec:
     <<: *testbrian
     container_name: testbrain-worker-spec
-    command: celery worker -E -A system --loglevel=INFO --queues immediate,processing
+    command: celery -A system worker -E --loglevel=INFO --queues immediate
     depends_on:
       - api
       - postgres

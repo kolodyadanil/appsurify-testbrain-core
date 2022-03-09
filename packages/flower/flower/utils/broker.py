@@ -8,11 +8,9 @@ from tornado import ioloop
 from tornado import gen
 from tornado import httpclient
 
-try:
-    from urllib.parse import urlparse, urljoin, quote, unquote
-except ImportError:
-    from urlparse import urlparse, urljoin, unquote
-    from urllib import quote
+
+from urllib.parse import urlparse, urljoin, quote, unquote
+
 
 try:
     import redis

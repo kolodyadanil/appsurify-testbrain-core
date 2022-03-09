@@ -31,8 +31,8 @@ class TestRunFilterSet(FilterSet):
 
 class TestFilterSet(FilterSet):
 
-    test_suites = NumberFilter(label='test_suites__id', method='filter_test_suite')
-    test_run = NumberFilter(label='test_runs__id', method='filter_test_run')
+    test_suites = NumberFilter(field_name='test_suites__id', method='filter_test_suite')
+    test_run = NumberFilter(field_name='test_runs__id', method='filter_test_run')
 
     class Meta(object):
         model = Test
@@ -65,7 +65,7 @@ class TestRunResultFilterSet(FilterSet):
 
 class DefectFilterSet(FilterSet):
 
-    test_run = NumberFilter(label='found_test_runs__id', method='filter_test_run')
+    test_run = NumberFilter(field_name='found_test_runs__id', method='filter_test_run')
 
     class Meta(object):
         model = Defect
@@ -78,7 +78,7 @@ class DefectFilterSet(FilterSet):
 
 class FileFilterSet(FilterSet):
 
-    area = NumberFilter(label='area', method='filter_is_associated')
+    area = NumberFilter(field_name='area', method='filter_is_associated')
 
     class Meta(object):
         model = File

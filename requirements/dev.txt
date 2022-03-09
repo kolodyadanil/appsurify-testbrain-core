@@ -1,7 +1,3 @@
 -r base.txt
-# ./packages/GitPython
-# ./packages/gitdb2
-# ./packages/celery-locked-task
-# ./packages/django-celery-monitor
 ./packages/flower
 ./packages/drf-yasg
