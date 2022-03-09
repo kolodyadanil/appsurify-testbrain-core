@@ -49,6 +49,7 @@ RUN chmod -R +x /opt/app/bin
 RUN ln -s /opt/app/bin/perforce/nix/p4 /opt/app/bin/p4
 
 COPY ./compose/testbrain/core/cron/notification /etc/cron.d/notification
+# COPY ./compose/testbrain/core/cron/ml /etc/cron.d/ml
 
 COPY ./compose/testbrain/core/docker-entrypoint /docker-entrypoint
 RUN sed -i 's/\r$//g' /docker-entrypoint

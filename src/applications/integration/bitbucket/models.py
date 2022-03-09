@@ -243,6 +243,10 @@ class BitbucketRepository(models.Model):
 
         return status, message
 
+    @staticmethod
+    def processing_commits_fast(project, repository, data):
+        return True
+
 
 class BitbucketHook(models.Model):
     project = models.OneToOneField('project.Project', related_name='bitbucket_web_hook', null=False,

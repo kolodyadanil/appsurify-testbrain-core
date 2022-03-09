@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
 
 import os
 import re
@@ -174,9 +173,10 @@ class PerforceRepository(models.Model):
         status, message = True, ''
         try:
             message = event_push(self.id)
-        except Exception as exc:
-            status, message = False, repr(exc)
+        except Exception as e:
+            status, message = False, e
         return status, message
 
-
-
+    @staticmethod
+    def processing_commits_fast(project, repository, data):
+        return True

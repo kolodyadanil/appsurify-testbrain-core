@@ -62,6 +62,7 @@ LOCAL_APPS = [
     "applications.project",
     "applications.vcs",
     "applications.testing",
+    "applications.ml",
     "applications.notification",
     "applications.integration",
     "applications.integration.github",
@@ -198,5 +199,5 @@ USE_X_FORWARDED_PORT = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 512 * 1024
-DATA_UPLOAD_MAX_MEMORY_SIZE = 512 * 1024 * 1024
-FILE_UPLOAD_MAX_MEMORY_SIZE = 512 * 1024 * 1024
+DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024 * 1024

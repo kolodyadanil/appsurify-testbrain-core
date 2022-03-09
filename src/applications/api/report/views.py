@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-
 import re
 import operator
 import collections
@@ -24,7 +22,7 @@ from applications.vcs.utils.bugspots import Bugspots
 from .filters import *
 from .serializers import *
 
-from applications.testing.utils.predict_tests_priorities.predict_tests_priorities import *
+from applications.ml.neural_network import MLPredictor
 
 
 def get_object_or_404(queryset, *filter_args, **filter_kwargs):

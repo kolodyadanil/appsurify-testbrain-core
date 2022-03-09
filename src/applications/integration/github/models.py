@@ -206,6 +206,12 @@ class GithubRepository(models.Model):
 
         return status, message
 
+    @staticmethod
+    def processing_commits_fast(project, repository, data):
+        from applications.integration.github.utils import processing_commits_fast
+        result = processing_commits_fast(project=project, repository=repository, data=data)
+        return result
+
 
 class GithubHook(models.Model):
     project = models.OneToOneField('project.Project', related_name='web_hook', null=False, on_delete=models.CASCADE)
