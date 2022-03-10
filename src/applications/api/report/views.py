@@ -2425,15 +2425,18 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
         :param test_suite: py:obj:`TestSuite` object
         :return: py:obj:`Commit` object or may raise NotFound exception
         """
-
         last_run_commit_list = Commit.objects.filter(project=project,
                                                      branches=target_branch,
                                                      test_runs__isnull=False,
                                                      test_runs__test_suite=test_suite).order_by('-timestamp')
         if len(last_run_commit_list) == 0:
-            err_msg = "No one commit in branch '{0}' has not associated "                                 \
-                      "test runs in specified test suite '{1}'".format(target_branch.name, test_suite.name)
-            raise NotFound(detail=err_msg)
+            first_commit = Commit.objects.filter(project=project,
+                                                     branches=target_branch).order_by('timestamp')[:1]
+            if len(first_commit) == 0:
+                err_msg = "No one commit in branch '{0}' has not associated "                                 \
+                        "test runs in specified test suite '{1}'".format(target_branch.name, test_suite.name)
+                raise NotFound(detail=err_msg)
+            return first_commit[0]
         return last_run_commit_list[0]
 
     @staticmethod
