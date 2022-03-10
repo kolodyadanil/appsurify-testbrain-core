@@ -8,30 +8,39 @@ from django.db.transaction import atomic
 def delete_duplicated_sha(**kwargs):
     from django.db.models import Count
     from applications.vcs.models import Commit, FileChange
-
+    from django.db import connection
+    c = connection.cursor()
     try:
         print('  Delete duplicated commits...')
-        print('    Perform queryset for commits...')
-        qs = Commit.objects.all().values('project', 'sha').annotate(
-            cnt=Count('sha')).filter(cnt__gt=1).values_list('sha', flat=True)
-        print('    Duplicated commits: {}'.format(len(list(qs))))
-        with atomic():
-            for sha in qs:
-                Commit.objects.filter(sha=sha).order_by('created').first().delete()
+        c.execute("""
+DELETE FROM vcs_commit
+WHERE id IN (
+    SELECT id
+    FROM (
+            SELECT id,
+                ROW_NUMBER() OVER( PARTITION BY sha, project_id ORDER BY id) AS DuplicateCount
+            FROM vcs_commit ORDER BY id) vc
+            WHERE vc.DuplicateCount > 1
+);
+        """)
         print('  Done delete duplicated commits.')
-
         print('  Delete duplicated filechanges...')
-        print('    Perform queryset for filechanges...')
-        qs = FileChange.objects.all().values('commit_id', 'file_id').annotate(
-            cnt=Count('file_id')).filter(cnt__gt=1).values_list('file_id', flat=True)
-        print('    Duplicated filechanges: {}'.format(len(list(qs))))
-        with atomic():
-            for file_id in qs:
-                FileChange.objects.filter(file_id=file_id).order_by('created').first().delete()
+        c.execute("""
+DELETE FROM vcs_filechange
+WHERE id IN (
+    SELECT id
+    FROM (
+            SELECT id,
+                ROW_NUMBER() OVER( PARTITION BY file_id, commit_id ORDER BY id) AS DuplicateCount
+            FROM vcs_filechange ORDER BY id) vfc
+            WHERE vfc.DuplicateCount > 1
+);
+        """)
         print('  Done delete duplicated filechanges.')
-
-    except Exception as exc:
-        print(' Re-try migration one more time.')
+    except Exception as e:
+        print("Some error on cleanup duplicates")
+    finally:
+        c.close()
 
 
 class VCSConfig(AppConfig):
