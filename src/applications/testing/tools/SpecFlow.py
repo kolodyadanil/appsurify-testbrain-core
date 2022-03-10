@@ -29,11 +29,14 @@ ALLOWED_FORMAT_TYPES = [TYPE_JUNIT, TYPE_NUNIT3, TYPE_TRX]
 
 
 def preprocessing_dict(xmldict):
+    new_xmldict = dict()
     keys = xmldict.keys()
     for key in keys:
         if key[0] == '@':
-            xmldict[key[1:]] = xmldict.pop(key)
-    return xmldict
+            new_xmldict[key[1:]] = xmldict.get(key)
+        else:
+            new_xmldict[key] = xmldict.get(key)
+    return new_xmldict
 
 
 def preprocessing_area_dict(xmldict):
@@ -42,6 +45,8 @@ def preprocessing_area_dict(xmldict):
     for key in keys:
         if key[0] == '@':
             new_xmldict[key[1:]] = xmldict.get(key)
+        else:
+            new_xmldict[key] = xmldict.get(key)
     return new_xmldict
 
 
