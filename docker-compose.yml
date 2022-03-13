@@ -20,7 +20,7 @@ x-testbrain-docker: &testbrian
     - ./docker-compose.env
   volumes:
     - ./src:/opt/app/python
-    - data_storage:/opt/app/storage
+    - ./var/storage:/opt/app/storage
 
 services:
   webapp:
@@ -42,9 +42,9 @@ services:
     ports:
       - 9000:9000
 
-  worker-spec:
+  worker-immediate:
     <<: *testbrian
-    container_name: testbrain-worker-spec
+    container_name: testbrain-worker-immediate
     command: celery -A system worker -E --loglevel=INFO --queues immediate
     depends_on:
       - api
@@ -74,6 +74,28 @@ services:
       - postgres
       - rabbitmq
       - redis
+
+  cron:
+    <<: *testbrian
+    container_name: testbrain-cron
+    restart: always
+    command: /start-cron
+    depends_on:
+      - api
+      - postgres
+      - rabbitmq
+      - redis
+
+  ml:
+    <<: *testbrian
+    container_name: testbrain-ml
+    restart: always
+    command: /start-ml
+#    depends_on:
+#      - api
+#      - postgres
+#      - rabbitmq
+#      - redis
 
   flower:
     <<: *testbrian

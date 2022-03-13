@@ -42,14 +42,15 @@ RUN mkdir -p \
     /opt/app/python/static \
     /opt/app/pids \
     /opt/app/logs \
+    /opt/app/crons \
     ${DJANGO_STORAGE_ROOT}
 
 COPY ./bin /opt/app/bin
 RUN chmod -R +x /opt/app/bin
 RUN ln -s /opt/app/bin/perforce/nix/p4 /opt/app/bin/p4
 
-COPY ./compose/testbrain/core/cron/notification /etc/cron.d/notification
-# COPY ./compose/testbrain/core/cron/ml /etc/cron.d/ml
+COPY ./compose/testbrain/core/cron/notification /opt/app/crons/notification
+COPY ./compose/testbrain/core/ml/ml /opt/app/crons/ml
 
 COPY ./compose/testbrain/core/docker-entrypoint /docker-entrypoint
 RUN sed -i 's/\r$//g' /docker-entrypoint
@@ -62,6 +63,14 @@ RUN chmod +x /start-worker
 COPY ./compose/testbrain/core/celery/beat/start /start-beat
 RUN sed -i 's/\r$//g' /start-beat
 RUN chmod +x /start-beat
+
+COPY ./compose/testbrain/core/cron/start /start-cron
+RUN sed -i 's/\r$//g' /start-cron
+RUN chmod +x /start-cron
+
+COPY ./compose/testbrain/core/ml/start /start-ml
+RUN sed -i 's/\r$//g' /start-ml
+RUN chmod +x /start-ml
 
 COPY ./compose/testbrain/core/celery/flower/start /start-flower
 RUN sed -i 's/\r$//g' /start-flower

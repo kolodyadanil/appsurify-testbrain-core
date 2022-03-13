@@ -1,0 +1,9 @@
+#!/bin/bash
+set -e
+set -o errexit
+set -o nounset
+
+
+#cp /opt/app/crons/ml /etc/cron.d/ml
+cat /opt/app/crons/ml >> /etc/crontab
+/usr/sbin/cron -fL 15
