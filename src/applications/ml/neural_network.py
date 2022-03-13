@@ -62,6 +62,8 @@ class TestPriorityMLModel(object):
 class MLHolder(object):
 
     sql_template = open(settings.BASE_DIR / "applications" / "ml" / "sql" / "predict.sql", "r", encoding="utf-8").read()
+    # sql_template_dataset = settings.BASE_DIR / "applications" / "ml" / "sql" / "dataset.sql"
+    # sql_template_predict = settings.BASE_DIR / "applications" / "ml" / "sql" / "predict.sql"
 
     encode_columns = []
     decode_columns = []
@@ -254,8 +256,7 @@ class MLPredictor(MLHolder):
         tests_ids = '({})'.format(', '.join(map(str, test_queryset.values_list('id', flat=True))))
         commits_ids = '({})'.format(', '.join(map(str, commit_queryset.values_list('id', flat=True))))
 
-        sql_template = open(self.predict_sql_script_path, 'r').read()
-        sql = sql_template.format(tests_ids=tests_ids, commits_ids=commits_ids)
+        sql = self.sql_template.format(tests_ids=tests_ids, commits_ids=commits_ids)
 
         data = load_data(sql)
         df = pd.DataFrame(data)
@@ -295,8 +296,7 @@ class MLPredictor(MLHolder):
         tests_ids = '({})'.format(', '.join(map(str, test_queryset.values_list('id', flat=True))))
         commits_ids = '({})'.format(', '.join(map(str, commit_queryset.values_list('id', flat=True))))
 
-        sql_template = open(self.predict_sql_script_path, 'r').read()
-        sql = sql_template.format(tests_ids=tests_ids, commits_ids=commits_ids)
+        sql = self.sql_template.format(tests_ids=tests_ids, commits_ids=commits_ids)
 
         data = load_data(sql)
         df = pd.DataFrame(data)
@@ -334,13 +334,13 @@ class MLPredictor(MLHolder):
         if test_count < 10:
             test_count = test_count * 10
 
-        count_by_percent = (percent * test_count) / 100
+        count_by_percent = int((percent * test_count) / 100)
 
-        test_from_ml_normal_filtered = filter(lambda x: x[0] > 0.3, test_from_ml)
+        test_from_ml_normal_filtered = list(filter(lambda x: x[0] > 0.3, test_from_ml))
         test_from_ml_normal_filtered.sort(key=lambda x: x[0])
         test_from_ml_normal_filtered_ids = list(set([x[1] for x in test_from_ml_normal_filtered]))
 
-        test_from_ml_low_filtered = filter(lambda x: x[0] <= 0.3, test_from_ml)
+        test_from_ml_low_filtered = list(filter(lambda x: x[0] <= 0.3, test_from_ml))
         test_from_ml_low_filtered.sort(key=lambda x: x[0])
         test_from_ml_low_filtered_ids = list(set([x[1] for x in test_from_ml_low_filtered]))
 
