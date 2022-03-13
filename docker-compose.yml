@@ -77,9 +77,9 @@ services:
 
   cron:
     <<: *testbrian
-    container_name: testbrain-cron
+    container_name: testbrain-notify
     restart: always
-    command: /start-cron
+    command: /start-notify
     depends_on:
       - api
       - postgres
@@ -91,11 +91,11 @@ services:
     container_name: testbrain-ml
     restart: always
     command: /start-ml
-#    depends_on:
-#      - api
-#      - postgres
-#      - rabbitmq
-#      - redis
+    depends_on:
+      - api
+      - postgres
+      - rabbitmq
+      - redis
 
   flower:
     <<: *testbrian

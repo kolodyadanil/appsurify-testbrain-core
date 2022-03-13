@@ -23,7 +23,7 @@ RUN apt-get update -y && apt-get install -y \
     libpq-dev gettext wget gnupg p7zip-full openssh-server \
     ssh net-tools git gcc make software-properties-common \
     locales libcurl4-openssl-dev librtmp-dev libssl-dev default-jre \
-    cron mailutils postfix \
+    cron mailutils postfix postgresql-client \
     && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false
 
 # Requirements are installed here to ensure they will be cached.
@@ -49,8 +49,8 @@ COPY ./bin /opt/app/bin
 RUN chmod -R +x /opt/app/bin
 RUN ln -s /opt/app/bin/perforce/nix/p4 /opt/app/bin/p4
 
-COPY ./compose/testbrain/core/cron/notification /opt/app/crons/notification
-COPY ./compose/testbrain/core/ml/ml /opt/app/crons/ml
+COPY ./compose/testbrain/core/notify/cron /opt/app/crons/cron-notify
+COPY ./compose/testbrain/core/ml/cron /opt/app/crons/cron-ml
 
 COPY ./compose/testbrain/core/docker-entrypoint /docker-entrypoint
 RUN sed -i 's/\r$//g' /docker-entrypoint
@@ -64,9 +64,9 @@ COPY ./compose/testbrain/core/celery/beat/start /start-beat
 RUN sed -i 's/\r$//g' /start-beat
 RUN chmod +x /start-beat
 
-COPY ./compose/testbrain/core/cron/start /start-cron
-RUN sed -i 's/\r$//g' /start-cron
-RUN chmod +x /start-cron
+COPY ./compose/testbrain/core/notify/start /start-notify
+RUN sed -i 's/\r$//g' /start-notify
+RUN chmod +x /start-notify
 
 COPY ./compose/testbrain/core/ml/start /start-ml
 RUN sed -i 's/\r$//g' /start-ml

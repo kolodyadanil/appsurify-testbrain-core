@@ -1,4 +1,0 @@
-PYTHONPATH=/opt/appsurify-testbrain-core/src
-# m h dom mon dow user  command
-*/10 * * * * root cd /opt/appsurify-testbrain-core/src; python scripts/cron-helper-datasets.py >>/opt/app/logs/cron-helper-datasets.log 2>&1
-*/10 * * * * root cd /opt/appsurify-testbrain-core/src; python scripts/cron-helper-models.py >>/opt/app/logs/cron-helper-models.log 2>&1

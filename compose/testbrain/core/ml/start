@@ -4,6 +4,6 @@ set -o errexit
 set -o nounset
 
 
-#cp /opt/app/crons/ml /etc/cron.d/ml
-cat /opt/app/crons/ml >> /etc/crontab
-/usr/sbin/cron -fL 15
+cp /opt/app/crons/cron-ml /etc/cron.d/cron
+crontab /etc/cron.d/cron
+/usr/sbin/cron -f && tail -f /opt/app/logs/cron-helper-*.log

@@ -1,8 +1,0 @@
-#!/bin/bash
-set -e
-set -o errexit
-set -o nounset
-
-cp /opt/app/crons/notification /etc/cron.d/notification
-service postfix start && \
-/usr/sbin/cron -f
