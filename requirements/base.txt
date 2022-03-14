@@ -1,6 +1,6 @@
 Django>=3.2,<4.0
 django-environ
-psycopg2
+psycopg2-binary
 djangorestframework
 django-redis
 channels
