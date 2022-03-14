@@ -26,7 +26,7 @@ def main():
     fix_expired_datasets()
     fix_broken_datasets()
 
-    for ml_dataset in MLDataset.objects.filter(status=MLDataset.Status.PENDING)[:5]:
+    for ml_dataset in MLDataset.objects.filter(status=MLDataset.Status.PENDING)[:10]:
         try:
             perform_dataset_to_csv(ml_dataset=ml_dataset)
         except Exception as exc:

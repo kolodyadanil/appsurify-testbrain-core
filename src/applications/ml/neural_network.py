@@ -141,7 +141,7 @@ class MLTrainer(MLHolder):
         y = df['test_changed'].values
         x = df.drop('test_changed', axis=1).values
 
-        clf = CatBoostClassifier(auto_class_weights='Balanced', random_state=0, verbose=False)
+        clf = CatBoostClassifier(auto_class_weights='Balanced', random_state=0, verbose=False, thread_count=8, used_ram_limit="4GB")
         clf.fit(x, y)
         self.model.classifier = clf
 
