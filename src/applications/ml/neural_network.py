@@ -251,10 +251,11 @@ class MLPredictor(MLHolder):
         iterables_for_concatenate.append([[row.pop('commit_rework'), row.pop('commit_riskiness')]])
 
         for column_name, column_name_ml_prefix in self.decode_columns:
-            binalizer = getattr(self.model, column_name_ml_prefix + '_binarizer')
+
+            binarizer = getattr(self.model, column_name_ml_prefix + '_binarizer')
 
             iterables_for_concatenate.append(
-                binalizer.transform([row[column_name]])
+                binarizer.transform([row[column_name]])
             )
 
         x = np.concatenate(iterables_for_concatenate, axis=1)
