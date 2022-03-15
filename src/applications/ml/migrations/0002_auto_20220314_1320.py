@@ -10,12 +10,18 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AlterField(
+        migrations.RemoveField(
             model_name='mlmodel',
             name='status',
-            field=models.CharField(choices=[('DATASET_PENDING', 'DATASET_PENDING'), ('DATASET_PROCESSING', 'DATASET_PROCESSING'), ('DATASET_SUCCESS', 'DATASET_SUCCESS'), ('DATASET_FAILURE', 'DATASET_FAILURE'), ('DATASET_UNKNOWN', 'DATASET_UNKNOWN'), ('MODEL_PENDING', 'MODEL_PENDING'), ('MODEL_PROCESSING', 'MODEL_PROCESSING'), ('MODEL_SUCCESS', 'MODEL_SUCCESS'), ('MODEL_FAILURE', 'MODEL_FAILURE'), ('MODEL_UNKNOWN', 'MODEL_UNKNOWN'), ('UNKNOWN', 'UNKNOWN')], default='UNKNOWN', max_length=128, verbose_name='status'),
         ),
-        migrations.DeleteModel(
-            name='MLDataset',
+        migrations.AddField(
+            model_name='mlmodel',
+            name='dataset_status',
+            field=models.CharField(choices=[('PENDING', 'PENDING'), ('PROCESSING', 'PROCESSING'), ('SUCCESS', 'SUCCESS'), ('FAILURE', 'FAILURE'), ('UNKNOWN', 'UNKNOWN')], default='UNKNOWN', max_length=128, verbose_name='dataset status'),
+        ),
+        migrations.AddField(
+            model_name='mlmodel',
+            name='model_status',
+            field=models.CharField(choices=[('PENDING', 'PENDING'), ('PROCESSING', 'PROCESSING'), ('SUCCESS', 'SUCCESS'), ('FAILURE', 'FAILURE'), ('UNKNOWN', 'UNKNOWN')], default='UNKNOWN', max_length=128, verbose_name='model status'),
         ),
     ]

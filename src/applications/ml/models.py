@@ -9,16 +9,10 @@ from django.conf import settings
 class MLModel(models.Model):
 
     class Status(models.TextChoices):
-        DATASET_PENDING = "DATASET_PENDING", "DATASET_PENDING"
-        DATASET_PROCESSING = "DATASET_PROCESSING", "DATASET_PROCESSING"
-        DATASET_SUCCESS = "DATASET_SUCCESS", "DATASET_SUCCESS"
-        DATASET_FAILURE = "DATASET_FAILURE", "DATASET_FAILURE"
-        DATASET_UNKNOWN = "DATASET_UNKNOWN", "DATASET_UNKNOWN"
-        MODEL_PENDING = "MODEL_PENDING", "MODEL_PENDING"
-        MODEL_PROCESSING = "MODEL_PROCESSING", "MODEL_PROCESSING"
-        MODEL_SUCCESS = "MODEL_SUCCESS", "MODEL_SUCCESS"
-        MODEL_FAILURE = "MODEL_FAILURE", "MODEL_FAILURE"
-        MODEL_UNKNOWN = "MODEL_UNKNOWN", "MODEL_UNKNOWN"
+        PENDING = "PENDING", "PENDING"
+        PROCESSING = "PROCESSING", "PROCESSING"
+        SUCCESS = "SUCCESS", "SUCCESS"
+        FAILURE = "FAILURE", "FAILURE"
         UNKNOWN = "UNKNOWN", "UNKNOWN"
 
     test_suite = models.OneToOneField(
@@ -28,8 +22,17 @@ class MLModel(models.Model):
         on_delete=models.CASCADE
     )
 
-    status = models.CharField(
-        verbose_name="status",
+    dataset_status = models.CharField(
+        verbose_name="dataset status",
+        max_length=128,
+        default=Status.UNKNOWN,
+        choices=Status.choices,
+        blank=False,
+        null=False
+    )
+
+    model_status = models.CharField(
+        verbose_name="model status",
         max_length=128,
         default=Status.UNKNOWN,
         choices=Status.choices,
@@ -56,6 +59,13 @@ class MLModel(models.Model):
 
     def __str__(self):
         return f"<Model: {self.id} (TestSuite: {self.test_suite_id})>"
+
+    @property
+    def dataset_sql(self):
+        sql_template = open(settings.BASE_DIR / "applications" / "ml" / "sql" / "dataset.sql", "r",
+                            encoding="utf-8").read()
+        sql = sql_template.format(test_suite_id=self.test_suite_id)
+        return sql
 
     @property
     def dataset_path(self):

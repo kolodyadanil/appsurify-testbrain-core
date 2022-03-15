@@ -6,7 +6,7 @@ import subprocess
 from django.conf import settings
 from django.utils import timezone
 from datetime import datetime, timedelta
-from applications.ml.models import MLDataset, MLModel
+from applications.ml.models import MLModel
 from applications.ml.neural_network import MLTrainer
 from applications.testing.models import TestSuite
 
@@ -34,90 +34,72 @@ def execute_query(query):
     return stdout
 
 
-def fix_missed_datasets():
-    test_suites = TestSuite.objects.filter(dataset=None)
-    objs = MLDataset.objects.bulk_create([
-        MLDataset(test_suite=test_suite) for test_suite in test_suites
-    ])
-    return len(objs)
-
-
-def fix_expired_datasets(days=7):
-    datasets = MLDataset.objects\
-        .filter(status=MLDataset.Status.SUCCESS)\
-        .filter(updated__lte=datetime.now(timezone.utc) - timedelta(days=days))
-    datasets.update(status=MLDataset.Status.PENDING)
-
-
-def fix_broken_datasets(days=2):
-    datasets = MLDataset.objects\
-        .exclude(status=MLDataset.Status.SUCCESS)\
-        .filter(updated__gte=datetime.now(timezone.utc) - timedelta(days=days))
-    datasets.update(status=MLDataset.Status.PENDING)
-
-
 def fix_missed_models():
-    test_suites = TestSuite.objects.filter(model=None, dataset__status=MLDataset.Status.SUCCESS)
+    test_suites = TestSuite.objects.filter(model=None)
     objs = MLModel.objects.bulk_create([
-        MLModel(test_suite=test_suite) for test_suite in test_suites
+        MLModel(test_suite=test_suite)
+        for test_suite in test_suites
     ])
     return len(objs)
 
 
 def fix_expired_models(days=7):
-    datasets = MLModel.objects\
-        .filter(status=MLModel.Status.SUCCESS)\
+    queryset = MLModel.objects\
+        .filter(dataset_status=MLModel.Status.SUCCESS)\
         .filter(updated__lte=datetime.now(timezone.utc) - timedelta(days=days))
-    datasets.update(status=MLModel.Status.PENDING)
+    queryset.update(dataset_status=MLModel.Status.PENDING, model_status=MLModel.Status.PENDING)
 
 
 def fix_broken_models(days=2):
-    datasets = MLModel.objects\
-        .exclude(status=MLModel.Status.SUCCESS)\
+    queryset = MLModel.objects\
+        .filter(dataset_status__in=[MLModel.Status.FAILURE, MLModel.Status.UNKNOWN])\
         .filter(updated__gte=datetime.now(timezone.utc) - timedelta(days=days))
-    datasets.update(status=MLModel.Status.PENDING)
+    queryset.update(dataset_status=MLModel.Status.PENDING)
+
+    queryset = MLModel.objects\
+        .filter(model_status__in=[MLModel.Status.FAILURE, MLModel.Status.UNKNOWN])\
+        .filter(updated__gte=datetime.now(timezone.utc) - timedelta(days=days))
+    queryset.update(model_status=MLModel.Status.PENDING)
 
 
-def perform_dataset_to_csv(ml_dataset):
+def perform_dataset_to_csv(ml_model):
 
-    ml_dataset.status = MLDataset.Status.STARTED
-    ml_dataset.save(update_fields=["status", ])
+    ml_model.dataset_status = MLModel.Status.PROCESSING
+    ml_model.save(update_fields=["dataset_status", ])
 
-    sql_template = open(settings.BASE_DIR / "applications" / "ml" / "sql" / "dataset.sql", "r", encoding="utf-8").read()
-    sql = sql_template.format(test_suite_id=ml_dataset.test_suite_id)
+    # sql_template = open(settings.BASE_DIR / "applications" / "ml" / "sql" / "dataset.sql", "r", encoding="utf-8").read()
+    # sql = sql_template.format(test_suite_id=ml_model.test_suite_id)
+    dataset_path, dataset_filename = ml_model.dataset_path
+    dataset_path.mkdir(parents=True, exist_ok=True)
 
-    dir, filename = ml_dataset.path
-    dir.mkdir(parents=True, exist_ok=True)
-
-    sql_query = f"\copy ({sql}) To '{dir / filename}' With CSV DELIMITER ',' HEADER"
+    sql_query = f"\copy ({ml_model.dataset_sql}) To '{dataset_path / dataset_filename}' With CSV DELIMITER ',' HEADER"
 
     try:
         ret = execute_query(query=sql_query)
-        print(ret)
-    except Exception as e:
-        ml_dataset.status = MLDataset.Status.FAILURE
-        ml_dataset.save(update_fields=["status", ])
-        raise e
 
-    ml_dataset.status = MLDataset.Status.SUCCESS
-    ml_dataset.save(update_fields=["status", ])
+        ml_model.dataset_status = MLModel.Status.SUCCESS
+        ml_model.model_status = MLModel.Status.PENDING
+        ml_model.save(update_fields=["dataset_status", "model_status", ])
+    except Exception as e:
+        ml_model.dataset_status = MLModel.Status.FAILURE
+        ml_model.save(update_fields=["dataset_status", ])
+        raise e
 
 
 def perform_model_train(ml_model):
 
-    ml_model.status = MLModel.Status.STARTED
-    ml_model.save(update_fields=["status", ])
+    ml_model.model_status = MLModel.Status.PROCESSING
+    ml_model.save(update_fields=["model_status", ])
 
-    dir, filename = ml_model.path
-    dir.mkdir(parents=True, exist_ok=True)
-
+    model_path, model_filename = ml_model.model_path
+    model_path.mkdir(parents=True, exist_ok=True)
     try:
         mlt = MLTrainer(test_suite_id=ml_model.test_suite.id)
         mlt.train()
-    except Exception as e:
-        ml_model.status = MLModel.Status.FAILURE
-        ml_model.save(update_fields=["status", ])
-        raise e
 
-    ml_model.status = MLModel.Status.SUCCESS
-    ml_model.save(update_fields=["status", ])
+        ml_model.model_status = MLModel.Status.SUCCESS
+        ml_model.save(update_fields=["model_status", ])
+    except Exception as e:
+        ml_model.model_status = MLModel.Status.FAILURE
+        ml_model.save(update_fields=["model_status", ])
+        raise e

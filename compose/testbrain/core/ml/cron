@@ -4,5 +4,5 @@ PYTHONPATH=/opt/app/python
 
 # m h dom mon dow user  command
 * * * * * echo "Wait..." >> /opt/app/logs/cron-helper-datasets.log
-*/10 * * * * cd /opt/app/python; python scripts/cron-helper-datasets.py >>/opt/app/logs/cron-helper-datasets.log 2>&1
-*/10 * * * * cd /opt/app/python; python scripts/cron-helper-models.py >>/opt/app/logs/cron-helper-models.log 2>&1
+*/2 * * * * cd /opt/app/python; python scripts/cron-helper-datasets.py >>/opt/app/logs/cron-helper-datasets.log 2>&1
+*/2 * * * * cd /opt/app/python; python scripts/cron-helper-models.py >>/opt/app/logs/cron-helper-models.log 2>&1
