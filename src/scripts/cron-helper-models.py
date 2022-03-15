@@ -28,7 +28,8 @@ def main():
     fix_expired_models()
     fix_broken_models()
 
-    for ml_model in MLModel.objects.filter(status=MLModel.Status.PENDING)[:5]:
+    for ml_model in MLModel.objects.filter(dataset_status=MLModel.Status.SUCCESS,
+                                           model_status=MLModel.Status.PENDING)[:5]:
         try:
             perform_model_train(ml_model=ml_model)
         except Exception as exc:
