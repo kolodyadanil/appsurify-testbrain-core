@@ -29,7 +29,7 @@ def main():
     fix_broken_models()
 
     for ml_model in MLModel.objects.filter(dataset_status=MLModel.Status.SUCCESS,
-                                           model_status=MLModel.Status.PENDING)[:5]:
+                                           model_status=MLModel.Status.PENDING).order_by("-updated")[:5]:
         try:
             perform_model_train(ml_model=ml_model)
         except Exception as exc:
