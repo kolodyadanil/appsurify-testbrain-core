@@ -44,10 +44,11 @@ jobs:
           push: true
           tags: docker.io/appsurifyinc/testbrain-core:latest
           file: compose/testbrain/core/Dockerfile
+          cache-from: type=registry,ref=docker.io/appsurifyinc/testbrain-core:latest
 
       - uses: azure/login@v1
         with:
-#          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
