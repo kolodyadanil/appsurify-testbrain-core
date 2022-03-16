@@ -65,7 +65,7 @@ def fix_broken_models(days=2):
 def perform_dataset_to_csv(ml_model):
 
     ml_model.dataset_status = MLModel.Status.PROCESSING
-    ml_model.save(update_fields=["dataset_status", ])
+    ml_model.save()
 
     # sql_template = open(settings.BASE_DIR / "applications" / "ml" / "sql" / "dataset.sql", "r", encoding="utf-8").read()
     # sql = sql_template.format(test_suite_id=ml_model.test_suite_id)
@@ -79,17 +79,17 @@ def perform_dataset_to_csv(ml_model):
 
         ml_model.dataset_status = MLModel.Status.SUCCESS
         ml_model.model_status = MLModel.Status.PENDING
-        ml_model.save(update_fields=["dataset_status", "model_status", ])
+        ml_model.save()
     except Exception as e:
         ml_model.dataset_status = MLModel.Status.FAILURE
-        ml_model.save(update_fields=["dataset_status", ])
+        ml_model.save()
         raise e
 
 
 def perform_model_train(ml_model):
 
     ml_model.model_status = MLModel.Status.PROCESSING
-    ml_model.save(update_fields=["model_status", ])
+    ml_model.save()
 
     model_path, model_filename = ml_model.model_path
     model_path.mkdir(parents=True, exist_ok=True)
@@ -98,8 +98,8 @@ def perform_model_train(ml_model):
         mlt.train()
 
         ml_model.model_status = MLModel.Status.SUCCESS
-        ml_model.save(update_fields=["model_status", ])
+        ml_model.save()
     except Exception as e:
         ml_model.model_status = MLModel.Status.FAILURE
-        ml_model.save(update_fields=["model_status", ])
+        ml_model.save()
         raise e
