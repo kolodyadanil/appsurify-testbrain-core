@@ -55,10 +55,8 @@ jobs:
           resource-group: "rg-aks-testbrain-dev"
           cluster-name: "aks-testbrain-dev"
 
-      - uses: actions-hub/kubectl@master
-#        env:
-#          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
-        with:
-          args: get pods
-
+      - uses: azure/setup-kubectl@v2.0
+ #       with:
+ #         version: '<version>' # default is latest stable
+        id: install
 
