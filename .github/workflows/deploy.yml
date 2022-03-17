@@ -63,7 +63,6 @@ jobs:
       - run: |
           cd tools/azure/aks/dev/
           ls -la
-#          kubectl rollout restart statefulsets/
-#          kubectl rollout restart statefulsets/worker
-          
+          kubectl apply -f statefulsets/
+          kubectl apply -f statefulsets/worker  
 
