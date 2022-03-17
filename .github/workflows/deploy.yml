@@ -61,6 +61,5 @@ jobs:
         id: install
 
       - run: |
-          ls -la
-          kubectl get pods
+          kubectl tools/azure/aks/dev/statefulsets
 
