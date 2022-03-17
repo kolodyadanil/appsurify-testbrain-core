@@ -61,5 +61,6 @@ jobs:
         id: install
 
       - run: |
+          ls -la
           kubectl get pods
 
