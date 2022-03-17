@@ -60,3 +60,6 @@ jobs:
  #         version: '<version>' # default is latest stable
         id: install
 
+      - run: |
+          kubectl get pods
+
