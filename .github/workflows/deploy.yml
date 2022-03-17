@@ -18,15 +18,15 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-#      - name: Checkout main repo
-#        uses: actions/checkout@v2
-#
-#      - name: Checkout tools
-#        uses: actions/checkout@v3
-#        with:
-#          repository: Appsurify/appsurify-testbrain-deploy
-#          path: tools
-#          token: ${{ secrets.DEPLOY_GIT_TOKEN }}
+      - name: Checkout main repo
+        uses: actions/checkout@v2
+
+      - name: Checkout tools
+        uses: actions/checkout@v3
+        with:
+          repository: Appsurify/appsurify-testbrain-deploy
+          path: tools
+          token: ${{ secrets.DEPLOY_GIT_TOKEN }}
 #
 #      - name: Set up QEMU
 #        uses: docker/setup-qemu-action@v1
