@@ -37,9 +37,9 @@ jobs:
         with:
           context: .
           push: true
-          tags: docker.io/appsurifyinc/testbrain-core:latest
+          tags: docker.io/appsurifyinc/testbrain-core:development
           file: compose/testbrain/core/Dockerfile
-          cache-from: type=registry,ref=docker.io/appsurifyinc/testbrain-core:latest
+          cache-from: type=registry,ref=docker.io/appsurifyinc/testbrain-core:development
 
       - uses: azure/login@v1
         with:
@@ -59,6 +59,6 @@ jobs:
           kubectl rollout restart -f ./statefulsets/testbrain-celery-beat-statefulset.yaml
           kubectl rollout restart -f ./statefulsets/testbrain-celery-flower-statefulset.yaml
           kubectl rollout restart -f ./statefulsets/testbrain-cron-ml-statefulset.yaml
-          kubectl rollout restart -f ./statefulsets/testbrain-cron-ml-statefulset.yaml
+          kubectl rollout restart -f ./statefulsets/testbrain-cron-notify-statefulset.yaml
           kubectl rollout restart -f ./statefulsets/worker/
 
