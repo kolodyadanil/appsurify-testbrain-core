@@ -55,6 +55,10 @@ jobs:
 
       - run: |
           cd tools/azure/aks/dev/
-          kubectl apply -f statefulsets/
-          kubectl apply -f statefulsets/worker  
+          kubectl rollout restart -f ./statefulsets/testbrain-django-api-statefulset.yaml
+          kubectl rollout restart -f ./statefulsets/testbrain-celery-beat-statefulset.yaml
+          kubectl rollout restart -f ./statefulsets/testbrain-celery-flower-statefulset.yaml
+          kubectl rollout restart -f ./statefulsets/testbrain-cron-ml-statefulset.yaml
+          kubectl rollout restart -f ./statefulsets/testbrain-cron-ml-statefulset.yaml
+          kubectl rollout restart -f ./statefulsets/worker/
 
