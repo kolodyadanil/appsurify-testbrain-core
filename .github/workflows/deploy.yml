@@ -61,5 +61,6 @@ jobs:
         id: install
 
       - run: |
-          kubectl rollout restart tools/azure/aks/dev/statefulsets/
+          cd tools/azure/aks/dev/
+          kubectl rollout restart statefulsets
 
