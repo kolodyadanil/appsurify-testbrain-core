@@ -15,7 +15,9 @@ from applications.testing.models import TestSuite
 from applications.ml.neural_network import MLTrainer
 from applications.ml.models import MLModel
 from applications.ml.utils import (
-    fix_missed_models, fix_expired_models, fix_broken_models,
+    fix_missed_models,
+    fix_expired_models,
+    fix_broken_models,
     perform_model_train
 )
 
@@ -26,7 +28,8 @@ def main():
     fix_expired_models()
     fix_broken_models()
 
-    for ml_model in MLModel.objects.filter(status=MLModel.Status.PENDING)[:10]:
+    for ml_model in MLModel.objects.filter(dataset_status=MLModel.Status.SUCCESS,
+                                           model_status=MLModel.Status.PENDING).order_by("-updated")[:5]:
         try:
             perform_model_train(ml_model=ml_model)
         except Exception as exc:

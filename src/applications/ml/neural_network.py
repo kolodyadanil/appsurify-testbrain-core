@@ -33,6 +33,11 @@ def load_data(sql):
     return data
 
 
+def parse_list_entry(data):
+    data2 = data.replace("{", "").replace("}", "").split(",")
+    return data2
+
+
 class DatasetError(RuntimeError):
     pass
 
@@ -62,8 +67,6 @@ class TestPriorityMLModel(object):
 class MLHolder(object):
 
     sql_template = open(settings.BASE_DIR / "applications" / "ml" / "sql" / "predict.sql", "r", encoding="utf-8").read()
-    # sql_template_dataset = settings.BASE_DIR / "applications" / "ml" / "sql" / "dataset.sql"
-    # sql_template_predict = settings.BASE_DIR / "applications" / "ml" / "sql" / "predict.sql"
 
     encode_columns = []
     decode_columns = []
@@ -72,17 +75,15 @@ class MLHolder(object):
         self.auto_save = auto_save
         self.auto_load = auto_load
 
+        self.test_suite_id = test_suite_id
         self.test_suite = TestSuite.objects.get(id=test_suite_id)
 
-        self.test_suite_id = self.test_suite.id
-        self.project_id = self.test_suite.project_id
-
         try:
-            self.ml_model = self.test_suite.model
-            self.model_path, self.model_filename = self.ml_model.path
-            self.model_path.mkdir(parents=True, exist_ok=True)
+            self.test_suite_model = self.test_suite.model
+            # self.model_path, self.model_filename = self.test_suite_model.model_path
+            # self.model_path.mkdir(parents=True, exist_ok=True)
         except ObjectDoesNotExist:
-            self.ml_model = None
+            self.test_suite_model = None
 
 
 class MLTrainer(MLHolder):
@@ -110,13 +111,21 @@ class MLTrainer(MLHolder):
         self.model = None
 
     def save(self):
-        outfile = open(f"{self.model_path / self.model_filename}", "wb")
-        pickle.dump(self.model, outfile)
+        if self.test_suite_model:
+            model_path, model_filename = self.test_suite_model.model_path
+            outfile = open(f"{model_path / model_filename}", "wb")
+            pickle.dump(self.model, outfile)
+        else:
+            print(f"TestSuite model not exists! (TestSuite: {self.test_suite_id})")
 
 
     def train(self):
-        dir, filename = self.test_suite.dataset.path
-        df = pd.read_csv(f"{dir / filename}")
+        if not self.test_suite_model:
+            raise DatasetError('ML model not exist for TestSuite id: "{}"'.format(self.test_suite_id))
+
+        dataset_path, dataset_filename = self.test_suite_model.dataset_path
+
+        df = pd.read_csv(f"{dataset_path / dataset_filename}")
 
         df.dropna(axis=1, how='all', inplace=True)
 
@@ -130,11 +139,14 @@ class MLTrainer(MLHolder):
 
         df_chunks = [df['test_changed']]
         for column_name, new_columns_prefix in self.encode_columns:
+
+            df[column_name] = df[column_name].apply(parse_list_entry)
+
             binarizer = getattr(self.model, column_name + '_binarizer')
 
             df_chunks.append(pd.DataFrame(
                     binarizer.fit_transform(df.pop(column_name)),
-                    columns=(new_columns_prefix + u'_{}'.format(i) for i in binarizer.classes_),
+                    columns=[f"{new_columns_prefix}{i}" for i in binarizer.classes_],
                     index=df.index
                 ))
 
@@ -143,7 +155,7 @@ class MLTrainer(MLHolder):
         y = df['test_changed'].values
         x = df.drop('test_changed', axis=1).values
 
-        clf = CatBoostClassifier(auto_class_weights='Balanced', random_state=0, verbose=False, thread_count=8, used_ram_limit="4GB")
+        clf = CatBoostClassifier(auto_class_weights='Balanced', random_state=0, verbose=False)
         clf.fit(x, y)
         self.model.classifier = clf
 
@@ -194,15 +206,18 @@ class MLPredictor(MLHolder):
             self.load()
 
     def load(self):
-        try:
-            if self.ml_model and os.path.getsize(self.model_path / self.model_filename) > 0:
-                infile = open(f"{self.model_path / self.model_filename}", "rb")
-                unpickler = pickle.Unpickler(infile)
-                self.model = unpickler.load()
-        except IOError:
-            self.model = None
-        except Exception as e:
-            self.model = None
+        self.model = None
+        if self.test_suite_model:
+            model_path, model_filename = self.test_suite_model.model_path
+            try:
+                if os.path.getsize(model_path / model_filename) > 0:
+                    infile = open(f"{model_path / model_filename}", "rb")
+                    unpickler = pickle.Unpickler(infile)
+                    self.model = unpickler.load()
+            except IOError:
+                self.model = None
+            except Exception as e:
+                self.model = None
 
     @property
     def is_loaded(self):
@@ -236,10 +251,11 @@ class MLPredictor(MLHolder):
         iterables_for_concatenate.append([[row.pop('commit_rework'), row.pop('commit_riskiness')]])
 
         for column_name, column_name_ml_prefix in self.decode_columns:
-            binalizer = getattr(self.model, column_name_ml_prefix + '_binarizer')
+
+            binarizer = getattr(self.model, column_name_ml_prefix + '_binarizer')
 
             iterables_for_concatenate.append(
-                binalizer.transform([row[column_name]])
+                binarizer.transform([row[column_name]])
             )
 
         x = np.concatenate(iterables_for_concatenate, axis=1)
