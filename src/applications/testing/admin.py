@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-
 from django.contrib import admin
 from .models import *
+
+
+class TestReportAdmin(admin.ModelAdmin):
+    list_display = ('id', 'project', 'test_suite', 'name', 'format', 'status', 'created', 'updated')
 
 
 class TestTypeAdmin(admin.ModelAdmin):
@@ -109,6 +111,7 @@ class DefectAdmin(admin.ModelAdmin):
     caused_by_commits_field.admin_order_field = 'caused_by_commits__id'
 
 
+admin.site.register(TestReport, TestReportAdmin)
 admin.site.register(TestType, TestTypeAdmin)
 admin.site.register(Test, TestAdmin)
 admin.site.register(Step, StepAdmin)

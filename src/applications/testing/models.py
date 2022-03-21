@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
@@ -29,18 +27,116 @@ from collections import Counter
 User = get_user_model()
 
 
+class TestReport(models.Model):
+
+    class Format(models.TextChoices):
+        UNKNOWN = "UNKNOWN", "UNKNOWN"
+        NUNIT3 = "NUNIT3", "NUNIT3"
+        JUNIT = "JUNIT", "JUNIT"
+        TRX = "TRX", "TRX"
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "PENDING"
+        PROCESSING = "PROCESSING", "PROCESSING"
+        SUCCESS = "SUCCESS", "SUCCESS"
+        FAILURE = "FAILURE", "FAILURE"
+        UNKNOWN = "UNKNOWN", "UNKNOWN"
+
+    project = models.ForeignKey(
+        "project.Project",
+        related_name="test_reports",
+        blank=False,
+        null=False,
+        on_delete=models.CASCADE
+    )
+
+    test_suite = models.ForeignKey(
+        "testing.TestSuite",
+        related_name="test_reports",
+        blank=False,
+        null=False,
+        on_delete=models.CASCADE
+    )
+
+    test_run_name = models.CharField(
+        max_length=255,
+        blank=True,
+        null=False
+    )
+
+    commit_sha = models.CharField(
+        max_length=255,
+        blank=False,
+        null=False
+    )
+
+    name = models.CharField(
+        max_length=255,
+        blank=True,
+        null=False
+    )
+
+    source = models.TextField(
+        blank=False,
+        null=False
+    )
+
+    destination = models.TextField(
+        blank=True,
+        null=False
+    )
+
+    format = models.CharField(
+        verbose_name="format",
+        max_length=128,
+        default=Format.UNKNOWN,
+        choices=Format.choices,
+        blank=False,
+        null=False
+    )
+
+    status = models.CharField(
+        verbose_name="status",
+        max_length=128,
+        default=Status.UNKNOWN,
+        choices=Status.choices,
+        blank=False,
+        null=False
+    )
+
+    created = models.DateTimeField(
+        verbose_name="created",
+        auto_now_add=True,
+        help_text="Auto-generated field"
+    )
+
+    updated = models.DateTimeField(
+        verbose_name="updated",
+        auto_now=True,
+        help_text="Auto-generated and auto-updated field"
+    )
+
+    class Meta(object):
+        ordering = ["-id", "-project", "-test_suite"]
+        verbose_name = "test report"
+        verbose_name_plural = "test reports"
+
+    def __str__(self):
+        return f"<TestReport: {self.id} (TestSuite: {self.test_suite_id})>"
+
+
 class TestType(models.Model):
     """
     TestType object
     """
 
-    project = models.ForeignKey('project.Project', related_name='test_types', blank=False, null=False,
+    project = models.ForeignKey("project.Project", related_name="test_types", blank=False, null=False,
                                 on_delete=models.CASCADE)
 
     name = models.CharField(max_length=255, blank=False, null=False)
 
-    rerun_all = models.BooleanField(default=True, help_text='rerun all')
-    rerun_flaky = models.BooleanField(default=True, help_text='rerun flaky')
+    rerun_all = models.BooleanField(default=True)
+    rerun_flaky = models.BooleanField(default=True)
 
     number_of_reruns = models.IntegerField(default=1, blank=False, null=False)
     report_after_failure = models.BooleanField(default=True, blank=False, null=False)
@@ -54,12 +150,12 @@ class TestType(models.Model):
     updated = models.DateTimeField(auto_now=True, db_index=True)
 
     class Meta(object):
-        unique_together = ('project', 'name')
-        verbose_name = _(u'test type')
-        verbose_name_plural = _(u'test types')
+        unique_together = ["project", "name", ]
+        verbose_name = "test type"
+        verbose_name_plural = "test types"
 
-    def __unicode__(self):
-        return u'{id} {name}'.format(id=self.id, name=self.name)
+    def __str__(self):
+        return f"<TestType: {self.id} ({self.name})>"
 
     @classmethod
     def get_default(cls, project):
@@ -94,8 +190,8 @@ class Test(models.Model):
 
     area = models.ForeignKey('vcs.Area', related_name='tests', blank=True, null=True, on_delete=models.CASCADE)
 
-    associated_files = models.ManyToManyField('vcs.File', related_name='associated_files', blank=True)
-    associated_areas = models.ManyToManyField('vcs.Area', related_name='associated_areas', blank=True)
+    associated_files = models.ManyToManyField('vcs.File', related_name='associated_files', blank=True)  # Add throuth model for timestamped
+    associated_areas = models.ManyToManyField('vcs.Area', related_name='associated_areas', blank=True)  # Add throuth model for timestamped
 
     author = models.ForeignKey(User, related_name='tests', blank=True, null=True, on_delete=models.CASCADE)
 
@@ -1075,7 +1171,8 @@ class Defect(models.Model):
     caused_by_test_runs = models.ManyToManyField('TestRun', related_name='caused_defects', blank=True)
     caused_by_test_run_results = models.ManyToManyField('TestRunResult', related_name='caused_defects', blank=True)
     caused_by_tests = models.ManyToManyField('Test', related_name='caused_defects', blank=True)
-    caused_by_commits = models.ManyToManyField('vcs.Commit', related_name='caused_defects', blank=True)
+
+    caused_by_commits = models.ManyToManyField('vcs.Commit', related_name='caused_defects', blank=True)  # Add throuth model for timestamped
 
     # TODO: Link to objects in which defects are reopen (who init reopen defect)
     reopen_test_suites = models.ManyToManyField('TestSuite', related_name='reopened_defects', blank=True)
@@ -1109,7 +1206,7 @@ class Defect(models.Model):
                                     on_delete=models.CASCADE)
     closed_commit = models.ForeignKey('vcs.Commit', related_name='closed_defects', blank=True, null=True,
                                       on_delete=models.CASCADE)
-    closed_by_commits = models.ManyToManyField('vcs.Commit', related_name='closed_by_defects', blank=True)
+    closed_by_commits = models.ManyToManyField('vcs.Commit', related_name='closed_by_defects', blank=True)  # Add throuth model for timestamped
 
     created = models.DateTimeField(auto_now_add=True, db_index=True)
     updated = models.DateTimeField(auto_now=True, db_index=True)

@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-
 from urllib.parse import urlunsplit
 
 from rest_framework import serializers
@@ -10,7 +8,7 @@ from applications.api.project.serializers import ProjectRelatedSerializer
 from applications.api.testing.serializers import TestSuiteRelatedSerializer
 from applications.organization.utils import get_current_organization
 from applications.project.models import Project
-from applications.testing.models import TestSuite
+from applications.testing.models import TestSuite, TestReport
 from applications.testing.tools import SpecFlow
 from applications.vcs.models import Commit
 
@@ -108,11 +106,12 @@ class ImportReportSerializer(serializers.Serializer):
         commit_sha = validated_data.get('commit', None)
         file = validated_data['file']
         type = validated_data['type']
-        test_run_name = validated_data.get('test_run_name', None)
+        test_run_name = validated_data.get('test_run_name', "")
         try:
             commit = Commit.objects.get(project_id=project, sha=commit_sha)
         except (Commit.DoesNotExist, Commit.MultipleObjectsReturned) as e:
             return {'error': 'XMLError: {}'.format(e)}
+
         utils = SpecFlow.ImportUtils(
             type_xml=type,
             file_obj=file,

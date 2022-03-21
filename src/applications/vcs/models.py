@@ -41,7 +41,7 @@ class Area(models.Model):
     type = models.IntegerField(default=TYPE_UNKNOWN, choices=TYPE_CHOICE, blank=False, null=False)
     priority = models.IntegerField(default=0, blank=False, null=False)
 
-    dependencies = models.ManyToManyField('self', related_name='depended_on', blank=True, symmetrical=False)
+    dependencies = models.ManyToManyField('self', related_name='depended_on', blank=True, symmetrical=False)  # Add throuth model for timestamped
     links = models.ManyToManyField('self', related_name='linked_to', blank=True, symmetrical=False)
 
     created = models.DateTimeField(auto_now_add=True)
@@ -391,7 +391,7 @@ class Commit(models.Model):
 
     project = models.ForeignKey('project.Project', related_name='commits', blank=False, null=False,
                                 on_delete=models.CASCADE)
-    areas = models.ManyToManyField('Area', related_name='commits', blank=True)
+    areas = models.ManyToManyField('Area', related_name='commits', blank=True)   # Add throuth model for timestamped
 
     branches = models.ManyToManyField('Branch', related_name='commits', blank=True)
     tags = GenericRelation('Tag', object_id_field='target_id', content_type_field='target_type')

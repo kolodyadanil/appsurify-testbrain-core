@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-
 import os
 from collections import OrderedDict
 from datetime import timedelta
@@ -15,7 +13,7 @@ from django.utils import timezone
 from tempfile import mkstemp
 from lxml.etree import XMLSyntaxError
 
-from applications.testing.models import Test, TestSuite, TestRun, TestRunResult, Defect
+from applications.testing.models import Test, TestSuite, TestRun, TestRunResult, Defect, TestReport
 from applications.testing.signals import model_test_run_tests_changed, model_test_run_result_complete_test_run, \
     model_test_run_result_perform_defect
 from applications.vcs.models import Area, ParentCommit
@@ -78,7 +76,7 @@ class ImportUtils(object):
 
     def __init__(self, type_xml, file_obj, data, user_id, test_run_name, host):
         self.type_xml = type_xml
-        self.file_obj = file_obj
+        self.infile = file_obj.read()
         self.data = data
         self.user_id = user_id
         self.project = data.get('project')
@@ -107,64 +105,77 @@ class ImportUtils(object):
         self.reopened_flaky_defects = 0
         self.flaky_failures_breaks = 0
         self.host = host
-        self.test_suite = None
+        self.test_suite = data.get('test_suite')
         self.test_run_name = test_run_name
         self.test_run = None
 
+        source = self.infile
+        if isinstance(source, bytes):
+            source = source.decode('utf-8', errors='replace')
+
+        format = TestReport.Format.UNKNOWN
+        if type_xml.upper() in TestReport.Format.values:
+            format = TestReport.Format[type_xml.upper()]
+
+        self.test_report = TestReport.objects.create(
+            project=self.project,
+            test_suite=self.test_suite,
+            commit_sha=self.commit.sha,
+            test_run_name=self.test_run_name,
+            name=file_obj.name,
+            source=source,
+            destination="",
+            format=format,
+            status=TestReport.Status.PENDING
+        )
+        self.test_report.save()
+
     def import_xml_tests(self):
+        self.test_report.status = TestReport.Status.PROCESSING
+        self.test_report.save(update_fields=["status", "updated"])
+
         if self.type_xml == 'nunit3':
-            try:
-                xslt = ET.parse(os.path.join(settings.BASE_DIR, 'applications/testing/tools/nunit3-junit.xslt'))
-                transform = ET.XSLT(xslt)
-                dom = ET.parse(self.file_obj)
-                new_dom = transform(dom)
-                new_dom_str = ET.tostring(new_dom, pretty_print=True)
-                infile = new_dom_str
-            except XMLSyntaxError as e:
-                return {'error': 'XMLSyntaxError: {}'.format(e)}
-            except Exception:
-                return {'error': 'XMLError: Error convert nunit3 to Junit'}
+            xslt = ET.parse(os.path.join(settings.BASE_DIR, 'applications/testing/tools/nunit3-junit.xslt'))
+            transform = ET.XSLT(xslt)
+            dom = ET.fromstring(self.infile)
+            new_dom = transform(dom)
+            new_dom_str = ET.tostring(new_dom, pretty_print=True)
+            infile = new_dom_str
         elif self.type_xml == 'trx':
-            try:
-                # xslt = ET.parse(os.path.join(settings.BASE_DIR, 'applications/testing/tools/mstest-to-junit.xsl'))
-                # transform = ET.XSLT(xslt)
-                # dom = ET.parse(self.file_obj)
-                # new_dom = transform(dom)
-                # infile = unicode((ET.tostring(new_dom, pretty_print=True)))
-                xslt = open(os.path.join(settings.BASE_DIR, 'applications/testing/tools/mstest-to-junit.xsl'), 'r').read()
+            xslt = open(os.path.join(settings.BASE_DIR, 'applications/testing/tools/mstest-to-junit.xsl'), 'r').read()
+            if isinstance(xslt, bytes):
+                xslt = xslt.decode('utf-8', errors='replace')
+            source = self.infile
+            if isinstance(source, bytes):
+                source = source.decode('utf-8', errors='replace')
+            result = external_processor(xslt=xslt, source=source)
+            if isinstance(result, bytes):
+                result = result.decode('utf-8', errors='replace')
+            infile = result
 
-                if isinstance(xslt, bytes):
-                    xslt = xslt.decode('utf-8', errors='replace')
-
-                source = self.file_obj.read()
-
-                if isinstance(source, bytes):
-                    source = source.decode('utf-8', errors='replace')
-
-                result = external_processor(xslt=xslt, source=source)
-
-                if isinstance(result, bytes):
-                    result = result.decode('utf-8', errors='replace')
-
-                infile = result
-            except XMLSyntaxError as e:
-                return {'error': 'XMLSyntaxError: {}'.format(e)}
-            except Exception as e:
-                return {'error': 'XMLError: Error convert trx to Junit'}
-        else:
-            infile = self.file_obj.read()
+        elif self.type_xml == 'junit':
+            infile = self.infile
             if isinstance(infile, bytes):
                 infile = infile.decode('utf-8', errors='replace')
-        try:
-            xml_dict = xmltodict.parse(infile)
-        except Exception as e:
-            return {'error': 'XMLParse: {}'.format(e)}
+
+        else:
+            self.test_report.status = TestReport.Status.FAILURE
+            self.test_report.save(update_fields=["status", "updated"])
+            return {"error": "Unknown report type."}
 
         try:
-            ts = self.data.get('test_suite', None)
-            self.test_suite = TestSuite.objects.get(id=ts.id)
-        except TestSuite.DoesNotExist:
-            return {'error': 'TestSuite does not exists'}
+            xml_dict = xmltodict.parse(infile)
+            if isinstance(infile, bytes):
+                infile = infile.decode('utf-8', errors='replace')
+            self.test_report.destination = infile
+            self.test_report.save(update_fields=["destination", "updated"])
+        except Exception as e:
+            self.test_report.status = TestReport.Status.FAILURE
+            self.test_report.save(update_fields=["status", "updated"])
+            return {"error": "XML Parse error."}
+
+        ts = self.data.get('test_suite', None)
+        self.test_suite = TestSuite.objects.get(id=ts.id)
 
         root = xml_dict.get('testsuites', None)
         if root is None:
@@ -312,6 +323,9 @@ class ImportUtils(object):
             'report_url': self.host,
             'test_run_id': self.test_run.id,
         }
+
+        self.test_report.status = TestReport.Status.SUCCESS
+        self.test_report.save(update_fields=["status", "updated"])
         return data
 
     def test_run_result_complete(self):
