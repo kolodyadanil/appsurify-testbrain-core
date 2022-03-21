@@ -152,7 +152,7 @@ class GitHubRepositoryWrapper(RepositoryInterface):
         serializer.is_valid(raise_exception=True)
         repository = serializer.save(user=user, token=social_token)
         task = self.run_clone_workflow(repository=repository)
-        return {'task_id': task.id, 'status': task.status}
+        return {'task_id': task.parent.id, 'status': task.status}
 
     def retrieve(self, pk, *args, **kwargs):
         repository_instance = self.model.objects.get(project_id=pk)

@@ -2,11 +2,11 @@
 import os
 import django
 import pickle
+import dask.dataframe as dd
 import pandas as pd
 import numpy as np
-# from sklearn.model_selection import GridSearchCV
 from catboost import CatBoostClassifier
-# from sklearn.ensemble import ExtraTreesClassifier
+from scipy.sparse import hstack
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.model_selection import cross_val_score
 
@@ -45,21 +45,21 @@ class DatasetError(RuntimeError):
 class TestPriorityMLModel(object):
 
     def __init__(self):
-        self.test_areas_binarizer = MultiLabelBinarizer()
-        self.test_associated_areas_binarizer = MultiLabelBinarizer()
-        self.test_associated_files_binarizer = MultiLabelBinarizer()
-        self.test_dependent_areas_binarizer = MultiLabelBinarizer()
-        self.test_similarnamed_binarizer = MultiLabelBinarizer()
-        self.test_area_similarnamed_binarizer = MultiLabelBinarizer()
-        self.test_classes_names_binarizer = MultiLabelBinarizer()
-        self.test_names_binarizer = MultiLabelBinarizer()
-        self.commit_areas_binarizer = MultiLabelBinarizer()
-        self.commit_files_binarizer = MultiLabelBinarizer()
-        self.defect_closed_by_caused_by_commits_files_binarizer = MultiLabelBinarizer()
-        self.defect_closed_by_caused_by_commits_areas_binarizer = MultiLabelBinarizer()
-        self.defect_closed_by_caused_by_commits_dependent_areas_binarizer = MultiLabelBinarizer()
-        self.defect_closed_by_caused_by_intersection_files_binarizer = MultiLabelBinarizer()
-        self.defect_closed_by_caused_by_intersection_areas_binarizer = MultiLabelBinarizer()
+        self.test_areas_binarizer = MultiLabelBinarizer(sparse_output=True)
+        self.test_associated_areas_binarizer = MultiLabelBinarizer(sparse_output=True)
+        self.test_associated_files_binarizer = MultiLabelBinarizer(sparse_output=True)
+        self.test_dependent_areas_binarizer = MultiLabelBinarizer(sparse_output=True)
+        self.test_similarnamed_binarizer = MultiLabelBinarizer(sparse_output=True)
+        self.test_area_similarnamed_binarizer = MultiLabelBinarizer(sparse_output=True)
+        self.test_classes_names_binarizer = MultiLabelBinarizer(sparse_output=True)
+        self.test_names_binarizer = MultiLabelBinarizer(sparse_output=True)
+        self.commit_areas_binarizer = MultiLabelBinarizer(sparse_output=True)
+        self.commit_files_binarizer = MultiLabelBinarizer(sparse_output=True)
+        self.defect_closed_by_caused_by_commits_files_binarizer = MultiLabelBinarizer(sparse_output=True)
+        self.defect_closed_by_caused_by_commits_areas_binarizer = MultiLabelBinarizer(sparse_output=True)
+        self.defect_closed_by_caused_by_commits_dependent_areas_binarizer = MultiLabelBinarizer(sparse_output=True)
+        self.defect_closed_by_caused_by_intersection_files_binarizer = MultiLabelBinarizer(sparse_output=True)
+        self.defect_closed_by_caused_by_intersection_areas_binarizer = MultiLabelBinarizer(sparse_output=True)
 
         self.classifier = None
 
@@ -124,47 +124,41 @@ class MLTrainer(MLHolder):
             raise DatasetError('ML model not exist for TestSuite id: "{}"'.format(self.test_suite_id))
 
         dataset_path, dataset_filename = self.test_suite_model.dataset_path
+        df = dd.read_csv(f"{dataset_path}/{dataset_filename}")
 
-        df = pd.read_csv(f"{dataset_path / dataset_filename}")
+        df = df.drop([c for c in df.columns if df[c].isna().all().compute()], axis=1)
 
-        df.dropna(axis=1, how='all', inplace=True)
-
-        if df.empty:
+        if len(df.index) == 0:
             raise DatasetError('Empty dataset for this TestSuite id: "{}"'.format(self.test_suite_id))
 
-        if df.shape[0] < 5:
+        if len(df.columns) < 5:
             raise DatasetError('Small dataset for this TestSuite id: "{}"'.format(self.test_suite_id))
 
         self.model = TestPriorityMLModel()
 
-        df_chunks = [df['test_changed']]
+        x = None
         for column_name, new_columns_prefix in self.encode_columns:
-
-            df[column_name] = df[column_name].apply(parse_list_entry)
-
+            df[column_name] = df[column_name].apply(parse_list_entry, meta=(column_name, 'object'))
             binarizer = getattr(self.model, column_name + '_binarizer')
+            x_chunk = binarizer.fit_transform(df[column_name])
+            if x is None:
+                x = x_chunk
+            else:
+                x = hstack([x, x_chunk])
 
-            df_chunks.append(pd.DataFrame(
-                    binarizer.fit_transform(df.pop(column_name)),
-                    columns=[f"{new_columns_prefix}{i}" for i in binarizer.classes_],
-                    index=df.index
-                ))
-
-        df = pd.concat(df_chunks, axis=1)
-
-        y = df['test_changed'].values
-        x = df.drop('test_changed', axis=1).values
+        y = df['test_changed'].compute()
 
         clf = CatBoostClassifier(auto_class_weights='Balanced', random_state=0, verbose=False)
         clf.fit(x, y)
         self.model.classifier = clf
 
-        cv = 10
-        print(cross_val_score(clf, x, y, cv=cv, scoring='recall'))
-        print(cross_val_score(clf, x, y, cv=cv))
-
         if self.auto_save:
             self.save()
+
+        # For test only
+        # cv = 10
+        # print(cross_val_score(clf, x, y, cv=cv, scoring='recall'))
+        # print(cross_val_score(clf, x, y, cv=cv))
 
 
 class MLPredictor(MLHolder):
