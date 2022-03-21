@@ -325,7 +325,7 @@ class OrganizationSignupSerializer(serializers.Serializer):
             except ValidationError as e:
                 raise serializers.ValidationError({'password': e})
             if allauth_settings.SIGNUP_PASSWORD_ENTER_TWICE:
-                if not attrs.has_key('password2'):
+                if 'password2' not in attrs:
                     raise serializers.ValidationError({'password': 'The password fields didn\'t match.'})
 
                 password2 = attrs.get('password2')
@@ -365,7 +365,8 @@ class OrganizationSignupSerializer(serializers.Serializer):
 
             user = adapter.new_user(request)
             adapter.save_user(request, user, self.validated_data, commit=True)
-            setup_user_email(request, user, [])
+            # Temporarily allow for optional email verification
+            setup_user_email(request, user, [], email_verified=True)
 
             site = Site.objects.create(domain=company_domain, name=company_domain)
             organization = create_organization(user, company_name, slug=slugify(company_name), is_active=True, org_defaults={'site': site}, org_user_defaults={'is_admin': True})
