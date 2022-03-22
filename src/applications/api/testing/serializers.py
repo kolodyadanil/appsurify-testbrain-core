@@ -609,7 +609,7 @@ class ImportTestingReportSerializer(serializers.Serializer):
         commit = validated_data.get('commit', None)
         file = validated_data['file']
         type = validated_data['type']
-        test_run_name = validated_data.get('test_run_name', None)
+        test_run_name = validated_data.get('test_run_name', "")
         utils = SpecFlow.ImportUtils(
             type_xml=type,
             file_obj=file,
