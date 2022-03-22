@@ -2310,7 +2310,7 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
                 raise APIException('TestRun not found!')
 
         newest_current_test_run_results = TestRunResult.objects.filter(test_run=newest_test_run,
-                                                          test=models.OuterRef('id')).order_by('-created')
+                                                                       test=models.OuterRef('id')).order_by('-created')
 
         newest_previous_test_run_results = TestRunResult.objects.filter(test_run=newest_test_run.previous_test_run,
                                                                         test=models.OuterRef('id')).order_by('-created')

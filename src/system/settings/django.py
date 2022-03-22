@@ -3,11 +3,15 @@
 from system.env import env, BASE_DIR
 
 DEBUG = env.bool("DJANGO_DEBUG", default=True)
+DEBUG_SITE_ID = env.int("DJANGO_DEBUG_SITE_ID", default=0)
 
 PLATFORM = env.str("PLATFORM", default="on-premises")
 
 if PLATFORM == "on-premises":
     SITE_ID = 1
+
+if DEBUG_SITE_ID != 0:
+    SITE_ID = DEBUG_SITE_ID
 
 SECRET_KEY = env.str("DJANGO_SECRET_KEY", default="FAKE###T[*R)+Grx!%CwWXm)m+^;nFwTd,tc6Fhi/B@1Sd(XMC")
 
