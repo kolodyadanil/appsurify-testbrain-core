@@ -307,7 +307,7 @@ class OrganizationSignupAPIView(CreateAPIView):
 
     def create(self, request, *args, **kwargs):
 
-        serializer = self.get_serializer(
+        serializer: OrganizationSignupSerializer = self.get_serializer(
             data=request.data, context={"request": request}
         )
         serializer.is_valid(raise_exception=True)
@@ -325,12 +325,11 @@ class OrganizationSignupAPIView(CreateAPIView):
             )
 
         headers = self.get_success_headers(serializer.data)
-        return Response(data={}, status=status.HTTP_201_CREATED, headers=headers)
+        return Response(data=serializer.validated_data, status=status.HTTP_201_CREATED, headers=headers)
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer) -> Organization:
         organization = serializer.save(self.request)
-        # if not organization:
-        #     return None
+
         complete_signup(
             self.request._request,
             organization.owner.organization_user.user,
