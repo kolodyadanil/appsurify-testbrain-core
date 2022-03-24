@@ -380,8 +380,8 @@ class TestSuite(models.Model):
         verbose_name = _(u'test suite')
         verbose_name_plural = _(u'test suites')
 
-    def __unicode__(self):
-        return u'{id} {name}'.format(id=self.id, name=self.name)
+    def __str__(self):
+        return f"<TestSuite: {self.id} ({self.name}) (Project: {self.project.name})>"
 
     @property
     def last_test_run(self):
@@ -1012,6 +1012,7 @@ class TestRunResult(models.Model):
         indexes = [
             models.Index(fields=['-created'], name='testrunresult_created_idx'),
         ]
+
     def __unicode__(self):
         return u'{id} {result} {status}'.format(id=self.id, result=self.result, status=self.status)
 

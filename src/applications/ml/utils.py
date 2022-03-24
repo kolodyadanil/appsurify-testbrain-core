@@ -50,7 +50,7 @@ def fix_expired_models(days=7):
     queryset.update(dataset_status=MLModel.Status.PENDING, model_status=MLModel.Status.PENDING)
 
 
-def fix_broken_models(days=2):
+def fix_broken_models(days=7):
     queryset = MLModel.objects\
         .filter(dataset_status__in=[MLModel.Status.FAILURE, MLModel.Status.UNKNOWN])\
         .filter(updated__gte=datetime.now(timezone.utc) - timedelta(days=days))
