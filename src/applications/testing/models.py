@@ -1072,6 +1072,7 @@ class Defect(models.Model):
     TYPE_INVALID_TEST = 4
     TYPE_LOCAL = 5
     TYPE_OUTSIDE = 6
+    TYPE_NEW_TEST = 7
 
     TYPE_CHOICE = (
         (TYPE_ENVIRONMENTAL, _(u'ENVIRONMENTAL')),
@@ -1079,7 +1080,8 @@ class Defect(models.Model):
         (TYPE_PROJECT, _(u'PROJECT')),
         (TYPE_INVALID_TEST, _(u'INVALID TEST')),
         (TYPE_LOCAL, _(u'LOCAL')),
-        (TYPE_OUTSIDE, _(u'OUTSIDE SCOPE'))
+        (TYPE_OUTSIDE, _(u'OUTSIDE SCOPE')),
+        (TYPE_NEW_TEST, _(u'NEW TEST')),
     )
 
     STATUS_NEW = 1
