@@ -191,7 +191,7 @@ def create_defect_and_add_commits_in_last_24hours(sender, instance, created, **k
         print('First test run in current test suite, do nothing')
     
     else:
-        timestamp_24hours_ago = timezone.now() - timezone.timedelta(hours=24*7)
+        timestamp_24hours_ago = timezone.now() - timezone.timedelta(hours=24)
         last_24hours_commits = Commit.objects.filter(timestamp__gte=timestamp_24hours_ago)
         
         defect = Defect(project=test_suite.project,
