@@ -2297,7 +2297,7 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
 
     @action(methods=['GET', ], detail=False, url_path=r'changed')
     def changed(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
+        queryset = self.filter_queryset(self.get_queryset()).distinct('id')
 
         if 'test_run' in request.query_params:
             value = request.query_params['test_run']
@@ -2368,7 +2368,6 @@ WHERE
             execution_time_max=models.Max('test_runs__test_run_results__execution_time',
                                           output_field=models.FloatField()),
         )
-
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)

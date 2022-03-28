@@ -1173,7 +1173,12 @@ class Defect(models.Model):
     caused_by_test_run_results = models.ManyToManyField('TestRunResult', related_name='caused_defects', blank=True)
     caused_by_tests = models.ManyToManyField('Test', related_name='caused_defects', blank=True)
 
-    caused_by_commits = models.ManyToManyField('vcs.Commit', related_name='caused_defects', blank=True)  # Add throuth model for timestamped
+    caused_by_commits = models.ManyToManyField(
+        "vcs.Commit",
+        related_name="caused_defects",
+        blank=True,
+        through="DefectCausedByCommits"
+    )
 
     # TODO: Link to objects in which defects are reopen (who init reopen defect)
     reopen_test_suites = models.ManyToManyField('TestSuite', related_name='reopened_defects', blank=True)
@@ -1861,3 +1866,35 @@ class DefectAttachment(models.Model):
 
     def __unicode__(self):
         return u'{id} {name}'.format(id=self.id, name=self.name)
+
+
+class TimeStampedM2M(models.Model):
+    created = models.DateTimeField(
+        verbose_name="created",
+        auto_now_add=True,
+        help_text="Auto-generated field"
+    )
+
+    updated = models.DateTimeField(
+        verbose_name="updated",
+        auto_now=True,
+        help_text="Auto-generated and auto-updated field"
+    )
+
+    class Meta(object):
+        abstract = True
+
+
+class DefectCausedByCommits(TimeStampedM2M):
+    commit = models.ForeignKey(
+        "vcs.Commit",
+        on_delete=models.CASCADE
+    )
+
+    defect = models.ForeignKey(
+        "Defect",
+        on_delete=models.CASCADE
+    )
+
+    class Meta(object):
+        db_table = "testing_defect_caused_by_commits"
