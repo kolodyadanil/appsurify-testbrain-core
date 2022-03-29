@@ -41,7 +41,13 @@ class Area(models.Model):
     type = models.IntegerField(default=TYPE_UNKNOWN, choices=TYPE_CHOICE, blank=False, null=False)
     priority = models.IntegerField(default=0, blank=False, null=False)
 
-    dependencies = models.ManyToManyField('self', related_name='depended_on', blank=True, symmetrical=False)  # Add throuth model for timestamped
+    dependencies = models.ManyToManyField(
+        "self",
+        related_name="depended_on",
+        blank=True,
+        symmetrical=False,
+        through="AreaDependencies"
+    )
     links = models.ManyToManyField('self', related_name='linked_to', blank=True, symmetrical=False)
 
     created = models.DateTimeField(auto_now_add=True)
@@ -391,7 +397,12 @@ class Commit(models.Model):
 
     project = models.ForeignKey('project.Project', related_name='commits', blank=False, null=False,
                                 on_delete=models.CASCADE)
-    areas = models.ManyToManyField('Area', related_name='commits', blank=True)   # Add throuth model for timestamped
+    areas = models.ManyToManyField(
+        "Area",
+        related_name="commits",
+        blank=True,
+        through="CommitAreas"
+    )
 
     branches = models.ManyToManyField('Branch', related_name='commits', blank=True)
     tags = GenericRelation('Tag', object_id_field='target_id', content_type_field='target_type')
@@ -560,3 +571,52 @@ class Tag(models.Model):
 
     def __unicode__(self):
         return u'{id} {tag}'.format(id=self.id, tag=self.tag)
+
+
+class TimeStampedM2M(models.Model):
+    created = models.DateTimeField(
+        verbose_name="created",
+        auto_now_add=True,
+        help_text="Auto-generated field"
+    )
+
+    updated = models.DateTimeField(
+        verbose_name="updated",
+        auto_now=True,
+        help_text="Auto-generated and auto-updated field"
+    )
+
+    class Meta(object):
+        abstract = True
+
+
+class CommitAreas(TimeStampedM2M):
+    area = models.ForeignKey(
+        "Area",
+        on_delete=models.CASCADE
+    )
+
+    commit = models.ForeignKey(
+        "Commit",
+        on_delete=models.CASCADE
+    )
+
+    class Meta(object):
+        db_table = "vcs_commit_areas"
+
+
+class AreaDependencies(TimeStampedM2M):
+    to_area = models.ForeignKey(
+        "Area",
+        related_name="from_areas",
+        on_delete=models.CASCADE
+    )
+
+    from_area = models.ForeignKey(
+        "Area",
+        related_name="to_areas",
+        on_delete=models.CASCADE
+    )
+
+    class Meta(object):
+        db_table = "vcs_area_dependencies"
