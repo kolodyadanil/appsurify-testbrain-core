@@ -45,7 +45,7 @@ services:
   worker-immediate:
     <<: *testbrian
     container_name: testbrain-worker-immediate
-    command: celery -A system worker -E --loglevel=INFO --queues immediate
+    command: celery -A system worker -E --hostname=immediate@%h --loglevel=INFO --pool prefork --concurrency 2 --queues immediate
     depends_on:
       - api
       - postgres
@@ -55,7 +55,7 @@ services:
   worker:
     <<: *testbrian
     restart: always
-    command: /start-worker
+    command: celery -A system worker -E --hostname=common@%h --loglevel=INFO --pool prefork --concurrency 2
     deploy:
       replicas: 2
     depends_on:

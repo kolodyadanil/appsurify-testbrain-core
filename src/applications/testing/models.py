@@ -190,8 +190,18 @@ class Test(models.Model):
 
     area = models.ForeignKey('vcs.Area', related_name='tests', blank=True, null=True, on_delete=models.CASCADE)
 
-    associated_files = models.ManyToManyField('vcs.File', related_name='associated_files', blank=True)  # Add throuth model for timestamped
-    associated_areas = models.ManyToManyField('vcs.Area', related_name='associated_areas', blank=True)  # Add throuth model for timestamped
+    associated_files = models.ManyToManyField(
+        "vcs.File",
+        related_name="associated_files",
+        blank=True,
+        through="TestAssociatedFiles"
+    )
+    associated_areas = models.ManyToManyField(
+        "vcs.Area",
+        related_name="associated_areas",
+        blank=True,
+        through="TestAssociatedAreas"
+    )
 
     author = models.ForeignKey(User, related_name='tests', blank=True, null=True, on_delete=models.CASCADE)
 
@@ -380,8 +390,8 @@ class TestSuite(models.Model):
         verbose_name = _(u'test suite')
         verbose_name_plural = _(u'test suites')
 
-    def __unicode__(self):
-        return u'{id} {name}'.format(id=self.id, name=self.name)
+    def __str__(self):
+        return f"<TestSuite: {self.id} ({self.name}) (Project: {self.project.name})>"
 
     @property
     def last_test_run(self):
@@ -1012,6 +1022,7 @@ class TestRunResult(models.Model):
         indexes = [
             models.Index(fields=['-created'], name='testrunresult_created_idx'),
         ]
+
     def __unicode__(self):
         return u'{id} {result} {status}'.format(id=self.id, result=self.result, status=self.status)
 
@@ -1172,7 +1183,12 @@ class Defect(models.Model):
     caused_by_test_run_results = models.ManyToManyField('TestRunResult', related_name='caused_defects', blank=True)
     caused_by_tests = models.ManyToManyField('Test', related_name='caused_defects', blank=True)
 
-    caused_by_commits = models.ManyToManyField('vcs.Commit', related_name='caused_defects', blank=True)  # Add throuth model for timestamped
+    caused_by_commits = models.ManyToManyField(
+        "vcs.Commit",
+        related_name="caused_defects",
+        blank=True,
+        through="DefectCausedByCommits"
+    )
 
     # TODO: Link to objects in which defects are reopen (who init reopen defect)
     reopen_test_suites = models.ManyToManyField('TestSuite', related_name='reopened_defects', blank=True)
@@ -1206,7 +1222,12 @@ class Defect(models.Model):
                                     on_delete=models.CASCADE)
     closed_commit = models.ForeignKey('vcs.Commit', related_name='closed_defects', blank=True, null=True,
                                       on_delete=models.CASCADE)
-    closed_by_commits = models.ManyToManyField('vcs.Commit', related_name='closed_by_defects', blank=True)  # Add throuth model for timestamped
+    closed_by_commits = models.ManyToManyField(
+        "vcs.Commit",
+        related_name="closed_by_defects",
+        blank=True,
+        through="DefectClosedByCommits"
+    )
 
     created = models.DateTimeField(auto_now_add=True, db_index=True)
     updated = models.DateTimeField(auto_now=True, db_index=True)
@@ -1860,3 +1881,80 @@ class DefectAttachment(models.Model):
 
     def __unicode__(self):
         return u'{id} {name}'.format(id=self.id, name=self.name)
+
+
+class TimeStampedM2M(models.Model):
+    created = models.DateTimeField(
+        verbose_name="created",
+        auto_now_add=True,
+        help_text="Auto-generated field"
+    )
+
+    updated = models.DateTimeField(
+        verbose_name="updated",
+        auto_now=True,
+        help_text="Auto-generated and auto-updated field"
+    )
+
+    class Meta(object):
+        abstract = True
+
+
+class DefectCausedByCommits(TimeStampedM2M):
+    commit = models.ForeignKey(
+        "vcs.Commit",
+        on_delete=models.CASCADE
+    )
+
+    defect = models.ForeignKey(
+        "Defect",
+        on_delete=models.CASCADE
+    )
+
+    class Meta(object):
+        db_table = "testing_defect_caused_by_commits"
+
+
+class DefectClosedByCommits(TimeStampedM2M):
+    commit = models.ForeignKey(
+        "vcs.Commit",
+        on_delete=models.CASCADE
+    )
+
+    defect = models.ForeignKey(
+        "Defect",
+        on_delete=models.CASCADE
+    )
+
+    class Meta(object):
+        db_table = "testing_defect_closed_by_commits"
+
+
+class TestAssociatedFiles(TimeStampedM2M):
+    file = models.ForeignKey(
+        "vcs.File",
+        on_delete=models.CASCADE
+    )
+
+    test = models.ForeignKey(
+        "Test",
+        on_delete=models.CASCADE
+    )
+
+    class Meta(object):
+        db_table = "testing_test_associated_files"
+
+
+class TestAssociatedAreas(TimeStampedM2M):
+    area = models.ForeignKey(
+        "vcs.Area",
+        on_delete=models.CASCADE
+    )
+
+    test = models.ForeignKey(
+        "Test",
+        on_delete=models.CASCADE
+    )
+
+    class Meta(object):
+        db_table = "testing_test_associated_areas"

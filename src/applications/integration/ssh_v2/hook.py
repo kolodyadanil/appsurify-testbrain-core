@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-
 import os
 import sys 
 from django.conf import settings
@@ -14,5 +12,5 @@ def generate_hook(hook_url, username, repo_name, api_key):
     data = data.replace("{{HOOK_URL}}", hook_url)
     data = data.replace("{{USERNAME}}", username)
     data = data.replace("{{PROJECT}}", repo_name)
-    data = data.replace("{{API_KEY}}", api_key if sys.version_info[0] == 2 else api_key.decode('utf-8'))
+    data = data.replace("{{API_KEY}}", api_key)
     return data
