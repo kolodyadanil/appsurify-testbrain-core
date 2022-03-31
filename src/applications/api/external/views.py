@@ -37,6 +37,7 @@ PRIORITY_TOP20 = 8
 PRIORITY_PERCENT = 9
 PRIORITY_FOR_TEST = 10
 PRIORITY_FOR_TEST_WITH_DAY = 11
+PRIORITY_EXECUTION_TIME_UNDER = 12
 
 
 class ExternalAPIViewSet(MultiSerializerViewSetMixin, viewsets.GenericViewSet):
@@ -271,8 +272,10 @@ class ExternalAPIViewSet(MultiSerializerViewSetMixin, viewsets.GenericViewSet):
                 queryset = test_view.get_top_by_percent_queryset(queryset=filtered_queryset)
             elif priority == PRIORITY_FOR_TEST or priority == PRIORITY_FOR_TEST_WITH_DAY:
                 queryset = test_view.get_all_queryset(queryset=filtered_queryset)
+            elif priority == PRIORITY_EXECUTION_TIME_UNDER:
+                queryset = test_view.get_highest_tests_under_time(queryset=filtered_queryset)
             else:
-                raise APIException('Please choice priority from 1 to 11.')
+                raise APIException('Please choice priority from 1 to 12.')
         except NotFound:
             raise APIException(
                 "No one commit in branch '{0}' has not associated test runs in specified test suite '{1}'".format(
