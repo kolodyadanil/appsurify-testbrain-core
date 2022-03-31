@@ -2976,6 +2976,31 @@ WHERE
             queryset = queryset.filter(created__range=(from_date, to_date))
         return queryset.distinct('name')
 
+    def get_highest_tests_under_time(self, queryset):
+        """
+        This function returns the highest tests set under time in minutes
+        """
+        time = self.request.query_params.get('time', None)
+        queryset = self.filter_queryset(queryset)
+        if time is not None:
+            time = int(time)
+            queryset = queryset.order_by('-priority')
+            id_set = set()
+            for test in queryset:
+                testrunresult_set = TestRunResult.objects.filter(test=test).filter(status='pass').order_by('execution_started')
+                last_pass = testrunresult_set.first()
+                if last_pass is not None:
+                    if last_pass.execution_time < time*60:
+                        id_set.add(last_pass.id)
+                    else:
+                        break
+                else:
+                    continue
+            queryset = queryset.filter(id__in=id_set)
+            return queryset.distinct('name')
+        else: 
+            raise APIException('Time is required in minute(s).')
+
     def get_default_by_percent_queryset(self, queryset, commits_ids, percent):
         default_queryset = list()
         commit_id = self.request.query_params.get('commit', None)
