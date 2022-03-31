@@ -146,7 +146,7 @@ class Area(models.Model):
 
         file_areas.extend(list(Area.objects.filter(project=project, name__in=area_names, type=cls.TYPE_FOLDER)))
 
-        if len(file_areas) == 0 and project.auto_area_on_commit is True:
+        if len(area_names) > 0 and len(file_areas) == 0 and project.auto_area_on_commit is True:
             area, _ = cls.objects.get_or_create(project=project, name=area_names[-1],
                                                 defaults={'type': cls.TYPE_FOLDER})
 
