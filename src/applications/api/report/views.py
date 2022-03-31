@@ -2445,17 +2445,19 @@ WHERE
         :param test_suite: py:obj:`TestSuite` object
         :return: py:obj:`Commit` object or may raise NotFound exception
         """
-        time_threshold = datetime.datetime.now() - timedelta(days=7)
+        time_threshold = commit.timestamp - timedelta(days=7)
         last_run_commit_list = Commit.objects.filter(project=project,
                                                         branches=target_branch,
                                                         test_runs__isnull=False,
                                                         test_runs__test_suite=test_suite,
-                                                        timestamp__gt=time_threshold).order_by('-timestamp')
+                                                        timestamp__gt=time_threshold,
+                                                        timestamp__lt=commit.timestamp).order_by('-timestamp')
     
         if len(last_run_commit_list) == 0:
             all_commits = Commit.objects.filter(project=project,
                                                 branches=target_branch,
-                                                timestamp__gt=time_threshold).order_by('timestamp')
+                                                timestamp__gt=time_threshold,
+                                                timestamp__lt=commit.timestamp).order_by('timestamp')
             if len(all_commits) == 0:
                 return commit
             return all_commits[-1]
