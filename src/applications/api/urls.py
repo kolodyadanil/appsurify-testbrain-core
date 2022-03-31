@@ -22,7 +22,7 @@ You can log in using the pre-existing user"""),
 
 SchemaView = get_schema_view(
     info=swagger_info,
-    schemes=['http', 'https'],
+    # schemes=['http', 'https'],
     validators=[],
     public=True,
     permission_classes=[permissions.AllowAny, ],

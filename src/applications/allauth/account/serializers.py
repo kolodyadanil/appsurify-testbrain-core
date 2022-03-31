@@ -254,6 +254,8 @@ class LoginSerializer(serializers.Serializer):
 
 class OrganizationSignupSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=get_username_max_length(), min_length=allauth_settings.USERNAME_MIN_LENGTH, required=allauth_settings.USERNAME_REQUIRED)
+    first_name = serializers.CharField(min_length=2, max_length=26, required=True)
+    last_name = serializers.CharField(min_length=2, max_length=26, required=True)
 
     email = serializers.EmailField(required=allauth_settings.EMAIL_REQUIRED)
     email2 = serializers.EmailField(write_only=True, required=False)
@@ -262,7 +264,7 @@ class OrganizationSignupSerializer(serializers.Serializer):
     password2 = serializers.CharField(write_only=True, required=False)
 
     company_name = serializers.CharField(write_only=True, required=False)
-    token = serializers.CharField(write_only=True, required=True)
+    token = serializers.CharField(write_only=True, required=False)
 
     def _validate_unique_email(self, email):
         return get_adapter().validate_unique_email(email)
@@ -293,14 +295,14 @@ class OrganizationSignupSerializer(serializers.Serializer):
             raise exceptions.ValidationError(msg)
         return site_domain
 
-    def validate(self, attrs):
-        # adapter = get_adapter()
-        # attrs['user'] = adapter.new_user(self.context['request'])
+    def validate(self, attrs: OrderedDict):
+        username_attr = attrs.get('username')
+        if username_attr:
+            self._validate_username(username_attr)
 
-        username = self._validate_username(attrs.get('username'))
         email = self._validate_email(attrs.get('email'))
+        self._validate_organization_name(attrs.get('company_name'))
 
-        company_name = self._validate_organization_name(attrs.get('company_name'))
         site_domain = self._validate_organization_domain(attrs.get('company_name'))
         attrs['company_domain'] = site_domain
 
@@ -311,7 +313,7 @@ class OrganizationSignupSerializer(serializers.Serializer):
                 raise serializers.ValidationError({'email': e})
 
         if allauth_settings.SIGNUP_EMAIL_ENTER_TWICE:
-            if not attrs.has_key('email2'):
+            if 'email2' not in attrs:
                 raise serializers.ValidationError({'email': 'The email fields didn\'t match.'})
 
             email2 = self._validate_email(attrs.get('email2'))
@@ -325,7 +327,7 @@ class OrganizationSignupSerializer(serializers.Serializer):
             except ValidationError as e:
                 raise serializers.ValidationError({'password': e})
             if allauth_settings.SIGNUP_PASSWORD_ENTER_TWICE:
-                if not attrs.has_key('password2'):
+                if 'password2' not in attrs:
                     raise serializers.ValidationError({'password': 'The password fields didn\'t match.'})
 
                 password2 = attrs.get('password2')
@@ -337,7 +339,7 @@ class OrganizationSignupSerializer(serializers.Serializer):
     def custom_signup(self, request, organization, user):
         # print request.scheme
         # print request.is_secure()
-        token = self.validated_data['token']
+        # token = self.validated_data['token']
         # if token:
         #     customer, created = Customer.get_or_create(subscriber=user)
         #     card = customer.add_card(token)
@@ -365,7 +367,8 @@ class OrganizationSignupSerializer(serializers.Serializer):
 
             user = adapter.new_user(request)
             adapter.save_user(request, user, self.validated_data, commit=True)
-            setup_user_email(request, user, [])
+            # Temporarily allow for optional email verification
+            setup_user_email(request, user, [], email_verified=True)
 
             site = Site.objects.create(domain=company_domain, name=company_domain)
             organization = create_organization(user, company_name, slug=slugify(company_name), is_active=True, org_defaults={'site': site}, org_user_defaults={'is_admin': True})

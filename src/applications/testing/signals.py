@@ -180,3 +180,32 @@ def model_test_run_result_perform_defect(sender, instance, created, **kwargs):
     auto_raise = test_suite.auto_raise_defect
     auto_close = test_suite.auto_close_defect
     defect = Defect.perform(test_run_result=test_run_result)
+
+
+@receiver(post_save, sender=TestRun)
+def create_defect_and_add_commits_in_last_24hours(sender, instance, created, **kwargs):
+    test_suite = instance.test_suite
+    test_runs = TestRun.objects.filter(test_suite=test_suite).order_by('id')
+    
+    if instance == test_runs.first(): # If this is the first test of test suite, pass over this function
+        print('First test run in current test suite, do nothing')
+    
+    else:
+        timestamp_24hours_ago = timezone.now() - timezone.timedelta(hours=24)
+        last_24hours_commits = Commit.objects.filter(timestamp__gte=timestamp_24hours_ago)
+        
+        defect = Defect(project=test_suite.project,
+                        name='Create for ...',
+                        reason='Create for ... ',
+                        error='Not yet',
+                        type=Defect.TYPE_NEW_TEST,
+                        create_type=Defect.CREATE_TYPE_AUTOMATIC,
+                        status=Defect.STATUS_NEW,
+                        severity=Defect.SEVERITY_TRIVIAL,
+                        # remain fields are set to Blank or Default
+                        )
+        defect.save()
+
+        for commit in last_24hours_commits:
+            defect.add_caused_by_commits(commit=commit, test_suite=test_suite)
+            defect.add_closed_by_commits(commit=commit, test_suite=test_suite)
