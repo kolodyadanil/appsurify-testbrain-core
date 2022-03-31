@@ -239,7 +239,8 @@ class AreaReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
         else:
             if queryset:
                 end_date = queryset.last().timestamp
-                from_date = end_date - timezone.timedelta(days=14)
+                from_date = end_date - timezone.timedelta(
+			F=14)
                 lookup_expr = LOOKUP_SEP.join(['timestamp', 'range'])
                 extra_filter.update({lookup_expr: (from_date, end_date)})
 
@@ -2434,7 +2435,7 @@ WHERE
         return Response(serializer.data)
 
     @staticmethod
-    def get_last_run_result_commit(project, target_branch, test_suite):
+    def get_last_run_result_commit(project, target_branch, test_suite, commit):
         """
         Return last commit of commits set that has 'target_branch' in 'branches' and have test runs.
 
@@ -2445,19 +2446,23 @@ WHERE
         :param test_suite: py:obj:`TestSuite` object
         :return: py:obj:`Commit` object or may raise NotFound exception
         """
+        time_threshold = commit.timestamp - timedelta(days=1)
         last_run_commit_list = Commit.objects.filter(project=project,
-                                                     branches=target_branch,
-                                                     test_runs__isnull=False,
-                                                     test_runs__test_suite=test_suite).order_by('-timestamp')
+                                                        branches=target_branch,
+                                                        test_runs__isnull=False,
+                                                        test_runs__test_suite=test_suite,
+                                                        timestamp__gt=time_threshold,
+                                                        timestamp__lt=commit.timestamp).order_by('-timestamp')
+    
         if len(last_run_commit_list) == 0:
-            first_commit = Commit.objects.filter(project=project,
-                                                     branches=target_branch).order_by('timestamp')[:1]
-            if len(first_commit) == 0:
-                err_msg = "No one commit in branch '{0}' has not associated "                                 \
-                        "test runs in specified test suite '{1}'".format(target_branch.name, test_suite.name)
-                raise NotFound(detail=err_msg)
-            return first_commit[0]
-        return last_run_commit_list[0]
+            all_commits = Commit.objects.filter(project=project,
+                                                branches=target_branch,
+                                                timestamp__gt=time_threshold,
+                                                timestamp__lt=commit.timestamp).order_by('timestamp')
+            if len(all_commits) == 0:
+                return commit
+            return all_commits[-1]
+        return last_run_commit_list[0]          
 
     @staticmethod
     def get_commits_list(target_branch, first_commit, second_commit, exclusive=False):
@@ -2573,7 +2578,7 @@ WHERE
                 raise ValidationError({'detail': "Argument 'test_suite' is not specified"})
             if from_commit:
                 raise ValidationError({'detail': "Argument 'from_commit' not needed."})
-            last_res_commit = self.get_last_run_result_commit(project, target_branch, test_suite)
+            last_res_commit = self.get_last_run_result_commit(project, target_branch, test_suite, commit)
             commits_ids = self.get_commits_list(target_branch, commit, last_res_commit)
         elif commit_type in ['BetweenInclusive', 'BetweenExclusive']:
             if not target_branch:
@@ -2975,6 +2980,31 @@ WHERE
             from_date = to_date - timedelta(days=day_val)
             queryset = queryset.filter(created__range=(from_date, to_date))
         return queryset.distinct('name')
+
+    def get_highest_tests_under_time(self, queryset):
+        """
+        This function returns the highest tests set under time in minutes
+        """
+        time = self.request.query_params.get('time', None)
+        queryset = self.filter_queryset(queryset)
+        if time is not None:
+            time = int(time)
+            queryset = queryset.order_by('-priority')
+            id_set = set()
+            for test in queryset:
+                testrunresult_set = TestRunResult.objects.filter(test=test).filter(status='pass').order_by('execution_started')
+                last_pass = testrunresult_set.first()
+                if last_pass is not None:
+                    if last_pass.execution_time < time*60:
+                        id_set.add(last_pass.id)
+                    else:
+                        break
+                else:
+                    continue
+            queryset = queryset.filter(id__in=id_set)
+            return queryset.distinct('name')
+        else: 
+            raise APIException('Time is required in minute(s).')
 
     def get_default_by_percent_queryset(self, queryset, commits_ids, percent):
         default_queryset = list()

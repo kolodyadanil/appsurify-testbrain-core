@@ -302,7 +302,7 @@ def create_or_update_commit(project=None, repository=None, branch=None, refspec=
     return new_commit, created
 
 
-def processing_files(task=None, project=None, repository=None, ref=None, before=None, after=None, since_time=None):
+def processing_files(project=None, repository=None, ref=None, before=None, after=None, since_time=None):
 
     repo = repository.get_repo(ref=ref, before=before, after=after)
 
