@@ -239,7 +239,8 @@ class AreaReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
         else:
             if queryset:
                 end_date = queryset.last().timestamp
-                from_date = end_date - timezone.timedelta(days=14)
+                from_date = end_date - timezone.timedelta(
+			F=14)
                 lookup_expr = LOOKUP_SEP.join(['timestamp', 'range'])
                 extra_filter.update({lookup_expr: (from_date, end_date)})
 
@@ -2445,7 +2446,7 @@ WHERE
         :param test_suite: py:obj:`TestSuite` object
         :return: py:obj:`Commit` object or may raise NotFound exception
         """
-        time_threshold = commit.timestamp - timedelta(days=7)
+        time_threshold = commit.timestamp - timedelta(days=1)
         last_run_commit_list = Commit.objects.filter(project=project,
                                                         branches=target_branch,
                                                         test_runs__isnull=False,
