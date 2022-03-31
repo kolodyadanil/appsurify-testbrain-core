@@ -552,6 +552,12 @@ class RepositoryHookViewSet(RepositoryGenericViewSet):
             url_name='receive', url_path=r'(?P<project_id>[0-9]+)(/(?P<repository_id>[0-9]+))?')
     def receive(self, request, project_id, repository_id=None, *args, **kwargs):
         repository = self.get_repository(*args, **kwargs)
+        project = Project.objects.get(id=project_id)
+        if not project.is_active:
+            return response.Response(
+                data={"detail": "Project is not active"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
         data = repository.hook_receive(project_id, repository_id, *args, **kwargs)
         if data['status'] is False:
             return response.Response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, data=data)
