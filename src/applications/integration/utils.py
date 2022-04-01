@@ -218,6 +218,12 @@ def create_commit(project=None, repository=None, branch=None, refspec=None, comm
 
 def create_or_update_commit(project=None, repository=None, branch=None, refspec=None, commit=None, is_parent=False):
 
+    stats = {
+        'deletions': commit.stats.total.get('deletions', 0),
+        'additions': commit.stats.total.get('insertions', 0),
+        'total': commit.stats.total.get('lines', 0)
+    }
+
     defaults = {
         'repo_id': commit.hexsha,
         'display_id': commit.hexsha[:7],
@@ -232,11 +238,7 @@ def create_or_update_commit(project=None, repository=None, branch=None, refspec=
             'date': datetime.fromtimestamp(commit.committed_date).strftime('%Y-%m-%dT%H:%M:%SZ'),
         },
         'message': commit.message[:255],
-        'stats': {
-            'deletions': commit.stats.total.get('deletions', 0),
-            'additions': commit.stats.total.get('insertions', 0),
-            'total': commit.stats.total.get('lines', 0)
-        },
+        'stats': stats,
         'timestamp': datetime.fromtimestamp(commit.authored_date).strftime('%Y-%m-%dT%H:%M:%SZ'),
         'url': repository.url_commit(commit.hexsha)
     }
@@ -246,6 +248,10 @@ def create_or_update_commit(project=None, repository=None, branch=None, refspec=
         sha=commit.hexsha,
         defaults=defaults
     )
+
+    if not created:
+        new_commit.stats = stats
+        new_commit.save()
 
     if not branch:
         branch, _ = Branch.objects.get_or_create(project=repository.project, name=refspec)
