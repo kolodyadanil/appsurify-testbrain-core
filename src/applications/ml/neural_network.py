@@ -2,6 +2,7 @@
 import os
 import django
 import pickle
+from pqdm.processes import pqdm
 import dask.dataframe as dd
 import pandas as pd
 import numpy as np
@@ -318,17 +319,22 @@ class MLPredictor(MLHolder):
 
         df.dropna(axis=1, how='all', inplace=True)
 
-        for test_id in df['test_id'].unique():
-            max_prediction = 0
-            for _, row in df[df['test_id'] == test_id].iterrows():
-                test_on_commit_prediction = self._predict(row)
-                if test_on_commit_prediction > max_prediction:
-                    max_prediction = test_on_commit_prediction
-                    if self._is_test_high(max_prediction) is True:
-                        break
-                tests_ids_by_priorities.append((test_on_commit_prediction, test_id))
-
+        self.df = df
+        tests_ids_by_priorities = pqdm(df['test_id'].unique(), self.get_row_prediction, n_jobs=os.cpu_count()-1)
+        tests_ids_by_priorities = [item for sublist in tests_ids_by_priorities for item in sublist]
         return tests_ids_by_priorities
+
+    def get_row_prediction(self, test_id):
+        max_prediction = 0
+        tests_ids_by_priorities_local = []
+        for _, row in self.df[self.df['test_id'] == test_id].iterrows():
+            test_on_commit_prediction = self._predict(row)
+            if test_on_commit_prediction > max_prediction:
+                max_prediction = test_on_commit_prediction
+                if self._is_test_high(max_prediction) is True:
+                    return tests_ids_by_priorities_local
+            tests_ids_by_priorities_local.append((test_on_commit_prediction, test_id))
+        return tests_ids_by_priorities_local
 
     def get_test_prioritization_top_by_percent(self, test_queryset, commit_queryset, percent):
         result = Test.objects.none()
