@@ -1,5 +1,5 @@
 WITH test_suite_id AS (SELECT {test_suite_id} AS test_suite_id),
-min_date AS (SELECT now() - interval '2 days' as min_date),
+min_date AS (SELECT now() - interval '7 days' as min_date),
 ttrr AS 
 (
     SELECT
