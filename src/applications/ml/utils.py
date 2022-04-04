@@ -52,12 +52,12 @@ def fix_expired_models(days=7):
 
 def fix_broken_models(days=7):
     queryset = MLModel.objects\
-        .filter(dataset_status__in=[MLModel.Status.FAILURE, MLModel.Status.UNKNOWN])\
+        .filter(dataset_status=MLModel.Status.FAILURE)\
         .filter(updated__gte=datetime.now(timezone.utc) - timedelta(days=days))
     queryset.update(dataset_status=MLModel.Status.PENDING)
 
     queryset = MLModel.objects\
-        .filter(model_status__in=[MLModel.Status.FAILURE, MLModel.Status.UNKNOWN])\
+        .filter(model_status=MLModel.Status.FAILURE)\
         .filter(updated__gte=datetime.now(timezone.utc) - timedelta(days=days))
     queryset.update(model_status=MLModel.Status.PENDING)
 
@@ -67,8 +67,6 @@ def perform_dataset_to_csv(ml_model):
     ml_model.dataset_status = MLModel.Status.PROCESSING
     ml_model.save()
 
-    # sql_template = open(settings.BASE_DIR / "applications" / "ml" / "sql" / "dataset.sql", "r", encoding="utf-8").read()
-    # sql = sql_template.format(test_suite_id=ml_model.test_suite_id)
     dataset_path, dataset_filename = ml_model.dataset_path
     dataset_path.mkdir(parents=True, exist_ok=True)
 
