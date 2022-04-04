@@ -11,7 +11,7 @@ WITH td AS (
   FROM 
     testing_defect 
   WHERE 
-    project_id IN (426) 
+    project_id IN {project_ids} 
     and created_by_commit_id is not null 
     and created_by_test_run_id is not null 
     and created_by_test_id is not null
@@ -24,7 +24,7 @@ ttrr AS (
   FROM 
     testing_testrunresult 
   WHERE 
-    project_id IN (426) 
+    project_id IN {project_ids} 
     AND status = 'pass' 
   GROUP BY 
     test_run_id, 
@@ -36,7 +36,7 @@ tt AS (
   FROM 
     testing_test 
   WHERE 
-    project_id IN (426)
+    project_id IN {project_ids}
 ), 
 va AS (
   SELECT 
@@ -45,7 +45,7 @@ va AS (
   FROM 
     vcs_area 
   WHERE 
-    project_id IN (426)
+    project_id IN {project_ids}
 ), 
 vf AS (
   SELECT 
@@ -54,7 +54,7 @@ vf AS (
   FROM 
     vcs_file 
   WHERE 
-    project_id IN (426)
+    project_id IN {project_ids}
 ) 
 SELECT 
   td.ID, 
