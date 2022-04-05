@@ -1,6 +1,4 @@
-WITH test_suite_id AS (SELECT 346 AS test_suite_id),
-min_date AS (SELECT now() - interval '7 days' as min_date),
-max_date AS (SELECT now() as max_date),
+WITH test_suite_id AS (SELECT 346 AS test_suite_id, 70722 as test_id),
 ttrr AS 
 (
     SELECT
@@ -23,7 +21,7 @@ ttrr AS
         INNER JOIN vcs_area va ON tt.area_id = va.id
         LEFT OUTER JOIN testing_defect td on ttrr.commit_id = td.created_by_commit_id and ttrr.test_run_id = td.created_by_test_run_id
     WHERE
-        ttrr.test_suite_id = (SELECT test_suite_id FROM test_suite_id)
+        (ttrr.test_suite_id, ttrr.test_id) = (SELECT test_suite_id, test_id FROM test_suite_id)
 GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
 ),
 ttrr_grp AS (
@@ -65,9 +63,9 @@ ttrr_grp AS (
            WHERE tdcabc.defect_id = ttrr.td_id
            ), NULL) AS defect_closed_by_caused_by_intersection_files
 FROM ttrr
-LEFT JOIN LATERAL (SELECT defect_id, updated FROM testing_defect_caused_by_commits tdcabc WHERE ttrr.td_id = tdcabc.defect_id AND tdcabc.updated > (SELECT min_date FROM min_date) AND tdcabc.updated < (SELECT max_date FROM max_date)
+LEFT JOIN LATERAL (SELECT defect_id, updated FROM testing_defect_caused_by_commits tdcabc WHERE ttrr.td_id = tdcabc.defect_id
 	UNION SELECT
-	defect_id, updated FROM testing_defect_closed_by_commits tdclbc WHERE ttrr.td_id = tdclbc.defect_id AND tdclbc.updated > (SELECT min_date FROM min_date) AND tdclbc.updated < (SELECT max_date FROM max_date)) tdc ON TRUE
+	defect_id, updated FROM testing_defect_closed_by_commits tdclbc WHERE ttrr.td_id = tdclbc.defect_id) tdc ON TRUE
 GROUP BY ttrr.project_id,
          ttrr.sha,
          ttrr.rework,
@@ -90,9 +88,7 @@ INNER JOIN vcs_commit vc on ttrr.commit_id = vc.id
 INNER JOIN testing_test tt on ttrr.test_id = tt.id
 INNER JOIN testing_test_associated_areas ttaa2 on ttrr.area_id = ttaa2.area_id
 INNER JOIN vcs_area va2 on ttaa2.area_id = va2.id
-WHERE ttrr.test_suite_id = (SELECT test_suite_id FROM test_suite_id)
-AND (ttaa2.updated > (SELECT min_date FROM min_date) AND ttaa2.updated < (SELECT max_date FROM max_date)
-OR va2.updated > (SELECT min_date FROM min_date) AND va2.updated < (SELECT max_date FROM max_date))
+WHERE (ttrr.test_suite_id, ttrr.test_id) = (SELECT test_suite_id, test_id FROM test_suite_id)
 GROUP BY tt.project_id,
 vc.sha,
 vc.rework,
@@ -108,9 +104,7 @@ INNER JOIN vcs_commit vc on ttrr.commit_id = vc.id
 INNER JOIN testing_test tt on ttrr.test_id = tt.id
 INNER JOIN testing_test_associated_files ttaf on ttrr.test_id = ttaf.test_id
 INNER JOIN vcs_file vf on ttaf.file_id = vf.id
-WHERE ttrr.test_suite_id = (SELECT test_suite_id FROM test_suite_id)
-AND (ttaf.updated > (SELECT min_date FROM min_date) AND ttaf.updated < (SELECT max_date FROM max_date)
-OR vf.updated > (SELECT min_date FROM min_date) AND vf.updated < (SELECT max_date FROM max_date))
+WHERE (ttrr.test_suite_id, ttrr.test_id) = (SELECT test_suite_id, test_id FROM test_suite_id)
 GROUP BY tt.project_id,
 vc.sha,
 vc.rework,
@@ -127,10 +121,7 @@ INNER JOIN testing_test tt on ttrr.test_id = tt.id
 INNER JOIN vcs_area_dependencies vad on ttrr.area_id = vad.to_area_id
 INNER JOIN testing_test_associated_areas ttaa3 on vad.from_area_id = ttaa3.area_id
 INNER JOIN vcs_area va3 on ttaa3.area_id = va3.id
-WHERE ttrr.test_suite_id = (SELECT test_suite_id FROM test_suite_id)
-AND (vad.updated > (SELECT min_date FROM min_date) AND vad.updated < (SELECT max_date FROM max_date)
-OR ttaa3.updated > (SELECT min_date FROM min_date) AND ttaa3.updated < (SELECT max_date FROM max_date)
-OR va3.updated > (SELECT min_date FROM min_date) AND va3.updated < (SELECT max_date FROM max_date))
+WHERE (ttrr.test_suite_id, ttrr.test_id) = (SELECT test_suite_id, test_id FROM test_suite_id)
 GROUP BY tt.project_id,
 vc.sha,
 vc.rework,
@@ -146,9 +137,7 @@ INNER JOIN vcs_commit vc on ttrr.commit_id = vc.id
 INNER JOIN testing_test tt on ttrr.test_id = tt.id
 INNER JOIN vcs_commit_areas vca4 on ttrr.commit_id = vca4.commit_id
 INNER JOIN vcs_area va4 on vca4.area_id = va4.id
-WHERE ttrr.test_suite_id = (SELECT test_suite_id FROM test_suite_id)
-AND (vca4.updated > (SELECT min_date FROM min_date) AND vca4.updated < (SELECT max_date FROM max_date)
-OR va4.updated > (SELECT min_date FROM min_date) AND va4.updated < (SELECT max_date FROM max_date))
+WHERE (ttrr.test_suite_id, ttrr.test_id) = (SELECT test_suite_id, test_id FROM test_suite_id)
 GROUP BY tt.project_id,
 vc.sha,
 vc.rework,
@@ -164,9 +153,7 @@ INNER JOIN vcs_commit vc on ttrr.commit_id = vc.id
 INNER JOIN testing_test tt on ttrr.test_id = tt.id
 INNER JOIN vcs_filechange vfc2 on ttrr.commit_id = vfc2.commit_id
 INNER JOIN vcs_file vf2 on vfc2.file_id = vf2.id
-WHERE ttrr.test_suite_id = (SELECT test_suite_id FROM test_suite_id)
-AND (vfc2.updated > (SELECT min_date FROM min_date) AND vfc2.updated < (SELECT max_date FROM max_date)
-OR vf2.updated > (SELECT min_date FROM min_date) AND vf2.updated < (SELECT max_date FROM max_date))
+WHERE (ttrr.test_suite_id, ttrr.test_id) = (SELECT test_suite_id, test_id FROM test_suite_id)
 GROUP BY tt.project_id,
 vc.sha,
 vc.rework,
@@ -186,12 +173,7 @@ INNER JOIN LATERAL (SELECT commit_id, updated FROM testing_defect_caused_by_comm
 	commit_id, updated FROM testing_defect_closed_by_commits tdclbc WHERE td.id = tdclbc.defect_id) tdc ON TRUE
 INNER JOIN vcs_filechange vfc3 on tdc.commit_id = vfc3.commit_id
 INNER JOIN vcs_file vf3 on vf3.id = vfc3.file_id
-WHERE ttrr.test_suite_id = (SELECT test_suite_id FROM test_suite_id)
-AND (
-tdc.updated > (SELECT min_date FROM min_date) AND tdc.updated < (SELECT max_date FROM max_date)
-OR vfc3.updated > (SELECT min_date FROM min_date) AND vfc3.updated < (SELECT max_date FROM max_date)
-OR vf3.updated > (SELECT min_date FROM min_date) AND vf3.updated < (SELECT max_date FROM max_date)
-)
+WHERE (ttrr.test_suite_id, ttrr.test_id) = (SELECT test_suite_id, test_id FROM test_suite_id)
 GROUP BY tt.project_id,
 vc.sha,
 vc.rework,
@@ -211,11 +193,7 @@ INNER JOIN LATERAL (SELECT commit_id, updated FROM testing_defect_caused_by_comm
 	commit_id, updated FROM testing_defect_closed_by_commits tdclbc WHERE td.id = tdclbc.defect_id) tdc ON TRUE
 INNER JOIN vcs_commit_areas vca5 on tdc.commit_id = vca5.commit_id
 INNER JOIN vcs_area va5 on vca5.area_id = va5.id
-WHERE ttrr.test_suite_id = (SELECT test_suite_id FROM test_suite_id)
-AND (tdc.updated > (SELECT min_date FROM min_date) AND tdc.updated < (SELECT max_date FROM max_date)
-OR vca5.updated > (SELECT min_date FROM min_date) AND vca5.updated < (SELECT max_date FROM max_date)
-OR va5.updated > (SELECT min_date FROM min_date) AND va5.updated < (SELECT max_date FROM max_date)
-)
+WHERE (ttrr.test_suite_id, ttrr.test_id) = (SELECT test_suite_id, test_id FROM test_suite_id)
 GROUP BY tt.project_id,
 vc.sha,
 vc.rework,
@@ -236,13 +214,7 @@ INNER JOIN LATERAL (SELECT commit_id, updated FROM testing_defect_caused_by_comm
 INNER JOIN vcs_commit_areas vca6 on tdc.commit_id = vca6.commit_id
 INNER JOIN vcs_area_dependencies vad6 on vca6.area_id = vad6.from_area_id
 INNER JOIN vcs_area va6 on va6.id = vad6.to_area_id
-WHERE ttrr.test_suite_id = (SELECT test_suite_id FROM test_suite_id)
-AND (
-tdc.updated > (SELECT min_date FROM min_date) AND tdc.updated < (SELECT max_date FROM max_date)
-OR vca6.updated > (SELECT min_date FROM min_date) AND vca6.updated < (SELECT max_date FROM max_date)
-OR vad6.updated > (SELECT min_date FROM min_date) AND vad6.updated < (SELECT max_date FROM max_date)
-OR va6.updated > (SELECT min_date FROM min_date) AND va6.updated < (SELECT max_date FROM max_date)
-)
+WHERE (ttrr.test_suite_id, ttrr.test_id) = (SELECT test_suite_id, test_id FROM test_suite_id)
 GROUP BY tt.project_id,
 vc.sha,
 vc.rework,

@@ -15,18 +15,18 @@ from django.conf import settings
 from applications.testing.models import TestSuite
 from applications.ml.models import MLModel
 from applications.ml.utils import (
-    fix_missed_models,
-    fix_expired_models,
-    fix_broken_models,
+    fix_missed,
+    fix_expired,
+    fix_broken,
     perform_dataset_to_csv
 )
 
 
 @pidfile()
 def main():
-    fix_missed_models()
-    fix_expired_models()
-    fix_broken_models()
+    fix_missed()
+    fix_expired()
+    fix_broken()
 
     for ml_model in MLModel.objects.filter(dataset_status=MLModel.Status.PENDING).order_by("-updated")[:5]:
         try:

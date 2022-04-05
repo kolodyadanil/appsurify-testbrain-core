@@ -2,11 +2,12 @@
 import os
 import django
 import pickle
+import hashlib
 from pqdm.processes import pqdm
 import dask.dataframe as dd
 import pandas as pd
 import numpy as np
-from catboost import CatBoostClassifier
+from catboost import CatBoostClassifier, sum_models
 from scipy.sparse import hstack
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.model_selection import cross_val_score
@@ -35,7 +36,9 @@ def load_data(sql):
 
 
 def parse_list_entry(data):
+    data = str(data)
     data2 = data.replace("{", "").replace("}", "").split(",")
+    data2 = [hashlib.md5(i.encode('utf-8')).hexdigest() for i in data2]
     return data2
 
 
@@ -46,21 +49,21 @@ class DatasetError(RuntimeError):
 class TestPriorityMLModel(object):
 
     def __init__(self):
-        self.test_areas_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.test_associated_areas_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.test_associated_files_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.test_dependent_areas_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.test_similarnamed_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.test_area_similarnamed_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.test_classes_names_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.test_names_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.commit_areas_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.commit_files_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.defect_closed_by_caused_by_commits_files_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.defect_closed_by_caused_by_commits_areas_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.defect_closed_by_caused_by_commits_dependent_areas_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.defect_closed_by_caused_by_intersection_files_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.defect_closed_by_caused_by_intersection_areas_binarizer = MultiLabelBinarizer(sparse_output=True)
+        self.test_areas_binarizer = MultiLabelBinarizer()
+        self.test_associated_areas_binarizer = MultiLabelBinarizer()
+        self.test_associated_files_binarizer = MultiLabelBinarizer()
+        self.test_dependent_areas_binarizer = MultiLabelBinarizer()
+        self.test_similarnamed_binarizer = MultiLabelBinarizer()
+        self.test_area_similarnamed_binarizer = MultiLabelBinarizer()
+        self.test_classes_names_binarizer = MultiLabelBinarizer()
+        self.test_names_binarizer = MultiLabelBinarizer()
+        self.commit_areas_binarizer = MultiLabelBinarizer()
+        self.commit_files_binarizer = MultiLabelBinarizer()
+        self.defect_closed_by_caused_by_commits_files_binarizer = MultiLabelBinarizer()
+        self.defect_closed_by_caused_by_commits_areas_binarizer = MultiLabelBinarizer()
+        self.defect_closed_by_caused_by_commits_dependent_areas_binarizer = MultiLabelBinarizer()
+        self.defect_closed_by_caused_by_intersection_files_binarizer = MultiLabelBinarizer()
+        self.defect_closed_by_caused_by_intersection_areas_binarizer = MultiLabelBinarizer()
 
         self.classifier = None
 
@@ -79,12 +82,9 @@ class MLHolder(object):
         self.test_suite_id = test_suite_id
         self.test_suite = TestSuite.objects.get(id=test_suite_id)
 
-        try:
-            self.test_suite_model = self.test_suite.model
-            # self.model_path, self.model_filename = self.test_suite_model.model_path
-            # self.model_path.mkdir(parents=True, exist_ok=True)
-        except ObjectDoesNotExist:
-            self.test_suite_model = None
+        self.test_suite_model = self.test_suite.model
+        self.model_path, self.model_filename = self.test_suite_model.model_path
+        self.model_filepath = self.model_path / self.model_filename
 
 
 class MLTrainer(MLHolder):
@@ -113,53 +113,89 @@ class MLTrainer(MLHolder):
 
     def save(self):
         if self.test_suite_model:
-            model_path, model_filename = self.test_suite_model.model_path
-            outfile = open(f"{model_path / model_filename}", "wb")
+            outfile = open(f"{self.model_filepath}", "wb")
             pickle.dump(self.model, outfile)
         else:
             print(f"TestSuite model not exists! (TestSuite: {self.test_suite_id})")
 
+    def get_dataset_files(self):
+        return self.test_suite_model.dataset_files
 
     def train(self):
+
         if not self.test_suite_model:
             raise DatasetError('ML model not exist for TestSuite id: "{}"'.format(self.test_suite_id))
 
-        dataset_path, dataset_filename = self.test_suite_model.dataset_path
-        df = dd.read_csv(f"{dataset_path}/{dataset_filename}")
+        clf = CatBoostClassifier(auto_class_weights='Balanced', random_state=0, verbose=False)
 
-        df = df.drop([c for c in df.columns if df[c].isna().all().compute()], axis=1)
+        is_init = True
 
-        if len(df.index) == 0:
-            raise DatasetError('Empty dataset for this TestSuite id: "{}"'.format(self.test_suite_id))
+        _x = []
+        _y = []
 
-        if len(df.columns) < 5:
-            raise DatasetError('Small dataset for this TestSuite id: "{}"'.format(self.test_suite_id))
+        model_classes = {}
 
         self.model = TestPriorityMLModel()
 
-        x = None
-        for column_name, new_columns_prefix in self.encode_columns:
-            df[column_name] = df[column_name].apply(parse_list_entry, meta=(column_name, 'object'))
-            binarizer = getattr(self.model, column_name + '_binarizer')
-            x_chunk = binarizer.fit_transform(df[column_name])
-            if x is None:
-                x = x_chunk
+        for dataset_file in self.get_dataset_files():
+            df = pd.read_csv(dataset_file, quoting=2)
+
+            for column_name, new_columns_prefix in self.encode_columns:
+                df[column_name] = df[column_name].apply(parse_list_entry)
+                binarizer = getattr(self.model, f"{column_name}_binarizer", MultiLabelBinarizer())
+                binarizer.fit_transform(df[column_name])
+
+                if column_name not in model_classes:
+                    model_classes[column_name] = set()
+
+                model_classes[column_name].update(binarizer.classes_)
+
+        for dataset_file in self.get_dataset_files():
+            df = pd.read_csv(dataset_file, quoting=2)
+
+            if len(df.index) == 0:
+                print('Empty dataset for this TestSuite id: "{}" {}'.format(self.test_suite_id, str(dataset_file)))
+                continue
+
+            if len(df.columns) < 5:
+                print('Small dataset for this TestSuite id: "{}" {}'.format(self.test_suite_id, str(dataset_file)))
+                continue
+
+            for column_name, new_columns_prefix in self.encode_columns:
+                df[column_name] = df[column_name].apply(parse_list_entry)
+                binarizer = getattr(self.model, f"{column_name}_binarizer", MultiLabelBinarizer())
+                binarizer.set_params(classes=list(model_classes[column_name]))
+                df = df.join(
+                    pd.DataFrame(
+                        binarizer.fit_transform(df.pop(column_name)),
+                        columns=(f"{new_columns_prefix}_{i}" for i in binarizer.classes_),
+                        index=df.index
+                    )
+                )
+
+            y = df['test_changed'].values
+            x = df.drop('test_changed', axis=1).values
+
+            if is_init:
+                is_init = False
+                clf.fit(x, y)
             else:
-                x = hstack([x, x_chunk])
+                clf.fit(x, y, init_model=f"{self.model_filepath}.init.cbm")
 
-        y = df['test_changed'].compute()
+            clf.save_model(f"{self.model_filepath}.init.cbm")
 
-        clf = CatBoostClassifier(auto_class_weights='Balanced', random_state=0, verbose=False)
-        clf.fit(x, y)
+            _x = x
+            _y = y
+
         self.model.classifier = clf
 
         if self.auto_save:
             self.save()
 
         # For test only
-        # cv = 10
-        # print(cross_val_score(clf, x, y, cv=cv, scoring='recall'))
-        # print(cross_val_score(clf, x, y, cv=cv))
+        # cv = 5
+        # print(cross_val_score(self.model.classifier, _x, _y, cv=cv, scoring='recall'))
+        # print(cross_val_score(self.model.classifier, _x, _y, cv=cv))
 
 
 class MLPredictor(MLHolder):
@@ -268,15 +304,15 @@ class MLPredictor(MLHolder):
         commits_ids = '({})'.format(', '.join(map(str, commit_queryset.values_list('id', flat=True))))
 
         sql = self.sql_template.format(tests_ids=tests_ids, commits_ids=commits_ids)
-
+        print(sql)
+        print()
         data = load_data(sql)
         df = pd.DataFrame(data)
+        print("Dataframe loaded")
 
         if df.empty is True:
             tests_ids_by_priorities['u'] = test_queryset
             return tests_ids_by_priorities
-
-        df.dropna(axis=1, how='all', inplace=True)
 
         for test_id in df['test_id'].unique():
 
@@ -294,6 +330,7 @@ class MLPredictor(MLHolder):
 
                 tests_ids_by_priorities[self._get_flag_from_prediction_num(max_prediction)].add(test_id)
 
+        print("Finished")
         return tests_ids_by_priorities
 
     def get_test_prioritization(self, test_queryset, commit_queryset):
@@ -308,20 +345,22 @@ class MLPredictor(MLHolder):
         commits_ids = '({})'.format(', '.join(map(str, commit_queryset.values_list('id', flat=True))))
 
         sql = self.sql_template.format(tests_ids=tests_ids, commits_ids=commits_ids)
-
+        print(sql)
+        print()
         data = load_data(sql)
         df = pd.DataFrame(data)
-
+        print("DF LOADED")
         if df.empty is True:
             for test_id in list(test_queryset.values_list('id', flat=True)):
                 tests_ids_by_priorities.append((0.0, test_id))
             return tests_ids_by_priorities
 
-        df.dropna(axis=1, how='all', inplace=True)
+        # df.dropna(axis=1, how='all', inplace=True)
 
         self.df = df
         tests_ids_by_priorities = pqdm(df['test_id'].unique(), self.get_row_prediction, n_jobs=os.cpu_count()-1)
         tests_ids_by_priorities = [item for sublist in tests_ids_by_priorities for item in sublist]
+        print("FINISHED")
         return tests_ids_by_priorities
 
     def get_row_prediction(self, test_id):
