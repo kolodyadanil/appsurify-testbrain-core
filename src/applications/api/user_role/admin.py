@@ -3,7 +3,7 @@ from .models import UserRole
 
 
 class UserRoleAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name')
+    list_display = ('id', 'name', 'index')
 
 
 # Register your models here.

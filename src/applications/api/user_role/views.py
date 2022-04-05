@@ -8,6 +8,6 @@ from .models import UserRole
 # Create your views here.
 class UserRolesView(APIView):
     def get(self, request):
-        queryset = UserRole.objects.all()
+        queryset = UserRole.objects.all().order_by('index')
         serializer = UserRoleSerializer(queryset, many=True)
         return Response(serializer.data)
