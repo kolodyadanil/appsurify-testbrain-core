@@ -77,6 +77,7 @@ LOCAL_APPS = [
     "applications.integration.ssh_v2",
     "applications.integration.jira",
     "applications.api",
+    "applications.api.user_role",
     # "applications.license",
 
 ]
