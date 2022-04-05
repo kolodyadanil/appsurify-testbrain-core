@@ -4,7 +4,7 @@ WITH td AS (
     name,
     error,
     reason,
-    TYPE,
+    type,
     created_by_commit_id,
     created_by_test_run_id,
     created_by_test_id,
@@ -12,7 +12,7 @@ WITH td AS (
   FROM
     testing_defect
   WHERE
-    project_id IN (426)
+    project_id IN {project_ids}
     AND created_by_commit_id IS NOT NULL
     AND created_by_test_run_id IS NOT NULL
     AND created_by_test_id IS NOT NULL
@@ -26,7 +26,7 @@ ttrr AS (
   FROM
     testing_testrunresult
   WHERE
-    project_id IN (426)
+    project_id IN {project_ids}
     AND status = 'pass'
   GROUP BY
     test_run_id,
@@ -47,7 +47,7 @@ ttrr2 AS (
       FROM
         testing_test
       WHERE
-        project_id IN (426)
+        project_id IN {project_ids}
     ) tt ON testing_testrunresult.test_id = tt.id
     INNER JOIN (
       SELECT
@@ -56,7 +56,7 @@ ttrr2 AS (
       FROM
         vcs_area
       WHERE
-        project_id IN (426)
+        project_id IN {project_ids}
     ) va ON tt.area_id = va.id
     LEFT JOIN vcs_file_areas vfa ON vfa.area_id = va.id
     LEFT JOIN (
@@ -66,10 +66,10 @@ ttrr2 AS (
       FROM
         vcs_file
       WHERE
-        project_id IN (426)
+        project_id IN {project_ids}
     ) vf ON vfa.file_id = vf.id
   WHERE
-    project_id IN (426)
+    project_id IN {project_ids}
   GROUP BY
     test_run_id,
     commit_id,
@@ -91,7 +91,7 @@ ttrr3 AS (
       FROM
         testing_test
       WHERE
-        project_id IN (426)
+        project_id IN {project_ids}
     ) tt ON testing_testrunresult.test_id = tt.id
     INNER JOIN (
       SELECT
@@ -100,7 +100,7 @@ ttrr3 AS (
       FROM
         vcs_area
       WHERE
-        project_id IN (426)
+        project_id IN {project_ids}
     ) va ON tt.area_id = va.id
     LEFT JOIN vcs_file_areas vfa ON vfa.area_id = va.id
     LEFT JOIN (
@@ -110,10 +110,10 @@ ttrr3 AS (
       FROM
         vcs_file
       WHERE
-        project_id IN (426)
+        project_id IN {project_ids}
     ) vf ON vfa.file_id = vf.id
   WHERE
-    project_id IN (426)
+    project_id IN {project_ids}
     AND status = 'fail'
   GROUP BY
     test_run_id,
@@ -128,7 +128,7 @@ ttrr4 AS (
   FROM
     testing_testrunresult
   WHERE
-    project_id IN (426)
+    project_id IN {project_ids}
     AND status = 'fail'
   GROUP BY
     id
