@@ -3,12 +3,9 @@ import os
 import django
 import pickle
 import hashlib
-from pqdm.processes import pqdm
-import dask.dataframe as dd
 import pandas as pd
 import numpy as np
 from catboost import CatBoostClassifier, sum_models
-from scipy.sparse import hstack
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.model_selection import cross_val_score
 
@@ -39,6 +36,14 @@ def parse_list_entry(data):
     data = str(data)
     data2 = data.replace("{", "").replace("}", "").split(",")
     data2 = [hashlib.md5(i.encode('utf-8')).hexdigest() for i in data2]
+    return data2
+
+
+def hash_value(data):
+    if isinstance(data, (list, tuple)):
+        data2 = [hashlib.md5(i.encode('utf-8')).hexdigest() for i in data]
+    else:
+        data2 = hashlib.md5(str(data).encode('utf-8')).hexdigest()
     return data2
 
 
@@ -119,7 +124,7 @@ class MLTrainer(MLHolder):
             print(f"TestSuite model not exists! (TestSuite: {self.test_suite_id})")
 
     def get_dataset_files(self):
-        return self.test_suite_model.dataset_files
+        return self.test_suite_model.dataset_files[:10]
 
     def train(self):
 
@@ -138,6 +143,7 @@ class MLTrainer(MLHolder):
         self.model = TestPriorityMLModel()
 
         for dataset_file in self.get_dataset_files():
+
             df = pd.read_csv(dataset_file, quoting=2)
 
             for column_name, new_columns_prefix in self.encode_columns:
@@ -278,11 +284,13 @@ class MLPredictor(MLHolder):
         return self._is_prediction_in_interval(prediction, self.UNASSIGNED_FLAG)
 
     def _predict(self, row, probability=False):
+
         iterables_for_concatenate = list()
+
         iterables_for_concatenate.append([[row.pop('commit_rework'), row.pop('commit_riskiness')]])
 
         for column_name, column_name_ml_prefix in self.decode_columns:
-
+            row[column_name] = hash_value(row[column_name])
             binarizer = getattr(self.model, column_name_ml_prefix + '_binarizer')
 
             iterables_for_concatenate.append(
@@ -300,19 +308,19 @@ class MLPredictor(MLHolder):
     def _predict_tests_priority(self, test_queryset, commit_queryset):
         tests_ids_by_priorities = {'h': set(), 'm': set(), 'l': set(), 'u': set()}
 
-        tests_ids = '({})'.format(', '.join(map(str, test_queryset.values_list('id', flat=True))))
-        commits_ids = '({})'.format(', '.join(map(str, commit_queryset.values_list('id', flat=True))))
+        tests_ids = '{}'.format(', '.join(map(str, test_queryset.values_list('id', flat=True))))
+        commits_ids = '{}'.format(', '.join(map(str, commit_queryset.values_list('id', flat=True))))
 
         sql = self.sql_template.format(tests_ids=tests_ids, commits_ids=commits_ids)
-        print(sql)
-        print()
+
         data = load_data(sql)
         df = pd.DataFrame(data)
-        print("Dataframe loaded")
 
         if df.empty is True:
             tests_ids_by_priorities['u'] = test_queryset
             return tests_ids_by_priorities
+
+        # df.dropna(axis=1, how='all', inplace=True)
 
         for test_id in df['test_id'].unique():
 
@@ -321,35 +329,29 @@ class MLPredictor(MLHolder):
             for _, row in df[df['test_id'] == test_id].iterrows():
 
                 test_on_commit_prediction = self._predict(row)
-
-                if test_on_commit_prediction > max_prediction:
-                    max_prediction = test_on_commit_prediction
-
-                    if self._is_test_high(max_prediction) is True:
-                        break
-
+                # if test_on_commit_prediction > max_prediction:
+                #     max_prediction = test_on_commit_prediction
+                #
+                #     if self._is_test_high(max_prediction) is True:
+                #         break
                 tests_ids_by_priorities[self._get_flag_from_prediction_num(max_prediction)].add(test_id)
-
-        print("Finished")
         return tests_ids_by_priorities
 
     def get_test_prioritization(self, test_queryset, commit_queryset):
         tests_by_priority = self._predict_tests_priority(test_queryset, commit_queryset)
-        result = {flag: Test.objects.filter(id__in=tests_ids) for flag, tests_ids in tests_by_priority.items()}
+        result = {flag: Test.objects.filter(id__in=set(tests_ids)) for flag, tests_ids in tests_by_priority.items()}
         return result
 
     def _predict_tests_priority_top_by_percent(self, test_queryset, commit_queryset):
         tests_ids_by_priorities = list()
 
-        tests_ids = '({})'.format(', '.join(map(str, test_queryset.values_list('id', flat=True))))
-        commits_ids = '({})'.format(', '.join(map(str, commit_queryset.values_list('id', flat=True))))
+        tests_ids = '{}'.format(', '.join(map(str, test_queryset.values_list('id', flat=True))))
+        commits_ids = '{}'.format(', '.join(map(str, commit_queryset.values_list('id', flat=True))))
 
         sql = self.sql_template.format(tests_ids=tests_ids, commits_ids=commits_ids)
-        print(sql)
-        print()
         data = load_data(sql)
         df = pd.DataFrame(data)
-        print("DF LOADED")
+
         if df.empty is True:
             for test_id in list(test_queryset.values_list('id', flat=True)):
                 tests_ids_by_priorities.append((0.0, test_id))
@@ -357,23 +359,16 @@ class MLPredictor(MLHolder):
 
         # df.dropna(axis=1, how='all', inplace=True)
 
-        self.df = df
-        tests_ids_by_priorities = pqdm(df['test_id'].unique(), self.get_row_prediction, n_jobs=os.cpu_count()-1)
-        tests_ids_by_priorities = [item for sublist in tests_ids_by_priorities for item in sublist]
-        print("FINISHED")
+        for test_id in df['test_id'].unique():
+            max_prediction = 0
+            for _, row in df[df['test_id'] == test_id].iterrows():
+                test_on_commit_prediction = self._predict(row)
+                # if test_on_commit_prediction > max_prediction:
+                #     max_prediction = test_on_commit_prediction
+                #     if self._is_test_high(max_prediction) is True:
+                #         break
+                tests_ids_by_priorities.append((test_on_commit_prediction, test_id))
         return tests_ids_by_priorities
-
-    def get_row_prediction(self, test_id):
-        max_prediction = 0
-        tests_ids_by_priorities_local = []
-        for _, row in self.df[self.df['test_id'] == test_id].iterrows():
-            test_on_commit_prediction = self._predict(row)
-            if test_on_commit_prediction > max_prediction:
-                max_prediction = test_on_commit_prediction
-                if self._is_test_high(max_prediction) is True:
-                    return tests_ids_by_priorities_local
-            tests_ids_by_priorities_local.append((test_on_commit_prediction, test_id))
-        return tests_ids_by_priorities_local
 
     def get_test_prioritization_top_by_percent(self, test_queryset, commit_queryset, percent):
         result = Test.objects.none()
