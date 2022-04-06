@@ -21,6 +21,11 @@ commits_queryset = Commit.objects.filter(id__in=commit_ids)
 tests_queryset = Test.objects.filter(id__in=test_ids)
 test_suite = TestSuite.objects.get(id=test_suite_id)
 
+mlmodel = test_suite.model
+
+print("All valid datasets")
+for item in mlmodel.dataset_files:
+    print(item)
 
 # Predict id ML trained
 print("START PREDICT")
