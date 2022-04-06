@@ -124,7 +124,7 @@ class MLTrainer(MLHolder):
             print(f"TestSuite model not exists! (TestSuite: {self.test_suite_id})")
 
     def get_dataset_files(self):
-        return self.test_suite_model.dataset_files[:10]
+        return self.test_suite_model.dataset_files
 
     def train(self):
 
