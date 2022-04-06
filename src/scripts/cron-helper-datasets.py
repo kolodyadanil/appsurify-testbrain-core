@@ -18,7 +18,8 @@ from applications.ml.utils import (
     fix_missed,
     fix_expired,
     fix_broken,
-    perform_dataset_to_csv
+    perform_dataset_to_csv,
+    perform_multi_dataset_to_csv
 )
 
 
@@ -30,7 +31,8 @@ def main():
 
     for ml_model in MLModel.objects.filter(dataset_status=MLModel.Status.PENDING).order_by("-updated")[:5]:
         try:
-            perform_dataset_to_csv(ml_model=ml_model)
+            # perform_dataset_to_csv(ml_model=ml_model)
+            perform_multi_dataset_to_csv(ml_model=ml_model)
         except Exception as exc:
             print(exc)
             continue

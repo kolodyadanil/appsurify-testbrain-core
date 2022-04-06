@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import pathlib
 import time
+import concurrent.futures
 import os
 import subprocess
 from django.db import connection
@@ -74,7 +75,7 @@ def fix_expired(days=7):
 def fix_broken(days=7):
     queryset = MLModel.objects\
         .filter(dataset_status=MLModel.Status.FAILURE)\
-        .filter(updated__gte=datetime.now(timezone.utc) - timedelta(days=days))
+        .filter(updated__lte=datetime.now(timezone.utc) - timedelta(days=days))
     queryset.update(dataset_status=MLModel.Status.PENDING)
 
     queryset = MLModel.objects\
@@ -116,6 +117,73 @@ def perform_dataset_to_csv(ml_model):
             ml_model_test.status = MLModelTests.Status.FAILURE
             ml_model_test.save()
             raise e
+
+    if ml_model_tests.count() == len(_errors):
+        ml_model.dataset_status = MLModel.Status.FAILURE
+        ml_model.save()
+        _message = '\n'.join(_errors)
+        print(f"<TestSuite: {ml_model.test_suite_id}>:\n{_message}")
+        return False
+
+    ml_model.dataset_status = MLModel.Status.SUCCESS
+    ml_model.model_status = MLModel.Status.PENDING
+    ml_model.save()
+    return True
+
+
+def perform_multi_dataset_to_csv(ml_model):
+    _errors = list()
+
+    ml_model.dataset_status = MLModel.Status.PROCESSING
+    ml_model.save()
+
+    dataset_path = ml_model.dataset_path
+    dataset_path.mkdir(parents=True, exist_ok=True)
+
+    test_id_list = get_test_list(ml_model=ml_model)
+    ml_model_tests = MLModelTests.objects.filter(mlmodel=ml_model, test_id__in=test_id_list)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+        futures = {}
+        for ml_model_test in ml_model_tests:
+            test_id = ml_model_test.test_id
+            sql = ml_model.dataset_sql(test_id=test_id)
+            dataset_filename = f"{test_id}.csv"
+            sql_query = f"\copy ({sql}) To '{dataset_path / dataset_filename}' With CSV DELIMITER ',' HEADER"
+            futures.update({executor.submit(execute_query, sql_query): ml_model_test})
+
+        for future in concurrent.futures.as_completed(futures):
+            ml_model_test = futures[future]
+            try:
+                ret = future.result()
+                ml_model_test.status = MLModelTests.Status.SUCCESS
+                ml_model_test.save()
+            except Exception as e:
+                _errors.append(f"<TestID: {ml_model_test.test_id}> {str(e)}")
+                ml_model_test.status = MLModelTests.Status.FAILURE
+                ml_model_test.save()
+                continue
+
+    # for ml_model_test in ml_model_tests:
+    #     test_id = ml_model_test.test_id
+    #     try:
+    #         sql = ml_model.dataset_sql(test_id=test_id)
+    #         dataset_filename = f"{test_id}.csv"
+    #         sql_query = f"\copy ({sql}) To '{dataset_path / dataset_filename}' With CSV DELIMITER ',' HEADER"
+    #         ret = execute_query(query=sql_query)
+    #         ml_model_test.status = MLModelTests.Status.SUCCESS
+    #         ml_model_test.save()
+    #     except QueryException as e:
+    #         _errors.append(f"<TestID: {test_id}> {str(e)}")
+    #         ml_model_test.status = MLModelTests.Status.FAILURE
+    #         ml_model_test.save()
+    #         continue
+    #     except Exception as e:
+    #         ml_model.dataset_status = MLModel.Status.FAILURE
+    #         ml_model.save()
+    #         ml_model_test.status = MLModelTests.Status.FAILURE
+    #         ml_model_test.save()
+    #         raise e
 
     if ml_model_tests.count() == len(_errors):
         ml_model.dataset_status = MLModel.Status.FAILURE

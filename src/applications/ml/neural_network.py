@@ -157,6 +157,9 @@ class MLTrainer(MLHolder):
                 model_classes[column_name].update(binarizer.classes_)
 
         for dataset_file in self.get_dataset_files():
+
+            print(f"<TestSuite: {self.test_suite_id}> - {dataset_file}")
+
             df = pd.read_csv(dataset_file, quoting=2)
 
             if len(df.index) == 0:
