@@ -2,6 +2,7 @@
 from __future__ import unicode_literals
 
 from django.db.models.constants import LOOKUP_SEP
+from django_filters import DateFilter
 from rest_framework_filters import FilterSet, Filter, NumberFilter, BooleanFilter
 from django_filters.fields import Lookup
 
@@ -99,6 +100,19 @@ class TestReportFilterSet(FilterSet):
     class Meta(object):
         model = Test
         fields = ('project', 'area', 'test_suites', 'test_run', )
+
+
+class TestRunReportByDayFilterSet(FilterSet):
+    test_run_type = NumberFilter(field_name='test_run_type')
+    status = NumberFilter(field_name='test_run_status')
+    is_local = BooleanFilter(field_name='test_run_is_local')
+    start_date = DateFilter(lookup_expr="gte")
+    end_date = DateFilter(field_name="test_run_end_date", lookup_expr="lte")
+
+    class Meta(object):
+        model = TestRunResult
+        fields = ('project', 'test_suite', 'test_run_type', 'status', 'is_local', 'start_date',
+                  'end_date')
 
 
 class TestRunResultReportFilterSet(FilterSet):
