@@ -5,7 +5,6 @@ from __future__ import unicode_literals
 from enum import Enum
 from functools import reduce
 
-from django.db.models import Sum, Q, Max
 from drf_yasg.utils import swagger_serializer_method
 from rest_framework import serializers
 
@@ -304,18 +303,24 @@ class ProjectSummarySerializer(BaseProjectSerializer):
         # Find max execution time for the TestRun
         # Group by test_run_id
         execution_time_by_test_run = TestRunResult.objects.filter(**filter_dict).values('test_run_id').annotate(
-            sum=Sum('execution_time'))
-        standard_execution_time = execution_time_by_test_run.aggregate(max=Max('sum'))['max']
+            sum=models.Sum('execution_time'))
+        standard_execution_time = execution_time_by_test_run.aggregate(max=models.Max('sum'))['max']
         time_savings_seconds = reduce(lambda x, y: x + y,
                                       map(lambda x: standard_execution_time - x['sum'], execution_time_by_test_run))
 
         return dict(
-            count=TestRunResult.objects.filter(**filter_dict).count(),
-            failed=TestRunResult.objects.filter(**filter_dict, status=TestRunResult.STATUS_FAIL).count(),
-            passed=TestRunResult.objects.filter(**filter_dict, status=TestRunResult.STATUS_PASS).count(),
-            broken=TestRunResult.objects.filter(**filter_dict, status=TestRunResult.STATUS_BROKEN).count(),
-            skipped=TestRunResult.objects.filter(**filter_dict, status=TestRunResult.STATUS_SKIPPED).count(),
-            **TestRunResult.objects.filter(**filter_dict).aggregate(execution_time_seconds=Sum('execution_time')),
+            **TestRunResult.objects.filter(**filter_dict).aggregate(
+                count=models.Count("id"),
+                execution_time_seconds=models.Sum('execution_time'),
+                failed=models.Count(
+                    models.Case(models.When(models.Q(status=TestRunResult.STATUS_FAIL), then=models.F('id')))),
+                passed=models.Count(
+                    models.Case(models.When(models.Q(status=TestRunResult.STATUS_PASS), then=models.F('id')))),
+                broken=models.Count(
+                    models.Case(models.When(models.Q(status=TestRunResult.STATUS_BROKEN), then=models.F('id')))),
+                skipped=models.Count(
+                    models.Case(models.When(models.Q(status=TestRunResult.STATUS_SKIPPED), then=models.F('id')))),
+            ),
             time_savings_seconds=time_savings_seconds)
 
     @swagger_serializer_method(serializer_or_field=ProjectSetupStatusSerializer)
