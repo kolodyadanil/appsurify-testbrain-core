@@ -10,13 +10,13 @@ from django.utils.text import slugify
 from rest_framework import permissions
 from rest_framework import viewsets, status
 from rest_framework.response import Response
+from rest_framework.generics import GenericAPIView
 
 from applications.notification.models import Notification
 from applications.organization.utils import get_current_organization
 from applications.project.permissions import IsOwnerOrReadOnly, IsAdminOrganizationOrReadOnly
 from .filters import *
 from .serializers import *
-
 
 UserModel = get_user_model()
 
@@ -243,3 +243,14 @@ class ProjectUserModelViewSet(viewsets.ModelViewSet):
             raise Exception()
 
         return Response({}, status=status.HTTP_200_OK)
+
+
+class ProjectSummaryView(viewsets.ModelViewSet):
+    model = Project
+    serializer_class = ProjectSummarySerializer
+    queryset = Project.objects.all()
+
+    permission_classes = (permissions.IsAuthenticated, IsOwnerOrReadOnly,)
+
+    lookup_field = 'pk'
+    lookup_url_kwarg = 'project_pk'

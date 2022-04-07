@@ -2,6 +2,11 @@
 from __future__ import unicode_literals
 
 # from djangotasks.models import Task
+from enum import Enum
+from functools import reduce
+
+from django.db.models import Sum, Q, Max
+from drf_yasg.utils import swagger_serializer_method
 from rest_framework import serializers
 
 from applications.api.common.serializers import DynamicFieldsModelSerializer, DynamicFieldsRelatedSerializer
@@ -25,28 +30,7 @@ class ProjectUserSerializer(DynamicFieldsModelSerializer):
         return project.is_owner(user.user)
 
 
-class ProjectSerializer(DynamicFieldsModelSerializer):
-    """
-    Base serializer for Project model.
-    """
-
-    slug = serializers.SlugField(read_only=True, required=False, allow_blank=True, allow_null=True)
-
-    users = ProjectUserSerializer(source='project_users', many=True, read_only=True)
-
-    number_of_tests = serializers.SerializerMethodField()
-    number_of_defects = serializers.SerializerMethodField()
-    number_of_flaky_failure_results = serializers.SerializerMethodField()
-    percentage_of_pass_results = serializers.SerializerMethodField()
-
-    defect_summary = serializers.ReadOnlyField()
-    integration = serializers.SerializerMethodField()
-    import_status = serializers.SerializerMethodField()
-
-    class Meta(object):
-        model = Project
-        fields = '__all__'
-
+class BaseProjectSerializer(DynamicFieldsModelSerializer):
     def get_number_of_tests(self, project):
         return project.tests.count()
 
@@ -231,8 +215,139 @@ class ProjectSerializer(DynamicFieldsModelSerializer):
         return status
 
 
+class ProjectSerializer(BaseProjectSerializer):
+    """
+    Base serializer for Project model.
+    """
+
+    slug = serializers.SlugField(read_only=True, required=False, allow_blank=True, allow_null=True)
+
+    users = ProjectUserSerializer(source='project_users', many=True, read_only=True)
+
+    number_of_tests = serializers.SerializerMethodField()
+    number_of_defects = serializers.SerializerMethodField()
+    number_of_flaky_failure_results = serializers.SerializerMethodField()
+    percentage_of_pass_results = serializers.SerializerMethodField()
+
+    defect_summary = serializers.ReadOnlyField()
+    integration = serializers.SerializerMethodField()
+    import_status = serializers.SerializerMethodField()
+
+    class Meta(object):
+        model = Project
+        fields = '__all__'
+
+
 class ProjectRelatedSerializer(DynamicFieldsRelatedSerializer):
     class Meta(object):
         model_class = Project
         model_serializer_class = ProjectSerializer
 
+
+class ProjectStatus(str, Enum):
+    NOT_STARTED = "NOT_STARTED"
+    IN_PROGRESS = "IN_PROGRESS"
+    SUCCESSFUL = "SUCCESSFUL"
+    FAILURE = "FAILURE"
+
+
+project_status_choices = [e.value for e in ProjectStatus]
+
+
+class ProjectSetupStatusSerializer(serializers.Serializer):
+    repo_bind = serializers.ChoiceField(choices=project_status_choices)
+    test_bind = serializers.ChoiceField(choices=project_status_choices)
+    building_model = serializers.ChoiceField(choices=project_status_choices)
+
+
+class ProjectTestRunStats(serializers.Serializer):
+    count = serializers.IntegerField()
+    failed = serializers.IntegerField()
+    passed = serializers.IntegerField()
+    broken = serializers.IntegerField()
+    skipped = serializers.IntegerField()
+    execution_time_seconds = serializers.FloatField()
+    time_savings_seconds = serializers.FloatField()
+
+
+class ProjectSummarySerializer(BaseProjectSerializer):
+    """
+    Aggregates data to display on the updated dashboard.
+    """
+
+    class Meta(object):
+        model = Project
+        fields = ('id', 'name', 'setup_status', 'maturity', "stats")
+
+    @swagger_serializer_method(serializer_or_field=serializers.FloatField)
+    def get_maturity(self, _):
+        """
+        Waiting for the requirements
+        """
+        return 0.48
+
+    @swagger_serializer_method(serializer_or_field=ProjectTestRunStats)
+    def get_stats(self, project):
+        """
+        Gives stats for summary page related to tests.
+        """
+        # Take 20 latest test run ids for project (ordered by date)
+        latest_query_ids = list(
+            map(lambda x: x.pk, TestRun.objects.filter(project=project).order_by("-start_date")[:20]))
+
+        # Honestly, I have no idea if it's a correct way to calculate total saved time
+        # Take the max execution time for latest 20 test runs and then subtract this maximum per each test run
+        # TODO: consult if it's a correct way of calculating this.
+        # Filter expression for queryset
+        filter_dict = dict(project=project, test_run_id__in=latest_query_ids)
+
+        # Find max execution time for the TestRun
+        # Group by test_run_id
+        execution_time_by_test_run = TestRunResult.objects.filter(**filter_dict).values('test_run_id').annotate(
+            sum=Sum('execution_time'))
+        standard_execution_time = execution_time_by_test_run.aggregate(max=Max('sum'))['max']
+        time_savings_seconds = reduce(lambda x, y: x + y,
+                                      map(lambda x: standard_execution_time - x['sum'], execution_time_by_test_run))
+
+        return dict(
+            count=TestRunResult.objects.filter(**filter_dict).count(),
+            failed=TestRunResult.objects.filter(**filter_dict, status=TestRunResult.STATUS_FAIL).count(),
+            passed=TestRunResult.objects.filter(**filter_dict, status=TestRunResult.STATUS_PASS).count(),
+            broken=TestRunResult.objects.filter(**filter_dict, status=TestRunResult.STATUS_BROKEN).count(),
+            skipped=TestRunResult.objects.filter(**filter_dict, status=TestRunResult.STATUS_SKIPPED).count(),
+            **TestRunResult.objects.filter(**filter_dict).aggregate(execution_time_seconds=Sum('execution_time')),
+            time_savings_seconds=time_savings_seconds)
+
+    @swagger_serializer_method(serializer_or_field=ProjectSetupStatusSerializer)
+    def get_setup_status(self, project):
+        """
+        Checks if test suite exists, repo is linked and if ml model is created and processed.
+        """
+        integration = self.get_integration(project)
+        # Check if there's a test suite created. (Are we taking the first test suite added to the system?)
+        # TODO: Clarify this later
+        test_suite = project.test_suites.first()
+
+        # If the integration is not set up an empty dict is returned.
+        repo_bind = ProjectStatus.SUCCESSFUL if len(integration) > 0 else ProjectStatus.NOT_STARTED
+        test_bind = ProjectStatus.SUCCESSFUL if test_suite else ProjectStatus.NOT_STARTED
+        building_model = ProjectStatus.NOT_STARTED
+
+        model = test_suite.model if test_suite else None
+        if model:
+            status = model.model_status
+            if status == "SUCCESS":
+                building_model = ProjectStatus.SUCCESSFUL
+            elif status == "FAILURE":
+                building_model = ProjectStatus.FAILURE
+            else:
+                building_model = ProjectStatus.IN_PROGRESS
+
+        return dict(
+            repo_bind=repo_bind,
+            test_bind=test_bind,
+            building_model=building_model)
+
+    setup_status = serializers.SerializerMethodField()
+    maturity = serializers.SerializerMethodField()
+    stats = serializers.SerializerMethodField()
