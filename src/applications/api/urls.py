@@ -63,6 +63,7 @@ urlpatterns = [
 
     url(r'^', include('applications.api.integration.urls')),
     url(r'^', include('applications.api.license.urls')),
+    url(r'^', include('applications.api.user_role.urls')),
 
 ]
 
