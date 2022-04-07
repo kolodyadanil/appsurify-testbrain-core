@@ -1705,6 +1705,16 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
                     )
                 ), distinct=True
             ),
+            skipped_tests__count=models.Count(
+                models.Case(
+                    models.When(
+                        models.Q(
+                            # test_run_id=models.F('test_run_id'),
+                            last_test_run_result=TestRunResult.STATUS_SKIPPED
+                        ), then=models.F('test_id')
+                    )
+                ), distinct=True
+            ),
             failed_tests__count=models.Count(
                 models.Case(
                     models.When(
@@ -1736,6 +1746,7 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
                     )
                 ), distinct=True
             ),
+            execution_time=models.Sum('execution_time'),
             id=models.F('test_run_id'),
             name=models.F('test_run_name'),
             type=models.F('test_run_type'),
@@ -1763,10 +1774,11 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
             'created_defects__count',
             'founded_defects__flaky_failure__count',
             'passed_tests__count',
+            'skipped_tests__count',
             'failed_tests__count',
             'broken_tests__count',
             'not_run_tests__count',
-
+            'execution_time',
         )
         # print '#3: {}'.format(time.time() - start_time)
         queryset = qs

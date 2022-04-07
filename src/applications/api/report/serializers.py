@@ -291,6 +291,10 @@ class TestRunReportSerializer(serializers.Serializer):
     number_of_flaky_failure_results = serializers.IntegerField(source='founded_defects__flaky_failure__count',
                                                                default=0, read_only=True)
 
+    execution_time = serializers.FloatField(default=0, read_only=True)
+    status = serializers.SerializerMethodField(method_name="get_status")
+
+    number_of_skipped_results = serializers.IntegerField(source='skipped_tests__count', default=0, read_only=True)
     number_of_pass_results = serializers.IntegerField(source='passed_tests__count', default=0, read_only=True)
     number_of_fail_results = serializers.IntegerField(source='failed_tests__count', default=0, read_only=True)
     number_of_broken_results = serializers.IntegerField(source='broken_tests__count', default=0, read_only=True)
@@ -298,6 +302,14 @@ class TestRunReportSerializer(serializers.Serializer):
 
     percentage_of_pass_results = serializers.IntegerField(default=0, read_only=True)
     percentage_of_flaky_failure_results = serializers.IntegerField(default=0, read_only=True)
+
+    @staticmethod
+    def get_status(instance):
+        """
+        It's assumed that the failed state is when we have some broken or failed tests
+        """
+        invalid_tests = instance.get('failed_tests__count', 0) + instance.get('broken_tests__count', 0)
+        return "Failed" if invalid_tests > 0 else "Passed"
 
     def get_project(self, instance):
         if isinstance(instance, TestRunResult):
