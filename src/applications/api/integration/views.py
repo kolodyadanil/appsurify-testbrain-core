@@ -579,3 +579,21 @@ class RepositoryHookViewSet(RepositoryGenericViewSet):
         response['Content-Disposition'] = 'attachment; filename="{}"'.format(data['filename'])
         response.write(data['content'])
         return response
+
+
+    @action(methods=['GET', ], detail=True, url_name='fetch',
+            url_path=r'fetch')
+    def fetch(self, request):
+        project_name = request.data.get('project_name')
+        projects = Project.objects.filter(name=project_name)
+        if projects:
+            project = projects[0]
+            project_id = project.id
+            data = {
+                "project_id": project_id
+            }
+        else:
+            data = {
+                "error": "Project didn't exist, check project name and try again!"
+            }
+        return response.Respone(status=status.HTTP_200_OK, data=data)
