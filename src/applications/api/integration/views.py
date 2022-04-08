@@ -580,11 +580,12 @@ class RepositoryHookViewSet(RepositoryGenericViewSet):
         response.write(data['content'])
         return response
 
-
-    @action(methods=['GET', ], detail=True, url_name='fetch',
-            url_path=r'fetch')
-    def fetch(self, request):
-        project_name = request.data.get('project_name')
+    # Temporary API for fetch project_id
+    # TODO: change when git refactoring done
+    @action(methods=['GET', ], detail=False, permission_classes=[permissions.AllowAny, ],
+            url_name='fetch', url_path=r'fetch')
+    def fetch(self, request, *args, **kwargs):
+        project_name = request.query_params.get('project_name')
         projects = Project.objects.filter(name=project_name)
         if projects:
             project = projects[0]
@@ -596,4 +597,4 @@ class RepositoryHookViewSet(RepositoryGenericViewSet):
             data = {
                 "error": "Project didn't exist, check project name and try again!"
             }
-        return response.Respone(status=status.HTTP_200_OK, data=data)
+        return response.Response(status=status.HTTP_200_OK, data=data)
