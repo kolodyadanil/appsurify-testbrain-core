@@ -14,6 +14,7 @@ from django.db import connection
 from django.core.exceptions import ObjectDoesNotExist
 
 from applications.testing.models import TestSuite, Test
+from applications.ml.models import MLModel
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -87,8 +88,7 @@ class MLHolder(object):
         self.test_suite_id = test_suite_id
         self.test_suite = TestSuite.objects.get(id=test_suite_id)
 
-        self.test_suite_model = self.test_suite.model
-        self.model_path, self.model_filename = self.test_suite_model.model_path
+        self.model_path, self.model_filename = MLModel.get_model_filepath(self.test_suite)
         self.model_filepath = self.model_path / self.model_filename
 
 
@@ -117,19 +117,13 @@ class MLTrainer(MLHolder):
         self.model = None
 
     def save(self):
-        if self.test_suite_model:
-            outfile = open(f"{self.model_filepath}", "wb")
-            pickle.dump(self.model, outfile)
-        else:
-            print(f"TestSuite model not exists! (TestSuite: {self.test_suite_id})")
+        outfile = open(f"{self.model_filepath}", "wb")
+        pickle.dump(self.model, outfile)
 
     def get_dataset_files(self):
-        return self.test_suite_model.dataset_files
+        return MLModel.get_dataset_file_list(self.test_suite)
 
     def train(self):
-
-        if not self.test_suite_model:
-            raise DatasetError('ML model not exist for TestSuite id: "{}"'.format(self.test_suite_id))
 
         clf = CatBoostClassifier(auto_class_weights='Balanced', random_state=0, verbose=False)
 
@@ -142,7 +136,10 @@ class MLTrainer(MLHolder):
 
         self.model = TestPriorityMLModel()
 
-        for dataset_file in self.get_dataset_files():
+        dataset_files = self.get_dataset_files()
+
+        print("Processing all datasets for store classes...")
+        for dataset_file in dataset_files:
 
             df = pd.read_csv(dataset_file, quoting=2)
 
@@ -156,7 +153,8 @@ class MLTrainer(MLHolder):
 
                 model_classes[column_name].update(binarizer.classes_)
 
-        for dataset_file in self.get_dataset_files():
+        print("Processing fits...")
+        for dataset_file in dataset_files:
 
             print(f"<TestSuite: {self.test_suite_id}> - {dataset_file}")
 
@@ -205,6 +203,7 @@ class MLTrainer(MLHolder):
         # cv = 5
         # print(cross_val_score(self.model.classifier, _x, _y, cv=cv, scoring='recall'))
         # print(cross_val_score(self.model.classifier, _x, _y, cv=cv))
+        return True
 
 
 class MLPredictor(MLHolder):
@@ -247,11 +246,10 @@ class MLPredictor(MLHolder):
 
     def load(self):
         self.model = None
-        if self.test_suite_model:
-            model_path, model_filename = self.test_suite_model.model_path
+        if self.model_filepath:
             try:
-                if os.path.getsize(model_path / model_filename) > 0:
-                    infile = open(f"{model_path / model_filename}", "rb")
+                if os.path.getsize(self.model_filepath) > 0:
+                    infile = open(f"{self.model_filepath}", "rb")
                     unpickler = pickle.Unpickler(infile)
                     self.model = unpickler.load()
             except IOError:

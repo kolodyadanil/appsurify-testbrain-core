@@ -49,6 +49,6 @@ user_agents
 jira
 catboost
 psutil
-pid
+python-pidfile
 dask
 pqdm

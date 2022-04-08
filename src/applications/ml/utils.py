@@ -8,7 +8,7 @@ from django.db import connection
 from django.conf import settings
 from django.utils import timezone
 from datetime import datetime, timedelta
-from applications.ml.models import MLModel, MLModelTests
+from applications.ml.models import MLModel
 from applications.ml.neural_network import MLTrainer
 from applications.testing.models import TestSuite, Test
 
@@ -40,29 +40,42 @@ def execute_query(query):
     return stdout
 
 
-def get_test_list(ml_model):
-    with connection.cursor() as cursor:
-        cursor.execute(ml_model.test_sql)
-        columns = [col[0] for col in cursor.description]
-        rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
-    return list([row['test_id'] for row in rows])
+def processing_dataset(ml_model):
+    result = False
+    ml_model.dataset_status = MLModel.Status.PROCESSING
+    ml_model.save()
+    dataset_filename = ml_model.dataset_filename
+    dataset_path = ml_model.dataset_path
+    dataset_path.mkdir(parents=True, exist_ok=True)
+    test_id = ml_model.test_id
+    print(f"<TestSuiteID: {ml_model.test_suite_id}> / <TestID: {ml_model.test_id}> processing...")
+    sql = ml_model.dataset_sql
+    sql_query = f"\copy ({sql}) To '{dataset_path / dataset_filename}' With CSV DELIMITER ',' HEADER"
+    try:
+        output = execute_query(query=sql_query)
+        print(f"<TestSuiteID: {ml_model.test_suite_id}> / <TestID: {ml_model.test_id}> success {output}")
+        ml_model.dataset_status = MLModel.Status.SUCCESS
+        ml_model.model_status = MLModel.Status.PENDING
+        ml_model.save()
+        result = True
+    except Exception as e:
+        print(f"<TestSuiteID: {ml_model.test_suite_id}> / <TestID: {ml_model.test_id}> {str(e)}")
+        ml_model.dataset_status = MLModel.Status.FAILURE
+        ml_model.save()
+    return result
 
 
 def fix_missed():
-    test_suites = TestSuite.objects.filter(model=None)
+    test_suites = TestSuite.objects.filter(tests__models__isnull=True).distinct().order_by("id")
 
-    ml_models = MLModel.objects.bulk_create([
-        MLModel(test_suite=test_suite)
-        for test_suite in test_suites
-    ])
-
-    for ml_model in MLModel.objects.all():
-        tests = Test.objects.filter(test_suites=ml_model.test_suite, models=None)
-        MLModelTests.objects.bulk_create([
-            MLModelTests(mlmodel=ml_model, test=test) for test in tests
+    for test_suite in test_suites:
+        print(f"Checking <TestSuite: {test_suite.id}>")
+        test_ids = MLModel.get_test_list(test_suite=test_suite)
+        MLModel.objects.bulk_create([
+            MLModel(test_suite_id=test_suite.id, test_id=test_id)
+            for test_id in test_ids
         ], ignore_conflicts=True)
-
-    return len(ml_models)
+    return True
 
 
 def fix_expired(days=7):
@@ -84,134 +97,71 @@ def fix_broken(days=7):
     queryset.update(model_status=MLModel.Status.PENDING)
 
 
-def perform_dataset_to_csv(ml_model):
-    _errors = list()
+def perform_dataset_to_csv(test_suite):
 
-    ml_model.dataset_status = MLModel.Status.PROCESSING
-    ml_model.save()
+    test_id_list = MLModel.get_test_list(test_suite=test_suite)
+    print(f"--- Total tests: {len(test_id_list)} ---")
+    ml_models = MLModel.objects.filter(test_suite_id=test_suite.id, test_id__in=test_id_list,
+                                       dataset_status=MLModel.Status.PENDING)
+    _complete = 0
 
-    dataset_path = ml_model.dataset_path
-    dataset_path.mkdir(parents=True, exist_ok=True)
-
-    test_id_list = get_test_list(ml_model=ml_model)
-    ml_model_tests = MLModelTests.objects.filter(mlmodel=ml_model, test_id__in=test_id_list)
-
-    for ml_model_test in ml_model_tests:
-        test_id = ml_model_test.test_id
-
-        try:
-            sql = ml_model.dataset_sql(test_id=test_id)
-            dataset_filename = f"{test_id}.csv"
-            sql_query = f"\copy ({sql}) To '{dataset_path / dataset_filename}' With CSV DELIMITER ',' HEADER"
-            ret = execute_query(query=sql_query)
-            ml_model_test.status = MLModelTests.Status.SUCCESS
-            ml_model_test.save()
-        except QueryException as e:
-            _errors.append(f"<TestID: {test_id}> {str(e)}")
-            ml_model_test.status = MLModelTests.Status.FAILURE
-            ml_model_test.save()
-            continue
-        except Exception as e:
-            ml_model.dataset_status = MLModel.Status.FAILURE
-            ml_model.save()
-            ml_model_test.status = MLModelTests.Status.FAILURE
-            ml_model_test.save()
-            raise e
-
-    if ml_model_tests.count() == len(_errors):
-        ml_model.dataset_status = MLModel.Status.FAILURE
-        ml_model.save()
-        _message = '\n'.join(_errors)
-        print(f"<TestSuite: {ml_model.test_suite_id}>:\n{_message}")
-        return False
-
-    ml_model.dataset_status = MLModel.Status.SUCCESS
-    ml_model.model_status = MLModel.Status.PENDING
-    ml_model.save()
-    return True
+    print(f"--- Total models: {ml_models.count()} ---")
+    for ml_model in ml_models:
+        result = processing_dataset(ml_model=ml_model)
+        if result:
+            _complete += 1
+    print(f"--- Success models: {_complete} ---")
+    return _complete
 
 
-def perform_multi_dataset_to_csv(ml_model):
-    _errors = list()
+def perform_multi_dataset_to_csv(test_suite):
+    test_id_list = MLModel.get_test_list(test_suite=test_suite)
+    ml_models = MLModel.objects.filter(test_suite_id=test_suite.id, test_id__in=test_id_list,
+                                       dataset_status=MLModel.Status.PENDING)
+    _complete = 0
 
-    ml_model.dataset_status = MLModel.Status.PROCESSING
-    ml_model.save()
-
-    dataset_path = ml_model.dataset_path
-    dataset_path.mkdir(parents=True, exist_ok=True)
-
-    test_id_list = get_test_list(ml_model=ml_model)
-    ml_model_tests = MLModelTests.objects.filter(mlmodel=ml_model, test_id__in=test_id_list)
+    print(f"--- Total models: {ml_models.count()} ---")
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
         futures = {}
-        for ml_model_test in ml_model_tests:
-            test_id = ml_model_test.test_id
-            sql = ml_model.dataset_sql(test_id=test_id)
-            dataset_filename = f"{test_id}.csv"
-            sql_query = f"\copy ({sql}) To '{dataset_path / dataset_filename}' With CSV DELIMITER ',' HEADER"
-            futures.update({executor.submit(execute_query, sql_query): ml_model_test})
+        for ml_model in ml_models:
+            futures.update({executor.submit(processing_dataset, ml_model): ml_model})
 
         for future in concurrent.futures.as_completed(futures):
-            ml_model_test = futures[future]
-            try:
-                ret = future.result()
-                ml_model_test.status = MLModelTests.Status.SUCCESS
-                ml_model_test.save()
-            except Exception as e:
-                _errors.append(f"<TestID: {ml_model_test.test_id}> {str(e)}")
-                ml_model_test.status = MLModelTests.Status.FAILURE
-                ml_model_test.save()
-                continue
+            ml_model = futures[future]
+            result = future.result()
+            if result:
+                _complete += 1
 
-    # for ml_model_test in ml_model_tests:
-    #     test_id = ml_model_test.test_id
-    #     try:
-    #         sql = ml_model.dataset_sql(test_id=test_id)
-    #         dataset_filename = f"{test_id}.csv"
-    #         sql_query = f"\copy ({sql}) To '{dataset_path / dataset_filename}' With CSV DELIMITER ',' HEADER"
-    #         ret = execute_query(query=sql_query)
-    #         ml_model_test.status = MLModelTests.Status.SUCCESS
-    #         ml_model_test.save()
-    #     except QueryException as e:
-    #         _errors.append(f"<TestID: {test_id}> {str(e)}")
-    #         ml_model_test.status = MLModelTests.Status.FAILURE
-    #         ml_model_test.save()
-    #         continue
-    #     except Exception as e:
-    #         ml_model.dataset_status = MLModel.Status.FAILURE
-    #         ml_model.save()
-    #         ml_model_test.status = MLModelTests.Status.FAILURE
-    #         ml_model_test.save()
-    #         raise e
-
-    if ml_model_tests.count() == len(_errors):
-        ml_model.dataset_status = MLModel.Status.FAILURE
-        ml_model.save()
-        _message = '\n'.join(_errors)
-        print(f"<TestSuite: {ml_model.test_suite_id}>:\n{_message}")
-        return False
-
-    ml_model.dataset_status = MLModel.Status.SUCCESS
-    ml_model.model_status = MLModel.Status.PENDING
-    ml_model.save()
-    return True
+    print(f"--- Success models: {_complete} ---")
+    return _complete
 
 
-def perform_model_train(ml_model):
+def perform_model_train(test_suite):
 
-    ml_model.model_status = MLModel.Status.PROCESSING
-    ml_model.save()
+    MLModel.objects.filter(
+        test_suite_id=test_suite.id,
+        dataset_status=MLModel.Status.SUCCESS,
+        model_status=MLModel.Status.PENDING
+    ).update(model_status=MLModel.Status.PROCESSING)
 
-    model_path, model_filename = ml_model.model_path
+    model_path, model_filename = MLModel.get_model_filepath(test_suite=test_suite)
     model_path.mkdir(parents=True, exist_ok=True)
     try:
-        mlt = MLTrainer(test_suite_id=ml_model.test_suite.id)
-        mlt.train()
+        mlt = MLTrainer(test_suite_id=test_suite.id)
+        result = mlt.train()
 
-        ml_model.model_status = MLModel.Status.SUCCESS
-        ml_model.save()
+        MLModel.objects.filter(
+            test_suite_id=test_suite.id,
+            dataset_status=MLModel.Status.SUCCESS,
+            model_status=MLModel.Status.PROCESSING
+        ).update(model_status=MLModel.Status.SUCCESS)
+
     except Exception as e:
-        ml_model.model_status = MLModel.Status.FAILURE
-        ml_model.save()
+        MLModel.objects.filter(
+            test_suite_id=test_suite.id,
+            dataset_status=MLModel.Status.SUCCESS,
+            model_status=MLModel.Status.PROCESSING
+        ).update(model_status=MLModel.Status.FAILURE)
         raise e
+    return result
