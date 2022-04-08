@@ -16,24 +16,16 @@ from applications.testing.models import TestSuite
 from applications.ml.neural_network import MLTrainer
 from applications.ml.models import MLModel
 from applications.ml.utils import (
-    fix_missed,
-    fix_expired,
-    fix_broken,
     perform_model_train
 )
 
 
 def main():
-    fix_missed()
-    fix_expired()
-    fix_broken()
-
     print("Train models for testSuites ...")
-
-    queryset = TestSuite.objects.filter(
+    queryset = set(TestSuite.objects.filter(
         models__dataset_status=MLModel.Status.SUCCESS,
         models__model_status=MLModel.Status.PENDING
-    ).distinct().order_by("-updated")[:20]
+    ).order_by("models__updated"))
 
     for test_suite in queryset:
         MLModel.objects.filter(test_suite=test_suite).update(updated=timezone.now())
@@ -41,7 +33,7 @@ def main():
             result = perform_model_train(test_suite=test_suite)
             print(f"<TestSuite: {test_suite.id}> - {result}")
         except Exception as e:
-            print(e)
+            print(f"<TestSuite: {test_suite.id}> - {e}")
             continue
 
 

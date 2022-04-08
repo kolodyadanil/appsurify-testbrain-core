@@ -93,7 +93,7 @@ def fix_broken(days=7):
 
     queryset = MLModel.objects\
         .filter(model_status=MLModel.Status.FAILURE)\
-        .filter(updated__gte=datetime.now(timezone.utc) - timedelta(days=days))
+        .filter(updated__lte=datetime.now(timezone.utc) - timedelta(days=days))
     queryset.update(model_status=MLModel.Status.PENDING)
 
 

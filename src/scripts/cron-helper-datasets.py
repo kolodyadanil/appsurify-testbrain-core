@@ -15,24 +15,17 @@ from django.conf import settings
 from applications.testing.models import TestSuite
 from applications.ml.models import MLModel
 from applications.ml.utils import (
-    fix_missed,
-    fix_expired,
-    fix_broken,
     perform_dataset_to_csv,
     perform_multi_dataset_to_csv
 )
 
 
 def main():
-    fix_missed()
-    fix_expired()
-    fix_broken()
-
     print("Get TestSuites for storing datasets...")
-    queryset = TestSuite.objects.filter(
-        models__dataset_status=MLModel.Status.PENDING).distinct().order_by("-updated")[:20]
+    queryset = set(TestSuite.objects.filter(
+        models__dataset_status=MLModel.Status.PENDING
+    ).order_by("models__updated"))
 
-    print(f"Total TestSuites: {queryset.count()}")
     for test_suite in queryset:
         MLModel.objects.filter(test_suite=test_suite).update(updated=timezone.now())
         try:
@@ -40,7 +33,7 @@ def main():
             # result = perform_dataset_to_csv(test_suite=test_suite)
             print(f"<TestSuite: {test_suite.id}> - {result}")
         except Exception as e:
-            print(e)
+            print(f"<TestSuite: {test_suite.id}> - {e}")
             continue
 
 
