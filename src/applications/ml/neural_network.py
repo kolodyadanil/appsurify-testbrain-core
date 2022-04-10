@@ -318,7 +318,7 @@ class MLPredictor(MLHolder):
         df = pd.DataFrame(data)
 
         if df.empty is True:
-            tests_ids_by_priorities['u'] = test_queryset
+            tests_ids_by_priorities['u'] = [test_id for test_id in list(test_queryset.values_list('id', flat=True))]
             return tests_ids_by_priorities
 
         # df.dropna(axis=1, how='all', inplace=True)

@@ -239,8 +239,7 @@ class AreaReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
         else:
             if queryset:
                 end_date = queryset.last().timestamp
-                from_date = end_date - timezone.timedelta(
-			F=14)
+                from_date = end_date - timezone.timedelta(days=14)
                 lookup_expr = LOOKUP_SEP.join(['timestamp', 'range'])
                 extra_filter.update({lookup_expr: (from_date, end_date)})
 
@@ -1853,7 +1852,8 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
 
     def get_queryset(self):
         queryset = super(TestReportModelViewSet, self).get_queryset()
-        queryset = queryset.filter(project__organization=get_current_organization(self.request))
+        current_organization = get_current_organization(self.request)
+        queryset = queryset.filter(project__organization=current_organization)
         return queryset
 
     def list(self, request, *args, **kwargs):
@@ -2461,8 +2461,8 @@ WHERE
                                                 timestamp__lt=commit.timestamp).order_by('timestamp')
             if len(all_commits) == 0:
                 return commit
-            return all_commits[-1]
-        return last_run_commit_list[0]          
+            return all_commits.last()
+        return last_run_commit_list.first()
 
     @staticmethod
     def get_commits_list(target_branch, first_commit, second_commit, exclusive=False):
@@ -2949,14 +2949,12 @@ WHERE
     #             for name_test_suite in list_name_test_suite:
     #                 name_for_search.append(name_test_suite.name)
     #             name_test = name_test.filter(testsuite_name__in = name_for_search)
-
     #         if day is not None and int(priority_param) == 11:
     #             to_date   = datetime.datetime.now()
     #             from_date = to_date - timedelta(days=int(day))
     #             name_test  = name_test.filter(created__range=(from_date, to_date))
     #     except:
     #         raise APIException('Test not found!')
-
     #     return name_test
 
     def get_all_queryset(self, queryset):
