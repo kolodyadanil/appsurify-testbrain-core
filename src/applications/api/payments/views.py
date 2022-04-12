@@ -1,42 +1,43 @@
-# import stripe
-# # This is your test secret API key.
-# stripe.api_key = 'sk_test_51KnHXDBSLz3I6Q36kLgvRBf4eaMu0t53vY1sBDyqs8EEKYdQFqMkGYJ7PNBhsRfLmMRscrQLINeLF77g4vsucAQg006HhiUBB7'
-#
-# app = Flask(__name__,
-#             static_url_path='',
-#             static_folder='public')
-#
-# YOUR_DOMAIN = 'http://localhost:4242'
-#
+from django.shortcuts import redirect
+from rest_framework.views import APIView
+import stripe
+# This is your test secret API key.
+from system.env import env
+
+stripe.api_key = env.str('STRIPE_SECRET_KEY')
+
+YOUR_DOMAIN = 'http://localhost:8000'
+
 # @app.route('/', methods=['GET'])
 # def get_index():
 #     return current_app.send_static_file('index.html')
-#
-# @app.route('/create-checkout-session', methods=['POST'])
-# def create_checkout_session():
-#     try:
-#         prices = stripe.Price.list(
-#             lookup_keys=[request.form['lookup_key']],
-#             expand=['data.product']
-#         )
-#
-#         checkout_session = stripe.checkout.Session.create(
-#             line_items=[
-#                 {
-#                     'price': prices.data[0].id,
-#                     'quantity': 1,
-#                 },
-#             ],
-#             mode='subscription',
-#             success_url=YOUR_DOMAIN +
-#             '?success=true&session_id={CHECKOUT_SESSION_ID}',
-#             cancel_url=YOUR_DOMAIN + '?canceled=true',
-#         )
-#         return redirect(checkout_session.url, code=303)
-#     except Exception as e:
-#         print(e)
-#         return "Server error", 500
-#
+
+
+class StripeCheckoutView(APIView):
+    def post(self, request):
+        try:
+            prices = stripe.Price.list(
+                lookup_keys=[request.form['lookup_key']],
+                expand=['data.product']
+            )
+
+            checkout_session = stripe.checkout.Session.create(
+                line_items=[
+                    {
+                        'price': prices.data[0].id,
+                        'quantity': 1,
+                    },
+                ],
+                mode='subscription',
+                success_url=YOUR_DOMAIN +
+                '?success=true&session_id={CHECKOUT_SESSION_ID}',
+                cancel_url=YOUR_DOMAIN + '?canceled=true',
+            )
+            return redirect(checkout_session.url, code=303)
+        except Exception as e:
+            print(e)
+            return "Server error", 500
+
 # @app.route('/create-portal-session', methods=['POST'])
 # def customer_portal():
 #     # For demonstration purposes, we're using the Checkout session to retrieve the customer ID.
@@ -95,7 +96,3 @@
 #         print('Subscription canceled: %s', event.id)
 #
 #     return jsonify({'status': 'success'})
-#
-#
-# if __name__ == '__main__':
-#     app.run(port=4242)
