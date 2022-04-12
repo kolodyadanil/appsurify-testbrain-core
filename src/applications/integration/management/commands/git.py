@@ -57,6 +57,7 @@ def get_commits_sha(start, number):
     all_commits_sha = all_commits_sha.split('\n')
     index = all_commits_sha.index(start)
     commits_sha = all_commits_sha[index:index+number]
+    commits_sha.reverse()
     return commits_sha
 
 
@@ -83,19 +84,18 @@ def request(url, token, data, event):
     return result
 
 
-def request_get(url, token):
+def get_project_id(project_name, token):
+    url = BASE_URL + 'fetch/?project_name={}'.format(project_name)
     headers = {"Content-Type": "application/json",
-                # "X-Git-Event": event,
                 "token": token}
     try:
         session = Session()
         session.mount('http://', HTTPAdapter(max_retries=3))
         session.mount('https://', HTTPAdapter(max_retries=3))
         resp = session.get(url=url, headers=headers, verify=False, allow_redirects=True)
-        # result = (resp.status_code, resp.reason)
     except Exception as e:
         print("Request error: ", e)
-        result = (None, None)
+        return None
     return resp.text
 
 
@@ -132,7 +132,8 @@ def get_commit(sha):
     
     commit_cmd = COMMAND_COMMIT.format(sha)
     if is_windows:
-        commit_cmd = commit_list_cmd.replace('\'', '')
+        commit_cmd = commit_cmd.replace('\'', '')
+        commit_cmd = commit_cmd.replace('\t', '%x09')
 
     output = execute(commit_cmd)
 
@@ -271,14 +272,6 @@ def wrap_push_event(ref, commit):
     except Exception as e:
         logging.debug("Incorrect chunk: '{}'. {}".format(','.join(commit_list), e), exc_info=DEBUG)
         return json.dumps({})
-    
-    
-def get_info(token, project_name):
-    url = BASE_URL + 'fetch/?project_name={}'.format(project_name)
-    # data = {
-    #     "project_name": project_name
-    # }
-    return request_get(url, token)
 
 
 parser = argparse.ArgumentParser(description='Sync a number of commits before a specific commit')
@@ -309,13 +302,12 @@ def performPush(token, start, number):
     sha_list = get_commits_sha(start, number)
     for sha in sha_list:
         commit = get_commit(sha)
-        ref = get_commit_branch(sha)[0] # TODO: find a way to get all branch
+        ref = get_commit_branch(sha)[0]
         data = wrap_push_event(ref, commit)
         
-        project_id = json.loads(get_info(token, project))["project_id"]
+        project_id = json.loads(get_project_id(project_name=project, token=token))["project_id"]
         url = BASE_URL + '{}/'.format(project_id)
         
         status_code, content = request(url, token, data, event='push')
 
 performPush(token, start, number)
-# print(get_info(token, project))
