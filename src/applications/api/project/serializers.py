@@ -279,11 +279,16 @@ class ProjectSummarySerializer(BaseProjectSerializer):
         fields = ('id', 'name', 'setup_status', 'maturity', "stats")
 
     @swagger_serializer_method(serializer_or_field=serializers.FloatField)
-    def get_maturity(self, _):
+    def get_maturity(self, project):
         """
-        Waiting for the requirements
+        Maturity is 100% after 50 test runs. Every tests run add 2%
         """
-        return 0.48
+        count_test_runs = len(TestRun.objects.filter(project=project))
+        if count_test_runs >= 50:
+            maturity = 1.0
+        else:
+            maturity = count_test_runs/50
+        return maturity
 
     @swagger_serializer_method(serializer_or_field=ProjectTestRunStats)
     def get_stats(self, project):
@@ -305,8 +310,12 @@ class ProjectSummarySerializer(BaseProjectSerializer):
         execution_time_by_test_run = TestRunResult.objects.filter(**filter_dict).values('test_run_id').annotate(
             sum=models.Sum('execution_time'))
         standard_execution_time = execution_time_by_test_run.aggregate(max=models.Max('sum'))['max']
-        time_savings_seconds = reduce(lambda x, y: x + y,
-                                      map(lambda x: standard_execution_time - x['sum'], execution_time_by_test_run))
+        # TODO: this is a way to avoid 500 while we have no data for execution_time_by_test_run after project creation
+        if not execution_time_by_test_run:
+            time_savings_seconds = 0
+        else:
+            time_savings_seconds = reduce(lambda x, y: x + y,
+                                          map(lambda x: standard_execution_time - x['sum'], execution_time_by_test_run))
 
         return dict(
             **TestRunResult.objects.filter(**filter_dict).aggregate(
