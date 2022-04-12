@@ -305,7 +305,8 @@ class ProjectSummarySerializer(BaseProjectSerializer):
         execution_time_by_test_run = TestRunResult.objects.filter(**filter_dict).values('test_run_id').annotate(
             sum=models.Sum('execution_time'))
         standard_execution_time = execution_time_by_test_run.aggregate(max=models.Max('sum'))['max']
-        if not standard_execution_time or not execution_time_by_test_run:
+        # TODO: this is a way to avoid 500 while we have no data for execution_time_by_test_run after project creation
+        if not execution_time_by_test_run:
             time_savings_seconds = 0
         else:
             time_savings_seconds = reduce(lambda x, y: x + y,
