@@ -54,6 +54,7 @@ urlpatterns = [
     url(r'^cli/', include('applications.api.cli.urls')),
     url(r'^notification/', include('applications.api.notification.urls')),
     url(r'^report/', include('applications.api.report.urls')),
+    url(r'^stripe/', include('applications.api.payments.urls')),
 
     url(r'^', include('applications.api.project.urls')),
     url(r'^', include('applications.api.testing.urls')),

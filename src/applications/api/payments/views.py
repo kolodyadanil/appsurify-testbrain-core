@@ -1,17 +1,13 @@
-from django.shortcuts import redirect
 from rest_framework.views import APIView
-import stripe
-# This is your test secret API key.
+from rest_framework.response import Response
+from rest_framework import status
+from django.shortcuts import redirect
 from system.env import env
+import stripe
 
 stripe.api_key = env.str('STRIPE_SECRET_KEY')
 
 YOUR_DOMAIN = 'http://localhost:8000'
-
-# @app.route('/', methods=['GET'])
-# def get_index():
-#     return current_app.send_static_file('index.html')
-
 
 class StripeCheckoutView(APIView):
     def post(self, request):
@@ -33,10 +29,13 @@ class StripeCheckoutView(APIView):
                 '?success=true&session_id={CHECKOUT_SESSION_ID}',
                 cancel_url=YOUR_DOMAIN + '?canceled=true',
             )
-            return redirect(checkout_session.url, code=303)
+            return redirect(checkout_session.url)
         except Exception as e:
             print(e)
-            return "Server error", 500
+            return Response(
+                {'error': 'Something went wrong when creating stripe checkout session'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 # @app.route('/create-portal-session', methods=['POST'])
 # def customer_portal():
