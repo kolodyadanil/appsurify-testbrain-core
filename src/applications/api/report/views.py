@@ -2530,7 +2530,7 @@ WHERE
                 if isinstance(commit_arg, str) and not re.match(r'^\d*$', commit_arg):
                     raise ValidationError({'detail': "Argument '{0}' should be integer".format(arg)})
                 try:
-                    commit_arg = Commit.objects.get(project=project, id=commit_arg)
+                    commit_arg = Commit.objects.get(project=project, sha=commit_arg)
                     if arg == 'commit':
                         commit = commit_arg
                     elif arg == 'from_commit':

@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
 
 import json
 import re
@@ -8,6 +7,7 @@ import urllib.parse
 from django.db import models
 from django.db.models import F, Value, CharField
 from django.db.models.functions import Concat
+from django.http import HttpRequest
 from django.utils.translation import ugettext_lazy as _
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -22,10 +22,13 @@ from applications.organization.models import Organization
 from applications.organization.utils import get_current_organization
 from applications.vcs.models import Branch
 
+from applications.testing.selectors import Priority, prioritized_test_list
+
 from .permissions import IsAuthenticatedToken
 from .serializers import *
 from .utils import ConfirmationHMAC
 
+## TODO: THIS IS DEPRICATED FLAGS
 PRIORITY_HIGH = 1
 PRIORITY_MEDIUM = 2
 PRIORITY_LOW = 3
@@ -105,221 +108,148 @@ class ExternalAPIViewSet(MultiSerializerViewSetMixin, viewsets.GenericViewSet):
         # except Exception as e:
         #     raise APIException(e)
 
-    @action(methods=['GET', ], detail=False, url_path=r'prioritized-tests')  # TODO: rename url path
-    def prioritized_tests_view(self, request, *args, **kwargs):
-        # get base queryset
-        queryset = self.get_queryset()
+    class ParamsPrioritizationTestSerializer(serializers.Serializer):
+        name_type = serializers.CharField(required=True)
 
-        # change request object properties. set mutable
-        if not request.GET._mutable:
-            request.GET._mutable = True
+        project = serializers.IntegerField(required=False)
+        project_name = serializers.CharField(required=False)
 
-        repo_type = request.query_params.get('repo', 'git')  # Maybe 'perforce'
-        # _re_p4 = re.compile(r"\[git-p4.*depot-paths\s=\s\"(?P<target_branch>.*)\".*change\s=\s(?P<commit>\d+)\]")
+        test_suite = serializers.IntegerField(required=False)
+        test_suite_name = serializers.CharField(required=False)
 
-        # validate project_* params in request query params
-        project_params = {}
+        target_branch = serializers.CharField(required=False)
+        target_branch_id = serializers.IntegerField(required=False)
 
-        if 'project' not in request.query_params and 'project_name' not in request.query_params:
-            raise APIException('Define witch one `project` or `project_name`')
+        commit_type = serializers.CharField(required=True)
+        commit = serializers.CharField(required=False)
+        from_commit = serializers.CharField(required=False)
 
-        project_id = request.query_params.get('project', None)
-        if project_id:
-            project_params['id'] = int(project_id)
+        priority = serializers.IntegerField(required=True)
+        percent = serializers.IntegerField(required=False, allow_null=True, default=None)
 
-        project_name = request.query_params.get('project_name', None)
-        if project_name:
-            project_params['name'] = str(project_name)
+        classname = serializers.BooleanField(required=True)
+        classname_separator = serializers.CharField(required=False, default="")
 
-        try:
-            project = Project.objects.get(**project_params)
-        except Project.DoesNotExist:
-            raise APIException('Project not found.')
-        except Exception as e:
-            raise APIException(e)
+        testsuitename = serializers.BooleanField(required=True)
+        testsuitename_separator = serializers.CharField(required=False, default="")
 
-        # normalize project filter param
-        request.query_params['project'] = project.id
+        day = serializers.CharField(required=False)
+        time = serializers.CharField(required=False)
 
-        # TEST_SUITE
-        # validate test_suite_* params in request query params
-        if 'test_suite' in request.query_params or 'test_suite_name' in request.query_params:
-            test_suite_params = {}
+        organization = serializers.ReadOnlyField()
 
-            test_suite_id = request.query_params.get('test_suite', None)
-            if test_suite_id:
-                test_suite_params['id'] = int(test_suite_id)
+        def _get_request(self):
+            request = self.context.get('request')
+            if not isinstance(request, HttpRequest):
+                request = request._request
+            return request
 
-            test_suite_name = request.query_params.get('test_suite_name', None)
-            if test_suite_name:
-                test_suite_params['name'] = test_suite_name
+        def _validate_project(self, attrs):
+            project = attrs.pop("project", "")
+            project_name = attrs.pop("project_name", "")
+
+            if not project and not project_name:
+                raise serializers.ValidationError("Require set project or project_name")
+            elif project and project_name:
+                raise serializers.ValidationError("Set only one project or project_name")
 
             try:
-                test_suite = TestSuite.objects.get(project=project, **test_suite_params)
-            except TestSuite.DoesNotExist:
-                raise APIException('TestSuite not found.')
+                if project:
+                    attrs["project"] = Project.objects.get(organization=attrs["organization"], id=project)
+                if project_name:
+                    attrs["project"] = Project.objects.get(organization=attrs["organization"],
+                                                           name__iexact=project_name)
+            except Project.DoesNotExist:
+                raise serializers.ValidationError("Project not found")
 
-            # normalize test_suite filter param
-            request.query_params['test_suite'] = test_suite.id
+            return attrs["project"]
 
-            organization = get_current_organization(request=request)
-            # pay_flag = check_usage(organization=organization, test_suite_id=test_suite.id)
-            # if pay_flag:
-            #     raise APIException('Number of minutes has been met for the month.')
+        def _validate_commit(self, attrs):
+            commit = attrs.pop("commit", "")
+            if not commit:
+                raise serializers.ValidationError("Require set commit")
+            try:
+                attrs["commit"] = Commit.objects.get(project=attrs["project"], sha=commit)
+            except Commit.DoesNotExist:
+                raise serializers.ValidationError("Commit not found")
+            return attrs["commit"]
 
-        # COMMITS
-        # validate commit params in request query params
-        for arg in ('commit', 'from_commit'):
-            if request and arg in request.query_params:
-                commit_sha = request.query_params.get(arg)
-
+        def _validate_from_commit(self, attrs):
+            commit = attrs.pop("from_commit", "")
+            if commit:
                 try:
-                    commit_sha = urllib.parse.unquote_plus(commit_sha)
-                except Exception:
-                    pass
-
-                try:
-                    if repo_type == 'perforce':
-                        if isinstance(commit_sha, (str, bytes)):
-                            if not commit_sha.isdigit():
-                                raise APIException("Incorrect params 'commit' {commit_sha} "
-                                                   "with param 'repo' = 'perforce'".format(commit_sha=commit_sha))
-
-                        commit_sha = int(commit_sha)
-                        commit_arg = Commit.objects.get(
-                            project=project, message__iregex="\[git-p4.*change\s=\s{:d}\]".format(commit_sha))
-
-                    elif repo_type != 'perforce' and commit_sha.find(';') != -1:
-                        commit_sha = commit_sha[:commit_sha.rfind(';')]
-                        commit_arg = Commit.objects.get(project=project, sha=commit_sha)
-
-                    else:
-                        commit_arg = Commit.objects.get(project=project, sha=commit_sha)
-
-                    request.query_params[arg] = commit_arg.id
-
+                    attrs["from_commit"] = Commit.objects.get(project=attrs["project"], sha=commit)
                 except Commit.DoesNotExist:
-                    raise APIException("Commit from '{0}' param not found.".format(arg))
-                except Commit.MultipleObjectsReturned:
-                    raise APIException('Founded duplicated commits. Please contact with support.')
-
-        # TARGET_BRANCH
-        if 'target_branch' in request.query_params or 'target_branch_id' in request.query_params:
-            if repo_type == 'perforce':
-                target_branch_id = request.query_params.get('target_branch_id', None)
-                if target_branch_id:
-                    raise APIException("Incompatible 'target_branch_id' param with 'repo' = 'perforce'. "
-                                       "Use only 'target_branch'")
-                target_branch_name = request.query_params.get('target_branch', None)
-                if target_branch_name:
-                    try:
-                        target_branch = Branch.objects.filter(
-                            project=project,
-                            commits__message__regex="\[git-p4.*depot-paths\s=\s\"{target_branch_name}\".*\]".format(
-                                target_branch_name=target_branch_name
-                            )
-                        ).first()
-                        if target_branch is None:
-                            raise APIException('Target branch not found.')
-                    except Exception:
-                        raise APIException('Target branch not found.')
-                    # normalize target_branch filter param
-                    request.query_params['target_branch'] = target_branch.id
+                    raise serializers.ValidationError("Commit not found")
             else:
-                target_branch_params = {}
-                target_branch_id = request.query_params.get('target_branch_id', None)
+                if not attrs["commit"]:
+                    raise serializers.ValidationError("Require set from_commit")
+                attrs["from_commit"] = attrs["commit"]
+            return attrs["from_commit"]
+
+        def _validate_test_suite(self, attrs):
+            test_suite = attrs.pop("test_suite", "")
+            test_suite_name = attrs.pop("test_suite_name", "")
+
+            if not test_suite and not test_suite_name:
+                raise serializers.ValidationError("Require set test_suite or test_suite_name")
+            elif test_suite and test_suite_name:
+                raise serializers.ValidationError("Set only one test_suite or test_suite_name")
+
+            try:
+                if test_suite:
+                    attrs["test_suite"] = TestSuite.objects.get(project=attrs["project"], id=test_suite)
+                if test_suite_name:
+                    attrs["test_suite"] = TestSuite.objects.get(project=attrs["project"], name__iexact=test_suite_name)
+            except Project.DoesNotExist:
+                raise serializers.ValidationError("TestSuite not found")
+
+            return attrs["test_suite"]
+
+        def _validate_target_branch(self, attrs):
+            target_branch = attrs.pop("target_branch", "")
+            target_branch_id = attrs.pop("target_branch_id", "")
+
+            if not target_branch and not target_branch_id:
+                raise serializers.ValidationError("Require set target_branch or target_branch_id")
+            elif target_branch and target_branch_id:
+                raise serializers.ValidationError("Set only one target_branch or target_branch_id")
+
+            try:
+                if target_branch:
+                    attrs["target_branch"] = Branch.objects.get(project=attrs["project"], name__iexact=target_branch)
                 if target_branch_id:
-                    target_branch_params['id'] = int(target_branch_id)
-                target_branch_name = request.query_params.get('target_branch', None)
-                if target_branch_name:
-                    target_branch_params['name'] = target_branch_name
-                try:
-                    target_branch = Branch.objects.get(project=project, **target_branch_params)
-                    target_branch_name = target_branch.name
-                except Branch.DoesNotExist:
-                    raise APIException('Target branch not found.')
+                    attrs["target_branch"] = TestSuite.objects.get(project=attrs["project"], id=target_branch_id)
+            except Project.DoesNotExist:
+                raise serializers.ValidationError("Branch not found")
 
-                # normalize target_branch filter param
-                request.query_params['target_branch'] = target_branch.id
+            return attrs["target_branch"]
 
-        # PRIORITY
-        # validate priority params in request query params
-        if 'priority' not in request.query_params:
-            raise APIException('`priority` is required.')
+        def validate(self, attrs):
 
-        priority = int(request.query_params.get('priority', 0))
+            attrs["organization"] = get_current_organization(self._get_request())
+            attrs["project"] = self._validate_project(attrs)
+            attrs["commit"] = self._validate_commit(attrs)
+            attrs["from_commit"] = self._validate_from_commit(attrs)
+            attrs["target_branch"] = self._validate_target_branch(attrs)
+            attrs["test_suite"] = self._validate_test_suite(attrs)
 
-        test_view = TestReportModelViewSet(request=request)
-        filtered_queryset = test_view.get_queryset()
-        try:
-            if priority == PRIORITY_HIGH:
-                queryset = test_view.get_high_queryset(queryset=filtered_queryset)
-            elif priority == PRIORITY_MEDIUM:
-                queryset = test_view.get_medium_queryset(queryset=filtered_queryset)
-            elif priority == PRIORITY_LOW:
-                queryset = test_view.get_low_queryset(queryset=filtered_queryset)
-            elif priority == PRIORITY_UNASSIGNED:
-                queryset = test_view.get_unassigned_queryset(queryset=filtered_queryset)
-            elif priority == PRIORITY_READY_DEFECT:
-                queryset = test_view.get_ready_defect_queryset(queryset=filtered_queryset)
-            elif priority == PRIORITY_OPEN_DEFECT:
-                queryset = test_view.get_open_defect_queryset(queryset=filtered_queryset)
-            elif priority == PRIORITY_RERUN:
-                queryset = test_view.get_rerun_queryset(queryset=filtered_queryset)
-            elif priority == PRIORITY_TOP20:
-                queryset = test_view.get_top20_queryset(queryset=filtered_queryset)
-            elif priority == PRIORITY_PERCENT:
-                queryset = test_view.get_top_by_percent_queryset(queryset=filtered_queryset)
-            elif priority == PRIORITY_FOR_TEST or priority == PRIORITY_FOR_TEST_WITH_DAY:
-                queryset = test_view.get_all_queryset(queryset=filtered_queryset)
-            elif priority == PRIORITY_EXECUTION_TIME_UNDER:
-                queryset = test_view.get_highest_tests_under_time(queryset=filtered_queryset)
-            else:
-                raise APIException('Please choice priority from 1 to 12.')
-        except NotFound:
-            raise APIException(
-                "No one commit in branch '{0}' has not associated test runs in specified test suite '{1}'".format(
-                    target_branch_name, test_suite.name
-                )
-            )
+            if attrs["priority"] in [Priority.TOP20, Priority.PERCENT]:
+                percent = attrs["percent"]
+                if not percent or percent == 0:
+                    raise serializers.ValidationError("Please define 'percent'")
 
-        # OUTPUT NAME FORMAT
-        classname = False
-        testsuitename = False
+            return attrs
 
-        classname_separator = ""
-        testsuitename_separator = ""
+    @action(methods=['GET', ], detail=False, url_path=r"prioritized-tests")  # TODO: rename url path
+    def prioritized_tests_view(self, request, *args, **kwargs):
+        # get base queryset
+        kwargs['context'] = self.get_serializer_context()
+        params_serializer = self.ParamsPrioritizationTestSerializer(data=request.query_params, **kwargs)
+        params_serializer.is_valid(raise_exception=True)
+        params = params_serializer.validated_data
 
-        if 'classname' in request.query_params:
-            classname = request.query_params.get('classname', False)
-            classname = json.loads(str(classname).lower())
-            if not isinstance(classname, bool):
-                raise APIException('Please choice `classname` only True/False.')
-
-        if 'testsuitename' in request.query_params:
-            testsuitename = request.query_params.get('testsuitename', False)
-            testsuitename = json.loads(str(testsuitename).lower())
-            if not isinstance(testsuitename, bool):
-                raise APIException('Please choice `testsuitename` only True/False.')
-
-        if classname:
-            classname_separator = request.query_params.get("classname_separator", "")
-
-        if testsuitename:
-            testsuitename_separator = request.query_params.get("testsuitename_separator", "")
-
-        queryset = queryset.values('name')
-
-        if classname:
-            queryset = (
-                queryset.annotate(mname=F('name')).values('mname').annotate(name=Concat(
-                    F('class_name'), Value(classname_separator), 'mname', output_field=CharField())).values('name')
-            )
-        if testsuitename:  # TODO: Remember this testsuite__name eq area__name
-            queryset = (
-                queryset.annotate(mname=F('name')).values('mname').annotate(name=Concat(
-                    F('area__name'), Value(testsuitename_separator), 'mname', output_field=CharField())).values('name')
-            )
+        queryset = prioritized_test_list(params=params)
 
         serializer = PrioritizedTestsSerializer(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
