@@ -2,9 +2,11 @@
 from __future__ import unicode_literals
 
 # from djangotasks.models import Task
+import datetime
 from enum import Enum
 from functools import reduce
 
+import pytz
 from drf_yasg.utils import swagger_serializer_method
 from rest_framework import serializers
 
@@ -340,22 +342,34 @@ class ProjectSummarySerializer(BaseProjectSerializer):
         integration = self.get_integration(project)
         # Check if there's a test suite created. (Are we taking the first test suite added to the system?)
         # TODO: Clarify this later
+        # From requirements:
+        # No Test Bind phase needs to be completed after a test run has been sent
+        # I think we can ignore testing at the test bind stage atm
+        # So green if sent data, grey if it hasn't
+        # Red if it had sent data but hasn't sent any within the 8 days
         test_suite = project.test_suites.first()
 
         # If the integration is not set up an empty dict is returned.
         repo_bind = ProjectStatus.SUCCESSFUL if len(integration) > 0 else ProjectStatus.NOT_STARTED
-        test_bind = ProjectStatus.SUCCESSFUL if test_suite else ProjectStatus.NOT_STARTED
+        utc = pytz.UTC
+        if project.test_run_results.all():
+            test_bind = ProjectStatus.SUCCESSFUL
+        elif project.created < (datetime.datetime.today()-datetime.timedelta(days=8)).replace(tzinfo=utc):
+            test_bind = ProjectStatus.FAILURE
+        else:
+            test_bind = ProjectStatus.NOT_STARTED
+
         building_model = ProjectStatus.NOT_STARTED
 
-        model = test_suite.model if test_suite else None
-        if model:
-            status = model.model_status
-            if status == "SUCCESS":
-                building_model = ProjectStatus.SUCCESSFUL
-            elif status == "FAILURE":
-                building_model = ProjectStatus.FAILURE
-            else:
-                building_model = ProjectStatus.IN_PROGRESS
+        # model = test_suite.model if test_suite else None
+        # if model:
+        #     status = model.model_status
+        #     if status == "SUCCESS":
+        #         building_model = ProjectStatus.SUCCESSFUL
+        #     elif status == "FAILURE":
+        #         building_model = ProjectStatus.FAILURE
+        #     else:
+        #         building_model = ProjectStatus.NOT_STARTED
 
         return dict(
             repo_bind=repo_bind,
