@@ -234,10 +234,13 @@ class ExternalAPIViewSet(MultiSerializerViewSetMixin, viewsets.GenericViewSet):
             attrs["target_branch"] = self._validate_target_branch(attrs)
             attrs["test_suite"] = self._validate_test_suite(attrs)
 
-            if attrs["priority"] in [Priority.TOP20, Priority.PERCENT]:
+            if attrs["priority"] == Priority.PERCENT:
                 percent = attrs["percent"]
                 if not percent or percent == 0:
                     raise serializers.ValidationError("Please define 'percent'")
+
+            if attrs["priority"] == PRIORITY_TOP20:
+                attrs["percent"] = 20
 
             return attrs
 
