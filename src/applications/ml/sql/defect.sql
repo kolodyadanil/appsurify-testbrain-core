@@ -388,3 +388,105 @@ FROM
   ) va ON vca.area_id = va.id 
 GROUP BY 
   td2.id;
+WITH td AS (
+  SELECT 
+    id 
+  FROM 
+    testing_defect 
+  WHERE 
+    project_id IN {project_ids} 
+    AND created_by_commit_id IS NOT NULL 
+    AND created_by_test_run_id IS NOT NULL 
+    AND created_by_test_id IS NOT NULL 
+    AND created_by_test_run_result_id IS NOT NULL
+) 
+SELECT 
+  td.ID, 
+  array_remove(
+    array_agg(
+      DISTINCT normalize_filepath_string(
+        full_trim(vf3.full_filename)
+      )
+    ), 
+    NULL
+  ) AS defect_closed_by_caused_by_commits_files, 
+  array_remove(
+    array_agg(
+      DISTINCT lower(va5.name)
+    ), 
+    NULL
+  ) AS defect_closed_by_caused_by_commits_areas, 
+  array_remove(
+    array(
+      SELECT 
+        lower(vcs_area.name) 
+      FROM 
+        vcs_area 
+        INNER JOIN vcs_commit_areas vca ON (vcs_area.id = vca.area_id) 
+      WHERE 
+        tdclbc.commit_id = vca.commit_id 
+      INTERSECT 
+      SELECT 
+        lower(vcs_area.name) 
+      FROM 
+        vcs_area 
+        INNER JOIN vcs_commit_areas vca ON (vcs_area.id = vca.area_id) 
+      WHERE 
+        tdcabc.commit_id = vca.commit_id
+    ), 
+    NULL
+  ) AS defect_closed_by_caused_by_intersection_areas, 
+  array_remove(
+    array(
+      SELECT 
+        normalize_filepath_string(
+          full_trim(vcs_file.full_filename)
+        ) 
+      FROM 
+        vcs_file 
+        INNER JOIN vcs_filechange vf ON (vcs_file.id = vf.file_id) 
+      WHERE 
+        tdclbc.commit_id = vf.commit_id 
+      INTERSECT 
+      SELECT 
+        normalize_filepath_string(
+          full_trim(vcs_file.full_filename)
+        ) 
+      FROM 
+        vcs_file 
+        INNER JOIN vcs_filechange vf ON (vcs_file.id = vf.file_id) 
+      WHERE 
+        tdcabc.commit_id = vf.commit_id
+    ), 
+    NULL
+  ) AS defect_closed_by_caused_by_intersection_files 
+FROM 
+  td 
+  LEFT OUTER JOIN testing_defect_caused_by_commits tdcabc on td.id = tdcabc.defect_id 
+  LEFT OUTER JOIN testing_defect_closed_by_commits tdclbc on td.id = tdclbc.defect_id 
+  LEFT OUTER JOIN vcs_filechange vfc3 on tdcabc.commit_id = vfc3.commit_id 
+  or tdclbc.commit_id = vfc3.commit_id 
+  LEFT OUTER JOIN (
+    select 
+      id, 
+      full_filename 
+    from 
+      vcs_file 
+    where 
+      project_id in {project_ids}
+  ) vf3 on vf3.id = vfc3.file_id 
+  LEFT OUTER JOIN vcs_commit_areas vca5 on tdcabc.commit_id = vca5.commit_id 
+  or tdclbc.commit_id = vca5.commit_id 
+  LEFT OUTER JOIN (
+    select 
+      id, 
+      name 
+    from 
+      vcs_area 
+    where 
+      project_id in {project_ids}
+  ) va5 on vca5.area_id = va5.id 
+GROUP BY 
+  td.ID, 
+  tdclbc.commit_id, 
+  tdcabc.commit_id;
