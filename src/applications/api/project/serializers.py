@@ -361,15 +361,15 @@ class ProjectSummarySerializer(BaseProjectSerializer):
 
         building_model = ProjectStatus.NOT_STARTED
 
-        model = test_suite.model if test_suite else None
-        if model:
-            status = model.model_status
-            if status == "SUCCESS":
-                building_model = ProjectStatus.SUCCESSFUL
-            elif status == "FAILURE":
-                building_model = ProjectStatus.FAILURE
-            else:
-                building_model = ProjectStatus.NOT_STARTED
+        # model = test_suite.model if test_suite else None
+        # if model:
+        #     status = model.model_status
+        #     if status == "SUCCESS":
+        #         building_model = ProjectStatus.SUCCESSFUL
+        #     elif status == "FAILURE":
+        #         building_model = ProjectStatus.FAILURE
+        #     else:
+        #         building_model = ProjectStatus.NOT_STARTED
 
         return dict(
             repo_bind=repo_bind,
