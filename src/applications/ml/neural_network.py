@@ -381,11 +381,12 @@ class MLPredictor(MLHolder):
         if len(test_from_ml) == 0:
             return result
 
-        test_count = test_queryset.distinct('id').count()
-        if test_count < 10:
-            test_count = test_count * 10
-
-        count_by_percent = int((percent * test_count) / 100)
+        # test_count = test_queryset.distinct('id').count()
+        # if test_count < 10:
+        #     test_count = test_count * 10
+        #
+        # count_by_percent = int((percent * test_count) / 100)
+        count_by_percent = int((percent * len(test_from_ml)) / 100)
 
         test_from_ml_normal_filtered = list(filter(lambda x: x[0] > 0.3, test_from_ml))
         test_from_ml_normal_filtered.sort(key=lambda x: x[0])
@@ -398,7 +399,7 @@ class MLPredictor(MLHolder):
         if len(test_from_ml_normal_filtered_ids) >= count_by_percent:
             test_ids = test_from_ml_normal_filtered_ids[:count_by_percent]
         else:
-            test_ids = test_from_ml_ids[:count_by_percent]
+            test_ids = test_from_ml_ids[:count_by_percent]  # TODO: NEED REWORK. Maybe need get from original queryset.
 
         result = Test.objects.filter(id__in=test_ids)
 

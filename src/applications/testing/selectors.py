@@ -14,6 +14,10 @@ from applications.ml.neural_network import MLPredictor
 LOOKUP_SEP = '__'
 
 
+TEST_RUNS_ML_USING_THRESHOLD = 500
+MINIMAL_NUMBER_OF_TESTRUNS_FOR_ML_MODEL_USNIG = 50
+
+
 class Priority(models.IntegerChoices):
     HIGH = 1
     MEDIUM = 2
@@ -29,6 +33,7 @@ class Priority(models.IntegerChoices):
     EXECUTION_TIME_UNDER = 12
 
 
+## TODO: THIS IS DEPRICATED FLAGS
 PRIORITY_HIGH = 1
 PRIORITY_MEDIUM = 2
 PRIORITY_LOW = 3
@@ -41,110 +46,6 @@ PRIORITY_PERCENT = 9
 PRIORITY_FOR_TEST = 10
 PRIORITY_FOR_TEST_WITH_DAY = 11
 PRIORITY_EXECUTION_TIME_UNDER = 12
-
-TEST_RUNS_ML_USING_THRESHOLD = 500
-MINIMAL_NUMBER_OF_TESTRUNS_FOR_ML_MODEL_USNIG = 50
-
-
-def get_last_run_result_commit(project=None, target_branch=None, test_suite=None, commit=None, **kwargs):
-    """
-    Return last commit of commits set that has 'target_branch' in 'branches' and have test runs.
-
-    If no one commit will be found we raise exception
-
-    :param project: py:obj:`Project` object
-    :param target_branch: py:obj:`Branch` object
-    :param test_suite: py:obj:`TestSuite` object
-    :return: py:obj:`Commit` object or may raise NotFound exception
-    """
-    time_threshold = commit.timestamp - timezone.timedelta(days=1)
-    last_run_commit_list = Commit.objects.filter(project=project,
-                                                 branches=target_branch,
-                                                 test_runs__isnull=False,
-                                                 test_runs__test_suite=test_suite,
-                                                 timestamp__gt=time_threshold,
-                                                 timestamp__lt=commit.timestamp).order_by('-timestamp')
-
-    if not last_run_commit_list.first():
-        last_run_commit_list = Commit.objects.filter(project=project,
-                                                     branches=target_branch,
-                                                     timestamp__gt=time_threshold,
-                                                     timestamp__lt=commit.timestamp).order_by('-timestamp')
-        if not last_run_commit_list.first():
-            return commit
-    return last_run_commit_list.first()
-
-
-def get_commit_range_list(target_branch=None, first_commit=None, second_commit=None, exclusive=False, **kwargs):
-    """
-    This function finds all commits contained in target branch and placed in inheritance chain between the first and
-    the second commit.
-
-    If flag 'exclusive' is set, then last commit in inheritance chain will be excluded.
-
-    :param target_branch: py:obj:`Branch` object
-    :param first_commit: py:obj:`Commit` object
-    :param second_commit: py:obj:`Commit` object
-    :param exclusive: boolean
-    :return: instance of py:obj:`Commit`
-    """
-    if first_commit.timestamp < second_commit.timestamp:
-        ancestor = first_commit
-        descendant = second_commit
-    else:
-        ancestor = second_commit
-        descendant = first_commit
-
-    if exclusive:
-        query = Q(timestamp__gte=ancestor.timestamp, timestamp__lt=descendant.timestamp)
-    else:
-        query = Q(timestamp__gte=ancestor.timestamp, timestamp__lte=descendant.timestamp)
-    return list(target_branch.commits.filter(query).values_list('id', flat=True))
-
-
-def get_commit_list(*, params=None):
-    """
-    This function return list of commit ids based on request params
-
-    Request query param should contains next:
-        commit_type - one of ['Single', 'LastRun', 'BetweenInclusive', 'BetweenExclusive']
-        commit - first commit id
-        from_commit - second commit id. Needed only for ['BetweenInclusive', 'BetweenExclusive']
-        target_branch - Needed for ['LastRun','BetweenInclusive', 'BetweenExclusive'].
-                        This argument specified target branch.
-
-    Allowed commit types:
-        Single - we return list that contains only 'commit'
-        LastRun - we search last commit in specified branch that has associated test runs. After that
-                  we return list of commit between specified commit and founded commit.
-        BetweenInclusive - return every commit between two specified commits.
-        BetweenExclusive - return every commit between two specified commits excluding earlier commit.
-
-    :return: list of commits ids or may raise one of this exceptions: APIException, ValidationError.
-    """
-    commit_list = []
-    commit_type = params["commit_type"]
-    commit = params["commit"]
-    if commit_type == "Single":
-        commit_list = [commit.id]
-    elif commit_type == "LastRun":
-        second_commit = get_last_run_result_commit(**params)
-        commit_list = get_commit_range_list(
-            target_branch=params["target_branch"],
-            first_commit=params["commit"],
-            second_commit=second_commit
-        )
-    elif commit_type in ["BetweenInclusive", "BetweenExclusive"]:
-        exclusive = False
-        if commit_type == "BetweenExclusive":
-            exclusive = True
-        commit_list = get_commit_range_list(
-            target_branch=params["target_branch"],
-            first_commit=params["commit"],
-            second_commit=params["from_commit"],
-            exclusive=exclusive
-        )
-    return commit_list
 
 
 def prioritized_test_list(*, params=None):
@@ -271,6 +172,107 @@ def prioritized_test_list(*, params=None):
         queryset = queryset.annotate(mname=F('name')).values('mname').annotate(name=Concat(F('area__name'), Value(testsuitename_separator), 'mname', output_field=CharField())).values('name')
 
     return queryset
+
+
+def get_last_run_result_commit(project=None, target_branch=None, test_suite=None, commit=None, **kwargs):
+    """
+    Return last commit of commits set that has 'target_branch' in 'branches' and have test runs.
+
+    If no one commit will be found we raise exception
+
+    :param project: py:obj:`Project` object
+    :param target_branch: py:obj:`Branch` object
+    :param test_suite: py:obj:`TestSuite` object
+    :return: py:obj:`Commit` object or may raise NotFound exception
+    """
+    time_threshold = commit.timestamp - timezone.timedelta(days=1)
+    last_run_commit_list = Commit.objects.filter(project=project,
+                                                 branches=target_branch,
+                                                 test_runs__isnull=False,
+                                                 test_runs__test_suite=test_suite,
+                                                 timestamp__gt=time_threshold,
+                                                 timestamp__lt=commit.timestamp).order_by('-timestamp')
+
+    if not last_run_commit_list.first():
+        last_run_commit_list = Commit.objects.filter(project=project,
+                                                     branches=target_branch,
+                                                     timestamp__gt=time_threshold,
+                                                     timestamp__lt=commit.timestamp).order_by('-timestamp')
+        if not last_run_commit_list.first():
+            return commit
+    return last_run_commit_list.first()
+
+
+def get_commit_range_list(target_branch=None, first_commit=None, second_commit=None, exclusive=False, **kwargs):
+    """
+    This function finds all commits contained in target branch and placed in inheritance chain between the first and
+    the second commit.
+
+    If flag 'exclusive' is set, then last commit in inheritance chain will be excluded.
+
+    :param target_branch: py:obj:`Branch` object
+    :param first_commit: py:obj:`Commit` object
+    :param second_commit: py:obj:`Commit` object
+    :param exclusive: boolean
+    :return: instance of py:obj:`Commit`
+    """
+    if first_commit.timestamp < second_commit.timestamp:
+        ancestor = first_commit
+        descendant = second_commit
+    else:
+        ancestor = second_commit
+        descendant = first_commit
+
+    if exclusive:
+        query = Q(timestamp__gte=ancestor.timestamp, timestamp__lt=descendant.timestamp)
+    else:
+        query = Q(timestamp__gte=ancestor.timestamp, timestamp__lte=descendant.timestamp)
+    return list(target_branch.commits.filter(query).values_list('id', flat=True))
+
+
+def get_commit_list(*, params=None):
+    """
+    This function return list of commit ids based on request params
+
+    Request query param should contains next:
+        commit_type - one of ['Single', 'LastRun', 'BetweenInclusive', 'BetweenExclusive']
+        commit - first commit id
+        from_commit - second commit id. Needed only for ['BetweenInclusive', 'BetweenExclusive']
+        target_branch - Needed for ['LastRun','BetweenInclusive', 'BetweenExclusive'].
+                        This argument specified target branch.
+
+    Allowed commit types:
+        Single - we return list that contains only 'commit'
+        LastRun - we search last commit in specified branch that has associated test runs. After that
+                  we return list of commit between specified commit and founded commit.
+        BetweenInclusive - return every commit between two specified commits.
+        BetweenExclusive - return every commit between two specified commits excluding earlier commit.
+
+    :return: list of commits ids or may raise one of this exceptions: APIException, ValidationError.
+    """
+    commit_list = []
+    commit_type = params["commit_type"]
+    commit = params["commit"]
+    if commit_type == "Single":
+        commit_list = [commit.id]
+    elif commit_type == "LastRun":
+        second_commit = get_last_run_result_commit(**params)
+        commit_list = get_commit_range_list(
+            target_branch=params["target_branch"],
+            first_commit=params["commit"],
+            second_commit=second_commit
+        )
+    elif commit_type in ["BetweenInclusive", "BetweenExclusive"]:
+        exclusive = False
+        if commit_type == "BetweenExclusive":
+            exclusive = True
+        commit_list = get_commit_range_list(
+            target_branch=params["target_branch"],
+            first_commit=params["commit"],
+            second_commit=params["from_commit"],
+            exclusive=exclusive
+        )
+    return commit_list
 
 
 def get_default_high_queryset(queryset, commits_ids, params=None):
