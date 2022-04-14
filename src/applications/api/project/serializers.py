@@ -289,7 +289,7 @@ class ProjectSummarySerializer(BaseProjectSerializer):
         if count_test_runs >= 50:
             maturity = 1.0
         else:
-            maturity = count_test_runs/50
+            maturity = count_test_runs / 50
         return maturity
 
     @swagger_serializer_method(serializer_or_field=ProjectTestRunStats)
@@ -354,7 +354,8 @@ class ProjectSummarySerializer(BaseProjectSerializer):
         utc = pytz.UTC
         if project.test_run_results.all():
             test_bind = ProjectStatus.SUCCESSFUL
-        elif project.created < (datetime.datetime.today()-datetime.timedelta(days=8)).replace(tzinfo=utc):
+        elif project.created < (datetime.datetime.today() - datetime.timedelta(days=8)).replace(
+                tzinfo=utc) and test_suite == ProjectStatus.SUCCESSFUL:
             test_bind = ProjectStatus.FAILURE
         else:
             test_bind = ProjectStatus.NOT_STARTED
