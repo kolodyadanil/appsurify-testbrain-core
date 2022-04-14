@@ -33,23 +33,14 @@ class StripePublicKeys(APIView):
 
 class StripeCheckoutView(APIView):
     def post(self, request):
-        price = request.POST.get('productPrice')
-        customerEmail = request.POST.get('customerEmail')
+        price = request.data['priceId']['productPrice']
+        customerEmail = request.data.get('userEmail')
         domain_url = os.getenv('DOMAIN')
 
         try:
-            # Create new Checkout Session for the order
-            # Other optional params include:
-            # [billing_address_collection] - to display billing address details on the page
-            # [customer] - if you have an existing Stripe Customer ID
-            # [customer_email] - lets you prefill the email input in the form
-            # [automatic_tax] - to automatically calculate sales tax, VAT and GST in the checkout page
-            # For full details see https://stripe.com/docs/api/checkout/sessions/create
-
-            # ?session_id={CHECKOUT_SESSION_ID} means the redirect will have the session ID set as a query param
             checkout_session = stripe.checkout.Session.create(
-                success_url=domain_url + '/success.html?session_id={CHECKOUT_SESSION_ID}',
-                cancel_url=domain_url + '/canceled.html',
+                success_url=domain_url + '/success',
+                cancel_url=domain_url + '/canceled',
                 mode='subscription',
                 # automatic_tax={'enabled': True},
                 customer_email=customerEmail,
@@ -101,47 +92,4 @@ class StripeWebhookReceivedView(APIView):
         else:
             print('Unhandled event type {}'.format(event['type']))
 
-        # return jsonify(success=True)
-        return Response(status=status.HTTP_200_OK)
-
-        # ''
-        # # Replace this endpoint secret with your endpoint's unique secret
-        # # If you are testing with the CLI, find the secret by running 'stripe listen'
-        # # If you are using an endpoint defined with the API or dashboard, look in your webhook settings
-        # # at https://dashboard.stripe.com/webhooks
-        # webhook_secret = env.str('STRIPE_WEBHOOK_SECRET')
-        # request_data = request.data
-        #
-        # if webhook_secret:
-        #     # Retrieve the event by verifying the signature using the raw body and secret if webhook signing is configured.
-        #     signature = request.headers.get('stripe-signature')
-        #     try:
-        #         event = stripe.Webhook.construct_event(
-        #             payload=request.data, sig_header=signature, secret=webhook_secret)
-        #         data = event['data']
-        #     except Exception as e:
-        #         return e
-        #     # Get the type of webhook event sent - used to check the status of PaymentIntents.
-        #     event_type = event['type']
-        # else:
-        #     data = request_data['data']
-        #     event_type = request_data['type']
-        # data_object = data['object']
-        #
-        # print('event ' + event_type)
-        #
-        # if event_type == 'checkout.session.completed':
-        #     print('🔔 Payment succeeded!')
-        # elif event_type == 'customer.subscription.trial_will_end':
-        #     print('Subscription trial will end')
-        # elif event_type == 'customer.subscription.created':
-        #     print('Subscription created %s', event.id)
-        # elif event_type == 'customer.subscription.updated':
-        #     print('Subscription created %s', event.id)
-        # elif event_type == 'customer.subscription.deleted':
-        #     # handle subscription canceled automatically based
-        #     # upon your subscription settings. Or if the user cancels it.
-        #     print('Subscription canceled: %s', event.id)
-        #
-        # # return jsonify({'status': 'success'})
-        # return Response(status=status.HTTP_200_OK)
+        return Response(status=status.HTTP_200_OK, data={"success": True})
