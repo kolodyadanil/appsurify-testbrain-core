@@ -1,10 +1,12 @@
 import codecs
+import os
+
 from rest_framework.utils import json
 
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import authentication_classes, permission_classes
-from rest_framework.parsers import JSONParser, BaseParser, FormParser
+from rest_framework.parsers import JSONParser, BaseParser, FormParser, FileUploadParser
 from rest_framework.settings import api_settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -18,9 +20,57 @@ stripe.api_key = env.str('STRIPE_SECRET_KEY')
 
 YOUR_DOMAIN = 'http://localhost:8000'
 
+class StripePublicKeys(APIView):
+    def get(self, request, *args, **kwargs):
+        keys = {
+            'publishableKey': os.getenv('STRIPE_PUBLISHABLE_KEY'),
+            'basicPrice': os.getenv('BASIC_PRICE_ID'),
+            'proPrice': os.getenv('PRO_PRICE_ID')
+        }
+        return Response(status=status.HTTP_200_OK, data=keys)
+
 
 class StripeCheckoutView(APIView):
     def post(self, request):
+        price = request.form.get('priceId')
+        domain_url = os.getenv('DOMAIN')
+
+        try:
+            # Create new Checkout Session for the order
+            # Other optional params include:
+            # [billing_address_collection] - to display billing address details on the page
+            # [customer] - if you have an existing Stripe Customer ID
+            # [customer_email] - lets you prefill the email input in the form
+            # [automatic_tax] - to automatically calculate sales tax, VAT and GST in the checkout page
+            # For full details see https://stripe.com/docs/api/checkout/sessions/create
+
+            # ?session_id={CHECKOUT_SESSION_ID} means the redirect will have the session ID set as a query param
+            checkout_session = stripe.checkout.Session.create(
+                success_url=domain_url + '/success.html?session_id={CHECKOUT_SESSION_ID}',
+                cancel_url=domain_url + '/canceled.html',
+                mode='subscription',
+                # automatic_tax={'enabled': True},
+                line_items=[{
+                    'price': price,
+                    'quantity': 1
+                }],
+            )
+            return redirect(checkout_session.url, code=303)
+        except Exception as e:
+            return Response(status=status.HTTP_400_BAD_REQUEST, data={'error': {'message': str(e)}})
+
+
+
+
+
+
+
+
+
+
+
+
+
         try:
             prices = stripe.Price.list(
                 lookup_keys=[request.form['lookup_key']],
@@ -66,25 +116,15 @@ class StripeCheckoutView(APIView):
 #     return redirect(portalSession.url, code=303)
 #
 
-class CustomParser(BaseParser):
-    """
-    Parses JSON-serialized data.
-    """
-    # media_type = 'application/json'
-
-    def parse(self, stream, media_type=None, parser_context=None):
-        return stream
-
-
 @authentication_classes([])
 @permission_classes([])
 class StripeWebhookReceivedView(APIView):
-    # parser_classes = (CustomParser,)
+    parser_classes = (FileUploadParser,)
 
     def post(self, request):
         endpoint_secret = env.str('STRIPE_WEBHOOK_SECRET')
         event = None
-        payload = request.data
+        payload = request.stream.body
 
         sig_header = request.headers['STRIPE_SIGNATURE']
 
@@ -102,7 +142,7 @@ class StripeWebhookReceivedView(APIView):
         # Handle the event
         if event['type'] == 'payment_intent.succeeded':
             payment_intent = event['data']['object']
-        # ... handle other event types
+            print(payment_intent)
         else:
             print('Unhandled event type {}'.format(event['type']))
 
