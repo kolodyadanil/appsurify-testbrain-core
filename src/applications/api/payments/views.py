@@ -1,6 +1,6 @@
 import codecs
 import os
-
+from django.views.generic.base import TemplateView
 from rest_framework.utils import json
 
 from django.conf import settings
@@ -10,6 +10,7 @@ from rest_framework.parsers import JSONParser, BaseParser, FormParser, FileUploa
 from rest_framework.settings import api_settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
+
 from rest_framework.exceptions import ParseError
 from rest_framework import status, renderers
 from django.shortcuts import redirect
@@ -20,18 +21,20 @@ stripe.api_key = env.str('STRIPE_SECRET_KEY')
 
 YOUR_DOMAIN = 'http://localhost:8000'
 
+
 class StripePublicKeys(APIView):
     def get(self, request, *args, **kwargs):
         keys = {
             'publishableKey': os.getenv('STRIPE_PUBLISHABLE_KEY'),
-            'basicPrice': os.getenv('STRIPE_PRICE_ID')
+            'productPrice': os.getenv('STRIPE_PRICE_ID')
         }
         return Response(status=status.HTTP_200_OK, data=keys)
 
 
 class StripeCheckoutView(APIView):
     def post(self, request):
-        price = request.POST.get('priceId')
+        price = request.POST.get('productPrice')
+        customerEmail = request.POST.get('customerEmail')
         domain_url = os.getenv('DOMAIN')
 
         try:
@@ -49,6 +52,7 @@ class StripeCheckoutView(APIView):
                 cancel_url=domain_url + '/canceled.html',
                 mode='subscription',
                 # automatic_tax={'enabled': True},
+                customer_email=customerEmail,
                 line_items=[{
                     'price': price,
                     'quantity': 1
@@ -59,24 +63,13 @@ class StripeCheckoutView(APIView):
             return Response(status=status.HTTP_400_BAD_REQUEST, data={'error': {'message': str(e)}})
 
 
+class StripeCheckoutSession(APIView):
+    # Fetch the Checkout Session to display the JSON result on the success pag    @app.route('/checkout-session', methods=['GET'])
+    def get(self, request, *args, **kwargs):
+        id = request.args.get('sessionId')
+        checkout_session = stripe.checkout.Session.retrieve(id)
+        return Response(status=status.HTTP_200_OK, data=checkout_session)
 
-# @app.route('/create-portal-session', methods=['POST'])
-# def customer_portal():
-#     # For demonstration purposes, we're using the Checkout session to retrieve the customer ID.
-#     # Typically this is stored alongside the authenticated user in your database.
-#     checkout_session_id = request.POST.get('session_id')
-#     checkout_session = stripe.checkout.Session.retrieve(checkout_session_id)
-#
-#     # This is the URL to which the customer will be redirected after they are
-#     # done managing their billing with the portal.
-#     return_url = YOUR_DOMAIN
-#
-#     portalSession = stripe.billing_portal.Session.create(
-#         customer=checkout_session.customer,
-#         return_url=return_url,
-#     )
-#     return redirect(portalSession.url, code=303)
-#
 
 @authentication_classes([])
 @permission_classes([])
@@ -102,9 +95,9 @@ class StripeWebhookReceivedView(APIView):
             raise e
 
         # Handle the event
+        print(event['data']['object'])
         if event['type'] == 'payment_intent.succeeded':
             payment_intent = event['data']['object']
-            print(payment_intent)
         else:
             print('Unhandled event type {}'.format(event['type']))
 

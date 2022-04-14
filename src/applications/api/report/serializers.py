@@ -25,7 +25,6 @@ from applications.allauth.account.serializers import UserRelatedSerializer
 from applications.project.models import Project
 from applications.testing.models import *
 from applications.vcs.models import *
-
 from applications.api.project.serializers import ProjectRelatedSerializer
 from applications.api.testing.serializers import TestSuiteRelatedSerializer
 from applications.api.vcs.serializers import CommitRelatedSerializer
