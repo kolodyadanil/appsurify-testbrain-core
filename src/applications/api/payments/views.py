@@ -1,5 +1,7 @@
 import codecs
 import os
+
+from django.contrib.auth import get_user_model
 from django.views.generic.base import TemplateView
 from rest_framework.utils import json
 
@@ -14,6 +16,8 @@ from rest_framework.response import Response
 from rest_framework.exceptions import ParseError
 from rest_framework import status, renderers
 from django.shortcuts import redirect
+
+from applications.project.models import Project
 from system.env import env
 import stripe
 
@@ -33,8 +37,8 @@ class StripePublicKeys(APIView):
 
 class StripeCheckoutView(APIView):
     def post(self, request):
-        price = request.data['priceId']['productPrice']
-        customerEmail = request.data.get('userEmail')
+        price = request.data.get('productPrice')
+        customerEmail = request.data.get('customerEmail')
         domain_url = os.getenv('DOMAIN')
 
         try:
@@ -86,9 +90,16 @@ class StripeWebhookReceivedView(APIView):
             raise e
 
         # Handle the event
+
         print(event['data']['object'])
         if event['type'] == 'payment_intent.succeeded':
             payment_intent = event['data']['object']
+            user_email = payment_intent["charges"]["data"][0]["billing_details"]["email"]
+            User = get_user_model()
+            user = User.objects.filter(email=user_email)
+            # queryset = Project.objects.filter()
+        elif event['type'] == 'customer.subscription.created':
+            subscription = event['data']['object']
         else:
             print('Unhandled event type {}'.format(event['type']))
 
