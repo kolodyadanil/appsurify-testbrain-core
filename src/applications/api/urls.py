@@ -6,7 +6,6 @@ from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 import user_agents
 
-
 swagger_info = openapi.Info(
     title=str("TestBrain API"),
     default_version=str(""),
@@ -54,6 +53,7 @@ urlpatterns = [
     url(r'^cli/', include('applications.api.cli.urls')),
     url(r'^notification/', include('applications.api.notification.urls')),
     url(r'^report/', include('applications.api.report.urls')),
+    url(r'^payments/', include('applications.api.payments.urls')),
 
     url(r'^', include('applications.api.project.urls')),
     url(r'^', include('applications.api.testing.urls')),
@@ -66,5 +66,3 @@ urlpatterns = [
     url(r'^', include('applications.api.user_role.urls')),
 
 ]
-
-

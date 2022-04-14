@@ -62,6 +62,7 @@ class AbstractProject(six.with_metaclass(ProjMeta, SharedBaseModel, AbstractBase
     slug = SlugField(max_length=200, blank=False, editable=True,
                      populate_from='name', unique=True,
                      help_text=_("The name in all lowercase, suitable for URL identification"))
+    subscription_paid_until = models.IntegerField(default=None, blank=True, null=True)
 
     class Meta(AbstractBaseProject.Meta):
         abstract = True

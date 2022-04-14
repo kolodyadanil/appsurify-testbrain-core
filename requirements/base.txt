@@ -51,3 +51,4 @@ catboost
 psutil
 pid
 dask
+stripe

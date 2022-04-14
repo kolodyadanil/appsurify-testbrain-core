@@ -78,6 +78,7 @@ LOCAL_APPS = [
     "applications.integration.jira",
     "applications.api",
     "applications.api.user_role",
+    # "applications.api.payments",
     # "applications.license",
 
 ]
