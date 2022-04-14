@@ -24,15 +24,14 @@ class StripePublicKeys(APIView):
     def get(self, request, *args, **kwargs):
         keys = {
             'publishableKey': os.getenv('STRIPE_PUBLISHABLE_KEY'),
-            'basicPrice': os.getenv('BASIC_PRICE_ID'),
-            'proPrice': os.getenv('PRO_PRICE_ID')
+            'basicPrice': os.getenv('STRIPE_PRICE_ID')
         }
         return Response(status=status.HTTP_200_OK, data=keys)
 
 
 class StripeCheckoutView(APIView):
     def post(self, request):
-        price = request.form.get('priceId')
+        price = request.POST.get('priceId')
         domain_url = os.getenv('DOMAIN')
 
         try:
@@ -61,48 +60,11 @@ class StripeCheckoutView(APIView):
 
 
 
-
-
-
-
-
-
-
-
-
-
-        try:
-            prices = stripe.Price.list(
-                lookup_keys=[request.form['lookup_key']],
-                expand=['data.product']
-            )
-
-            checkout_session = stripe.checkout.Session.create(
-                line_items=[
-                    {
-                        'price': prices.data[0].id,
-                        'quantity': 1,
-                    },
-                ],
-                mode='subscription',
-                success_url=YOUR_DOMAIN +
-                            '?success=true&session_id={CHECKOUT_SESSION_ID}',
-                cancel_url=YOUR_DOMAIN + '?canceled=true',
-            )
-            return redirect(checkout_session.url)
-        except Exception as e:
-            print(e)
-            return Response(
-                {'error': 'Something went wrong when creating stripe checkout session'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-
 # @app.route('/create-portal-session', methods=['POST'])
 # def customer_portal():
 #     # For demonstration purposes, we're using the Checkout session to retrieve the customer ID.
 #     # Typically this is stored alongside the authenticated user in your database.
-#     checkout_session_id = request.form.get('session_id')
+#     checkout_session_id = request.POST.get('session_id')
 #     checkout_session = stripe.checkout.Session.retrieve(checkout_session_id)
 #
 #     # This is the URL to which the customer will be redirected after they are
