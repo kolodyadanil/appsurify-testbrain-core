@@ -256,10 +256,6 @@ class ProjectStatus(str, Enum):
 project_status_choices = [e.value for e in ProjectStatus]
 
 
-class ProjectPaidStatus(serializers.Serializer):
-    is_paid = serializers.IntegerField()
-
-
 class ProjectSetupStatusSerializer(serializers.Serializer):
     repo_bind = serializers.ChoiceField(choices=project_status_choices)
     test_bind = serializers.ChoiceField(choices=project_status_choices)
@@ -283,7 +279,7 @@ class ProjectSummarySerializer(BaseProjectSerializer):
 
     class Meta(object):
         model = Project
-        fields = ('id', 'name', 'setup_status', 'maturity', "stats", "is_paid")
+        fields = ('id', 'name', 'setup_status', 'maturity', "stats")
 
     @swagger_serializer_method(serializer_or_field=serializers.FloatField)
     def get_maturity(self, project):
@@ -385,12 +381,3 @@ class ProjectSummarySerializer(BaseProjectSerializer):
     setup_status = serializers.SerializerMethodField()
     maturity = serializers.SerializerMethodField()
     stats = serializers.SerializerMethodField()
-    is_paid = serializers.SerializerMethodField()
-
-    @swagger_serializer_method(serializer_or_field=ProjectPaidStatus)
-    def get_is_paid(self, project):
-        if project.subscription_paid_until and time.time() < project.subscription_paid_until:
-            is_paid = True
-        else:
-            is_paid = False
-        return is_paid
