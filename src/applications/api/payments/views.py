@@ -1,25 +1,19 @@
-import codecs
+import datetime
 import os
+import time
 
-from django.contrib.auth import get_user_model
-from django.views.generic.base import TemplateView
-from rest_framework.utils import json
-
-from django.conf import settings
-from django.views.decorators.csrf import csrf_exempt
-from rest_framework.decorators import authentication_classes, permission_classes
-from rest_framework.parsers import JSONParser, BaseParser, FormParser, FileUploadParser
-from rest_framework.settings import api_settings
-from rest_framework.views import APIView
-from rest_framework.response import Response
-
-from rest_framework.exceptions import ParseError
-from rest_framework import status, renderers
-from django.shortcuts import redirect
-
-from applications.project.models import Project
-from system.env import env
 import stripe
+from dateutil.relativedelta import relativedelta
+from django.contrib.auth import get_user_model
+from django.shortcuts import redirect
+from rest_framework import status
+from rest_framework.decorators import authentication_classes, permission_classes
+from rest_framework.parsers import FileUploadParser
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from applications.organization.models import Organization
+from system.env import env
 
 stripe.api_key = env.str('STRIPE_SECRET_KEY')
 
@@ -37,16 +31,16 @@ class StripePublicKeys(APIView):
 
 class StripeCheckoutView(APIView):
     def post(self, request):
-        price = request.data.get('productPrice')
-        customerEmail = request.data.get('customerEmail')
-        domain_url = os.getenv('DOMAIN')
+        price = request.data.get('priceId').get('productPrice')
+        customerEmail = request.data.get('userEmail')
+        # TODO: for testing, delete when we set 'DOMAIN' in .env
+        domain_url = os.getenv('DOMAIN') or "https://appsurify.dev.appsurify.com"
 
         try:
             checkout_session = stripe.checkout.Session.create(
                 success_url=domain_url + '/success',
                 cancel_url=domain_url + '/canceled',
                 mode='subscription',
-                # automatic_tax={'enabled': True},
                 customer_email=customerEmail,
                 line_items=[{
                     'price': price,
@@ -91,13 +85,18 @@ class StripeWebhookReceivedView(APIView):
 
         # Handle the event
 
-        print(event['data']['object'])
         if event['type'] == 'payment_intent.succeeded':
             payment_intent = event['data']['object']
             user_email = payment_intent["charges"]["data"][0]["billing_details"]["email"]
-            User = get_user_model()
-            user = User.objects.filter(email=user_email)
-            # queryset = Project.objects.filter()
+            organizations = Organization.objects.all()
+            if os.getenv('STRIPE_PRICE_ID'):
+                for organization in organizations:
+                    if organization.users.filter(email=user_email):
+                        organization.subscription_paid_until = int(
+                            time.mktime((datetime.datetime.today() + relativedelta(months=1)).timetuple()))
+                        organization.save()
+
+
         elif event['type'] == 'customer.subscription.created':
             subscription = event['data']['object']
         else:
