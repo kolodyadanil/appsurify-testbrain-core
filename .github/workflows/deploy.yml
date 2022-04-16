@@ -56,7 +56,6 @@ jobs:
       - run: |
           cd tools/azure/aks/dev/
           kubectl apply -f ./configmaps/testbrain-common-environment-configmap.yaml
-#         kubectl apply -f ./configmaps/testbrain-common-environment-configmap.yaml
           kubectl rollout restart  -f ./statefulsets/testbrain-django-api-statefulset.yaml
           kubectl rollout restart  -f ./statefulsets/testbrain-celery-beat-statefulset.yaml
           kubectl rollout restart  -f ./statefulsets/testbrain-celery-flower-statefulset.yaml
