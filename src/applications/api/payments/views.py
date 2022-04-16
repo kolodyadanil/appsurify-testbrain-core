@@ -95,11 +95,8 @@ class StripeWebhookReceivedView(APIView):
                         organization.subscription_paid_until = int(
                             time.mktime((datetime.datetime.today() + relativedelta(months=1)).timetuple()))
                         organization.save()
-
-
         elif event['type'] == 'customer.subscription.created':
             subscription = event['data']['object']
         else:
             print('Unhandled event type {}'.format(event['type']))
-
         return Response(status=status.HTTP_200_OK, data={"success": True})
