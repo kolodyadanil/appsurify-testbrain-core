@@ -6,7 +6,8 @@ import pickle
 import hashlib
 import pandas as pd
 import numpy as np
-from catboost import CatBoostClassifier, sum_models
+from imblearn.over_sampling import RandomOverSampler
+from catboost import CatBoostClassifier
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.model_selection import cross_val_score
 
@@ -115,11 +116,12 @@ class MLTrainer(MLHolder):
         ('test_names', 'test_name'),
         ('commit_areas', 'commit_area'),
         ('commit_files', 'commit_file'),
-        ('defect_closed_by_caused_by_commits_files', 'defect_closed_by_caused_by_commits_file'),
-        ('defect_closed_by_caused_by_commits_areas', 'defect_closed_by_caused_by_commits_area'),
-        ('defect_closed_by_caused_by_commits_dependent_areas', 'defect_closed_by_caused_by_commits_dependent_area'),
+        ('defect_caused_by_commits_files', 'defect_caused_by_commits_file'),
+        ('defect_caused_by_commits_areas', 'defect_caused_by_commits_area'),
+        ('defect_caused_by_commits_dependent_areas', 'defect_caused_by_commits_dependent_area'),
         ('defect_closed_by_caused_by_intersection_files', 'defect_closed_by_caused_by_intersection_file'),
         ('defect_closed_by_caused_by_intersection_areas', 'defect_closed_by_caused_by_intersection_area'),
+        ('defect_caused_by_commits_folders', 'defect_caused_by_commits_folders'),
     ]
 
     def __init__(self, test_suite_id, **kwargs):
@@ -170,13 +172,17 @@ class MLTrainer(MLHolder):
 
             df = pd.read_csv(dataset_file, quoting=2)
 
-            if len(df.index) == 0:
+            if len(df.index) < 10:
                 print('Empty dataset for this TestSuite id: "{}" {}'.format(self.test_suite_id, str(dataset_file)))
                 continue
 
             if len(df.columns) < 5:
                 print('Small dataset for this TestSuite id: "{}" {}'.format(self.test_suite_id, str(dataset_file)))
                 continue
+
+            # Keep only allowed columns
+            allowed_columns = [column for (column, _) in self.encode_columns] + ['test_changed']
+            df = df[allowed_columns]
 
             for column_name, new_columns_prefix in self.encode_columns:
                 df[column_name] = df[column_name].apply(parse_list_entry)
@@ -193,23 +199,40 @@ class MLTrainer(MLHolder):
             y = df['test_changed'].values
             x = df.drop('test_changed', axis=1).values
 
+            # Add resampling
+            sm = RandomOverSampler(random_state=0)
+            x_res, y_res = sm.fit_resample(x, y)
+
             if is_init:
                 is_init = False
-                clf.fit(x, y)
+                clf.fit(x_res, y_res)
             else:
-                clf.fit(x, y, init_model=f"{self.model_filepath}.init.cbm")
+
+                # For local test only
+                validation_model = CatBoostClassifier()
+                validation_model.load_model(f"{self.model_filepath}.init.cbm")
+                cv = 5
+                print('CV recall', cross_val_score(validation_model, x_res, y_res, cv=cv,
+                                                   scoring='recall', fit_params=dict(verbose=False),
+                                                   error_score="raise"))
+                print('CV accuracy', cross_val_score(validation_model, x_res, y_res, cv=cv,
+                                                     scoring='balanced_accuracy', fit_params=dict(verbose=False),
+                                                     error_score="raise"))
+
+                # Improve fit
+                clf.fit(x_res, y_res, init_model=f"{self.model_filepath}.init.cbm")
 
             clf.save_model(f"{self.model_filepath}.init.cbm")
 
-            _x = x
-            _y = y
+            _x = x_res
+            _y = y_res
 
         self.model.classifier = clf
 
         if self.auto_save:
             self.save()
 
-        # For test only
+        # For global test only
         # cv = 5
         # print(cross_val_score(self.model.classifier, _x, _y, cv=cv, scoring='recall'))
         # print(cross_val_score(self.model.classifier, _x, _y, cv=cv))

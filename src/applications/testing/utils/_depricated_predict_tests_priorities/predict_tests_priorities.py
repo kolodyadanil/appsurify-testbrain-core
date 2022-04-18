@@ -49,11 +49,12 @@ class TestPriorityMLModel(object):
         self.test_names_binarizer = MultiLabelBinarizer()
         self.commit_areas_binarizer = MultiLabelBinarizer()
         self.commit_files_binarizer = MultiLabelBinarizer()
-        self.defect_closed_by_caused_by_commits_files_binarizer = MultiLabelBinarizer()
-        self.defect_closed_by_caused_by_commits_areas_binarizer = MultiLabelBinarizer()
-        self.defect_closed_by_caused_by_commits_dependent_areas_binarizer = MultiLabelBinarizer()
+        self.defect_caused_by_commits_files_binarizer = MultiLabelBinarizer()
+        self.defect_caused_by_commits_areas_binarizer = MultiLabelBinarizer()
+        self.defect_caused_by_commits_dependent_areas_binarizer = MultiLabelBinarizer()
         self.defect_closed_by_caused_by_intersection_files_binarizer = MultiLabelBinarizer()
         self.defect_closed_by_caused_by_intersection_areas_binarizer = MultiLabelBinarizer()
+        self.defect_caused_by_commits_folders_binarizer = MultiLabelBinarizer()
 
         self.classifier = None
 
@@ -97,11 +98,12 @@ class MLTrainer(MLHolder):
         ('test_names', 'test_name'),
         ('commit_areas', 'commit_area'),
         ('commit_files', 'commit_file'),
-        ('defect_closed_by_caused_by_commits_files', 'defect_closed_by_caused_by_commits_file'),
-        ('defect_closed_by_caused_by_commits_areas', 'defect_closed_by_caused_by_commits_area'),
-        ('defect_closed_by_caused_by_commits_dependent_areas', 'defect_closed_by_caused_by_commits_dependent_area'),
+        ('defect_caused_by_commits_files', 'defect_caused_by_commits_file'),
+        ('defect_caused_by_commits_areas', 'defect_caused_by_commits_area'),
+        ('defect_caused_by_commits_dependent_areas', 'defect_caused_by_commits_dependent_area'),
         ('defect_closed_by_caused_by_intersection_files', 'defect_closed_by_caused_by_intersection_file'),
         ('defect_closed_by_caused_by_intersection_areas', 'defect_closed_by_caused_by_intersection_area'),
+        ('defect_caused_by_commits_folders', 'defect_caused_by_commits_folders'),
     ]
 
     def __init__(self, test_suite_id, **kwargs):
@@ -184,21 +186,22 @@ class MLPredictor(MLHolder):
     }
 
     decode_columns = [
-        ('test_names', 'test_names'),
-        ('test_classes_names', 'test_classes_names'),
         ('test_areas', 'test_areas'),
-        ('test_associated_areas', 'test_associated_areas'),
-        ('test_associated_files', 'test_associated_files'),
-        ('test_dependent_areas', 'test_dependent_areas'),
-        ('test_similarnamed', 'test_similarnamed'),
-        ('test_area_similarnamed', 'test_area_similarnamed'),
-        ('commit_areas', 'commit_areas'),
-        ('commit_files', 'commit_files'),
-        ('defect_closed_by_caused_by_commits_files', 'defect_closed_by_caused_by_commits_files'),
-        ('defect_closed_by_caused_by_commits_areas', 'defect_closed_by_caused_by_commits_areas'),
-        ('defect_closed_by_caused_by_commits_dependent_areas', 'defect_closed_by_caused_by_commits_dependent_areas'),
-        ('defect_closed_by_caused_by_intersection_files', 'defect_closed_by_caused_by_intersection_files'),
-        ('defect_closed_by_caused_by_intersection_areas', 'defect_closed_by_caused_by_intersection_areas'),
+        ('test_associated_areas', 'test_associated_area'),
+        ('test_associated_files', 'test_associated_file'),
+        ('test_dependent_areas', 'test_dependent_area'),
+        ('test_similarnamed', 'test_similarnamed_file'),
+        ('test_area_similarnamed', 'test_area_similarnamed_file'),
+        ('test_classes_names', 'test_classes_name'),
+        ('test_names', 'test_name'),
+        ('commit_areas', 'commit_area'),
+        ('commit_files', 'commit_file'),
+        ('defect_caused_by_commits_files', 'defect_caused_by_commits_file'),
+        ('defect_caused_by_commits_areas', 'defect_caused_by_commits_area'),
+        ('defect_caused_by_commits_dependent_areas', 'defect_caused_by_commits_dependent_area'),
+        ('defect_closed_by_caused_by_intersection_files', 'defect_closed_by_caused_by_intersection_file'),
+        ('defect_closed_by_caused_by_intersection_areas', 'defect_closed_by_caused_by_intersection_area'),
+        ('defect_caused_by_commits_folders', 'defect_caused_by_commits_folders'),
     ]
 
     def __init__(self, test_suite_id, **kwargs):

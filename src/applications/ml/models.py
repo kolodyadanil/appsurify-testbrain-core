@@ -80,7 +80,7 @@ class MLModel(models.Model):
     def dataset_path(self):
         project = self.test_suite.project
         organization = project.organization
-        directory = pathlib.PosixPath(settings.STORAGE_ROOT) / "ml" / "datasets" / \
+        directory = pathlib.PosixPath("/mnt/testbrain-data") / "ml" / "datasets" / \
                     str(organization.id) / str(project.id) / str(self.test_suite_id)
         return directory
 
