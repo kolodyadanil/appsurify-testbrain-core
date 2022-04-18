@@ -31,10 +31,8 @@ class StripePublicKeys(APIView):
 
 class StripeCheckoutView(APIView):
     def post(self, request):
-        # price = request.data.get('priceId').get('productPrice')
-        # customerEmail = request.data.get('userEmail')
-        price = request.POST['productPrice']
-        customerEmail = request.POST['customerEmail']
+        price = request.data['productPrice']
+        customerEmail = request.data['customerEmail']
         # TODO: for testing, delete when we set 'DOMAIN' in .env
         domain_url = os.getenv('DOMAIN') or "https://appsurify.dev.appsurify.com"
 
