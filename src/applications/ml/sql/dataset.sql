@@ -63,7 +63,35 @@ ttrr_grp AS (
                INNER JOIN vcs_filechange vf ON (vcs_file.id = vf.file_id)
                INNER JOIN testing_defect_caused_by_commits tdcabc ON (tdcabc.commit_id = vf.commit_id)
            WHERE tdcabc.defect_id = ttrr.td_id
-           ), NULL) AS defect_closed_by_caused_by_intersection_files
+           ), NULL) AS defect_closed_by_caused_by_intersection_files,
+    array_remove(array(
+           SELECT DISTINCT normalize_filepath_string(full_trim(unnest(string_to_array(rtrim(vcs_file.full_filename, vcs_file.filename), '/'))))
+           FROM vcs_file
+               INNER JOIN vcs_filechange vf ON (vcs_file.id = vf.file_id)
+               INNER JOIN testing_defect_closed_by_commits tdclbc ON (tdclbc.commit_id = vf.commit_id)
+           WHERE tdclbc.defect_id = ttrr.td_id
+           INTERSECT
+           SELECT DISTINCT normalize_filepath_string(full_trim(unnest(string_to_array(rtrim(vcs_file.full_filename, vcs_file.filename), '/'))))
+           FROM vcs_file
+               INNER JOIN vcs_filechange vf ON (vcs_file.id = vf.file_id)
+               INNER JOIN testing_defect_caused_by_commits tdcabc ON (tdcabc.commit_id = vf.commit_id)
+           WHERE tdcabc.defect_id = ttrr.td_id
+           ), NULL) AS defect_closed_by_caused_by_intersection_folders,
+    array_remove(array(
+           SELECT DISTINCT normalize_filepath_string(full_trim(va6.name))
+           FROM testing_defect_closed_by_commits tdclbc
+			   INNER JOIN vcs_commit_areas vca6 on tdclbc.commit_id = vca6.commit_id
+               INNER JOIN vcs_area_dependencies vad6 on vca6.area_id = vad6.from_area_id
+               INNER JOIN vcs_area va6 on va6.id = vad6.to_area_id
+           WHERE tdclbc.defect_id = ttrr.td_id
+           INTERSECT
+           SELECT DISTINCT normalize_filepath_string(full_trim(va6.name))
+           FROM testing_defect_caused_by_commits tdcabc
+			   INNER JOIN vcs_commit_areas vca6 on tdcabc.commit_id = vca6.commit_id
+               INNER JOIN vcs_area_dependencies vad6 on vca6.area_id = vad6.from_area_id
+               INNER JOIN vcs_area va6 on va6.id = vad6.to_area_id
+           WHERE tdcabc.defect_id = ttrr.td_id
+           ), NULL) AS defect_closed_by_caused_by_intersection_dependent_areas
 FROM ttrr
 LEFT JOIN LATERAL (SELECT defect_id, updated FROM testing_defect_caused_by_commits tdcabc WHERE ttrr.td_id = tdcabc.defect_id AND tdcabc.updated > (SELECT min_date FROM min_date) AND tdcabc.updated < (SELECT max_date FROM max_date)
 	UNION SELECT
@@ -171,24 +199,22 @@ GROUP BY tt.project_id,
 vc.sha,
 vc.rework,
 vc.riskiness),
-defect_closed_by_caused_by_commits_files AS (
+defect_caused_by_commits_files AS (
 SELECT tt.project_id,
 vc.sha,
 vc.rework,
 vc.riskiness,
-    array_remove(normalize_filepath_string(array_agg(DISTINCT vf3.full_filename)), NULL) AS defect_closed_by_caused_by_commits_files
+    array_remove(normalize_filepath_string(array_agg(DISTINCT vf3.full_filename)), NULL) AS defect_caused_by_commits_files
 FROM testing_testrunresult ttrr
 INNER JOIN vcs_commit vc on ttrr.commit_id = vc.id
 INNER JOIN testing_test tt on ttrr.test_id = tt.id
 INNER JOIN testing_defect td on ttrr.commit_id = td.created_by_commit_id and ttrr.test_run_id = td.created_by_test_run_id
-INNER JOIN LATERAL (SELECT commit_id, updated FROM testing_defect_caused_by_commits tdcabc WHERE td.id = tdcabc.defect_id
-	UNION SELECT
-	commit_id, updated FROM testing_defect_closed_by_commits tdclbc WHERE td.id = tdclbc.defect_id) tdc ON TRUE
-INNER JOIN vcs_filechange vfc3 on tdc.commit_id = vfc3.commit_id
+INNER JOIN testing_defect_caused_by_commits tdcabc ON td.id = tdcabc.defect_id
+INNER JOIN vcs_filechange vfc3 on tdcabc.commit_id = vfc3.commit_id
 INNER JOIN vcs_file vf3 on vf3.id = vfc3.file_id
 WHERE (ttrr.test_suite_id, ttrr.test_id) = (SELECT test_suite_id, test_id FROM test_suite_id)
 AND (
-tdc.updated > (SELECT min_date FROM min_date) AND tdc.updated < (SELECT max_date FROM max_date)
+tdcabc.updated > (SELECT min_date FROM min_date) AND tdcabc.updated < (SELECT max_date FROM max_date)
 OR vfc3.updated > (SELECT min_date FROM min_date) AND vfc3.updated < (SELECT max_date FROM max_date)
 OR vf3.updated > (SELECT min_date FROM min_date) AND vf3.updated < (SELECT max_date FROM max_date)
 )
@@ -196,23 +222,52 @@ GROUP BY tt.project_id,
 vc.sha,
 vc.rework,
 vc.riskiness),
-defect_closed_by_caused_by_commits_areas AS (
+defect_caused_by_commits_folders AS (
+SELECT t.project_id,
+	t.sha,
+	t.rework,
+	t.riskiness,
+  array_remove(normalize_filepath_string(array_agg(DISTINCT t.folder)), NULL) AS defect_caused_by_commits_folders
+FROM
+(
+	SELECT tt.project_id,
+	vc.sha,
+	vc.rework,
+	vc.riskiness,
+	unnest(string_to_array(rtrim(vf3.full_filename, vf3.filename), '/')) AS folder
+	FROM testing_testrunresult ttrr
+	INNER JOIN vcs_commit vc on ttrr.commit_id = vc.id
+	INNER JOIN testing_test tt on ttrr.test_id = tt.id
+	INNER JOIN testing_defect td on ttrr.commit_id = td.created_by_commit_id and ttrr.test_run_id = td.created_by_test_run_id
+	INNER JOIN testing_defect_caused_by_commits tdcabc ON td.id = tdcabc.defect_id
+	INNER JOIN vcs_filechange vfc3 on tdcabc.commit_id = vfc3.commit_id
+	INNER JOIN vcs_file vf3 on vf3.id = vfc3.file_id
+	WHERE (ttrr.test_suite_id, ttrr.test_id) = (SELECT test_suite_id, test_id FROM test_suite_id)
+	AND (
+	tdcabc.updated > (SELECT min_date FROM min_date) AND tdcabc.updated < (SELECT max_date FROM max_date)
+	OR vfc3.updated > (SELECT min_date FROM min_date) AND vfc3.updated < (SELECT max_date FROM max_date)
+	OR vf3.updated > (SELECT min_date FROM min_date) AND vf3.updated < (SELECT max_date FROM max_date)
+	)
+) t
+GROUP BY t.project_id,
+t.sha,
+t.rework,
+t.riskiness),
+defect_caused_by_commits_areas AS (
 SELECT tt.project_id,
 vc.sha,
 vc.rework,
 vc.riskiness,
-    array_remove(array_agg(DISTINCT lower(va5.name)), NULL) AS defect_closed_by_caused_by_commits_areas
+    array_remove(array_agg(DISTINCT lower(va5.name)), NULL) AS defect_caused_by_commits_areas
 FROM testing_testrunresult ttrr
 INNER JOIN vcs_commit vc on ttrr.commit_id = vc.id
 INNER JOIN testing_test tt on ttrr.test_id = tt.id
 INNER JOIN testing_defect td on ttrr.commit_id = td.created_by_commit_id and ttrr.test_run_id = td.created_by_test_run_id
-INNER JOIN LATERAL (SELECT commit_id, updated FROM testing_defect_caused_by_commits tdcabc WHERE td.id = tdcabc.defect_id
-	UNION SELECT
-	commit_id, updated FROM testing_defect_closed_by_commits tdclbc WHERE td.id = tdclbc.defect_id) tdc ON TRUE
-INNER JOIN vcs_commit_areas vca5 on tdc.commit_id = vca5.commit_id
+INNER JOIN testing_defect_caused_by_commits tdcabc ON td.id = tdcabc.defect_id
+INNER JOIN vcs_commit_areas vca5 on tdcabc.commit_id = vca5.commit_id
 INNER JOIN vcs_area va5 on vca5.area_id = va5.id
 WHERE (ttrr.test_suite_id, ttrr.test_id) = (SELECT test_suite_id, test_id FROM test_suite_id)
-AND (tdc.updated > (SELECT min_date FROM min_date) AND tdc.updated < (SELECT max_date FROM max_date)
+AND (tdcabc.updated > (SELECT min_date FROM min_date) AND tdcabc.updated < (SELECT max_date FROM max_date)
 OR vca5.updated > (SELECT min_date FROM min_date) AND vca5.updated < (SELECT max_date FROM max_date)
 OR va5.updated > (SELECT min_date FROM min_date) AND va5.updated < (SELECT max_date FROM max_date)
 )
@@ -220,25 +275,23 @@ GROUP BY tt.project_id,
 vc.sha,
 vc.rework,
 vc.riskiness),
-defect_closed_by_caused_by_commits_dependent_areas AS (
+defect_caused_by_commits_dependent_areas AS (
 SELECT tt.project_id,
 vc.sha,
 vc.rework,
 vc.riskiness,
-    array_remove(array_agg(DISTINCT lower(va6.name)), NULL) AS defect_closed_by_caused_by_commits_dependent_areas
+    array_remove(array_agg(DISTINCT lower(va6.name)), NULL) AS defect_caused_by_commits_dependent_areas
 FROM testing_testrunresult ttrr
 INNER JOIN vcs_commit vc on ttrr.commit_id = vc.id
 INNER JOIN testing_test tt on ttrr.test_id = tt.id
 INNER JOIN testing_defect td on ttrr.commit_id = td.created_by_commit_id and ttrr.test_run_id = td.created_by_test_run_id
-INNER JOIN LATERAL (SELECT commit_id, updated FROM testing_defect_caused_by_commits tdcabc WHERE td.id = tdcabc.defect_id
-	UNION SELECT
-	commit_id, updated FROM testing_defect_closed_by_commits tdclbc WHERE td.id = tdclbc.defect_id) tdc ON TRUE
-INNER JOIN vcs_commit_areas vca6 on tdc.commit_id = vca6.commit_id
+INNER JOIN testing_defect_caused_by_commits tdcabc ON td.id = tdcabc.defect_id
+INNER JOIN vcs_commit_areas vca6 on tdcabc.commit_id = vca6.commit_id
 INNER JOIN vcs_area_dependencies vad6 on vca6.area_id = vad6.from_area_id
 INNER JOIN vcs_area va6 on va6.id = vad6.to_area_id
 WHERE (ttrr.test_suite_id, ttrr.test_id) = (SELECT test_suite_id, test_id FROM test_suite_id)
 AND (
-tdc.updated > (SELECT min_date FROM min_date) AND tdc.updated < (SELECT max_date FROM max_date)
+tdcabc.updated > (SELECT min_date FROM min_date) AND tdcabc.updated < (SELECT max_date FROM max_date)
 OR vca6.updated > (SELECT min_date FROM min_date) AND vca6.updated < (SELECT max_date FROM max_date)
 OR vad6.updated > (SELECT min_date FROM min_date) AND vad6.updated < (SELECT max_date FROM max_date)
 OR va6.updated > (SELECT min_date FROM min_date) AND va6.updated < (SELECT max_date FROM max_date)
@@ -261,11 +314,14 @@ ttrr.rework AS commit_rework,
 ttrr.riskiness::numeric::integer * 100 AS commit_riskiness,
 ca.commit_areas,
 cf.commit_files,
-dccf.defect_closed_by_caused_by_commits_files,
-dcca.defect_closed_by_caused_by_commits_areas,
-dccda.defect_closed_by_caused_by_commits_dependent_areas,
+dccf.defect_caused_by_commits_files,
+dcca.defect_caused_by_commits_areas,
+dccda.defect_caused_by_commits_dependent_areas,
 ttrr.defect_closed_by_caused_by_intersection_areas,
-ttrr.defect_closed_by_caused_by_intersection_files
+ttrr.defect_closed_by_caused_by_intersection_files,
+ttrr.defect_closed_by_caused_by_intersection_folders,
+ttrr.defect_closed_by_caused_by_intersection_dependent_areas,
+dccfld.defect_caused_by_commits_folders
 FROM ttrr_grp ttrr
 FULL OUTER JOIN test_area_similarnamed tasn ON ttrr.project_id = tasn.project_id
 FULL OUTER JOIN test_associated_areas taa ON ttrr.project_id = taa.project_id
@@ -288,15 +344,19 @@ FULL OUTER JOIN commit_files cf ON ttrr.project_id = cf.project_id
 	and ttrr.sha = cf.sha
 	and ttrr.rework = cf.rework
 	and ttrr.riskiness = cf.riskiness
-FULL OUTER JOIN defect_closed_by_caused_by_commits_files dccf ON ttrr.project_id = dccf.project_id
+FULL OUTER JOIN defect_caused_by_commits_files dccf ON ttrr.project_id = dccf.project_id
 	and ttrr.sha = dccf.sha
 	and ttrr.rework = dccf.rework
 	and ttrr.riskiness = dccf.riskiness
-FULL OUTER JOIN defect_closed_by_caused_by_commits_areas dcca ON ttrr.project_id = dcca.project_id
+FULL OUTER JOIN defect_caused_by_commits_areas dcca ON ttrr.project_id = dcca.project_id
 	and ttrr.sha = dcca.sha
 	and ttrr.rework = dcca.rework
 	and ttrr.riskiness = dcca.riskiness
-FULL OUTER JOIN defect_closed_by_caused_by_commits_dependent_areas dccda ON ttrr.project_id = dccda.project_id
+FULL OUTER JOIN defect_caused_by_commits_dependent_areas dccda ON ttrr.project_id = dccda.project_id
 	and ttrr.sha = dccda.sha
 	and ttrr.rework = dccda.rework
 	and ttrr.riskiness = dccda.riskiness
+FULL OUTER JOIN defect_caused_by_commits_folders dccfld ON ttrr.project_id = dccfld.project_id
+	and ttrr.sha = dccfld.sha
+	and ttrr.rework = dccfld.rework
+	and ttrr.riskiness = dccfld.riskiness
