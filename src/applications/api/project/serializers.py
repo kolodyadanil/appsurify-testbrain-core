@@ -262,6 +262,11 @@ class ProjectSetupStatusSerializer(serializers.Serializer):
     building_model = serializers.ChoiceField(choices=project_status_choices)
 
 
+class SubscriptionSerializer(serializers.Serializer):
+    paid_until = serializers.IntegerField()
+    active = serializers.BooleanField()
+
+
 class ProjectTestRunStats(serializers.Serializer):
     count = serializers.IntegerField()
     failed = serializers.IntegerField()
@@ -279,7 +284,7 @@ class ProjectSummarySerializer(BaseProjectSerializer):
 
     class Meta(object):
         model = Project
-        fields = ('id', 'name', 'setup_status', 'maturity', "stats")
+        fields = ('id', 'name', 'setup_status', 'maturity', "stats", "subscription")
 
     @swagger_serializer_method(serializer_or_field=serializers.FloatField)
     def get_maturity(self, project):
@@ -378,6 +383,14 @@ class ProjectSummarySerializer(BaseProjectSerializer):
             test_bind=test_bind,
             building_model=building_model)
 
+    @swagger_serializer_method(serializer_or_field=SubscriptionSerializer)
+    def get_subscription(self, project):
+        paid_until = project.organization.subscription_paid_until if project.organization.subscription_paid_until else 0
+        active = True if paid_until > int(time.time()) else False
+        subscription = dict({"paid_until": paid_until, "active": active})
+        return subscription
+
     setup_status = serializers.SerializerMethodField()
     maturity = serializers.SerializerMethodField()
     stats = serializers.SerializerMethodField()
+    subscription = serializers.SerializerMethodField()
