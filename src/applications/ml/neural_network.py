@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 import django
+import textdistance
 import pickle
 import hashlib
 import pandas as pd
@@ -18,6 +19,15 @@ from applications.ml.models import MLModel
 
 import warnings
 warnings.filterwarnings("ignore")
+
+
+def similarity(value1, value2):
+    value1 = value1.lower()
+    value2 = value2.lower()
+
+    return textdistance.damerau_levenshtein.normalized_similarity(value1, value2) +\
+        textdistance.sorensen_dice.normalized_similarity(value1, value2) +\
+        textdistance.lcsseq.normalized_similarity(value1, value2)
 
 
 def dictfetchall(cursor):
@@ -284,14 +294,16 @@ class MLPredictor(MLHolder):
     def _is_test_unassigned(self, prediction):
         return self._is_prediction_in_interval(prediction, self.UNASSIGNED_FLAG)
 
-    def _predict(self, row, probability=False):
+    def _predict_row(self, row, probability=False):
 
         iterables_for_concatenate = list()
 
         iterables_for_concatenate.append([[row.pop('commit_rework'), row.pop('commit_riskiness')]])
 
         for column_name, column_name_ml_prefix in self.decode_columns:
+            # TODO: Check keyword here
             row[column_name] = hash_value(row[column_name])
+
             binarizer = getattr(self.model, column_name_ml_prefix + '_binarizer')
 
             iterables_for_concatenate.append(
@@ -304,13 +316,23 @@ class MLPredictor(MLHolder):
             result = self.model.classifier.predict_proba(x)[0]
         else:
             result = self.model.classifier.predict(x)[0]
+
         return result
 
-    def _predict_tests_priority(self, test_queryset, commit_queryset):
-        tests_ids_by_priorities = {'h': set(), 'm': set(), 'l': set(), 'u': set()}
+    def get_test_prioritization(self, test_queryset, commit_queryset, params=None):
 
-        tests_ids = '{}'.format(', '.join(map(str, test_queryset.values_list('id', flat=True))))
-        commits_ids = '{}'.format(', '.join(map(str, commit_queryset.values_list('id', flat=True))))
+        if params is None:
+            params = {}
+
+        keyword = params.get("keyword", "")
+
+        result = {'h': set(), 'm': set(), 'l': set(), 'u': set()}
+
+        test_ids_str = ', '.join(map(str, test_queryset.values_list('id', flat=True)))
+        tests_ids = f"{test_ids_str}"
+
+        commits_ids_str = ', '.join(map(str, commit_queryset.values_list('id', flat=True)))
+        commits_ids = f"{commits_ids_str}"
 
         sql = self.sql_template.format(tests_ids=tests_ids, commits_ids=commits_ids)
 
@@ -318,33 +340,35 @@ class MLPredictor(MLHolder):
         df = pd.DataFrame(data)
 
         if df.empty is True:
-            tests_ids_by_priorities['u'] = [test_id for test_id in list(test_queryset.values_list('id', flat=True))]
-            return tests_ids_by_priorities
+            result['u'] = [test_id for test_id in list(test_queryset.values_list('id', flat=True))]
+        else:
+            for test_id in df['test_id'].unique():
+                for _, row in df[df['test_id'] == test_id].iterrows():
+                    test_on_commit_prediction = 0
+                    names = row['test_names']
+                    if keyword:
+                        ratio = similarity(keyword, names[0])
+                        if ratio >= 0.5:
+                            test_on_commit_prediction = 1
 
-        # df.dropna(axis=1, how='all', inplace=True)
+                    if test_on_commit_prediction != 1:
+                        test_on_commit_prediction = self._predict_row(row)
 
-        for test_id in df['test_id'].unique():
+                    result[self._get_flag_from_prediction_num(test_on_commit_prediction)].add(test_id)
 
-            max_prediction = 0
-
-            for _, row in df[df['test_id'] == test_id].iterrows():
-
-                test_on_commit_prediction = self._predict(row)
-                # if test_on_commit_prediction > max_prediction:
-                #     max_prediction = test_on_commit_prediction
-                #
-                #     if self._is_test_high(max_prediction) is True:
-                #         break
-                tests_ids_by_priorities[self._get_flag_from_prediction_num(max_prediction)].add(test_id)
-        return tests_ids_by_priorities
-
-    def get_test_prioritization(self, test_queryset, commit_queryset):
-        tests_by_priority = self._predict_tests_priority(test_queryset, commit_queryset)
-        result = {flag: Test.objects.filter(id__in=set(tests_ids)) for flag, tests_ids in tests_by_priority.items()}
+        result = {flag: Test.objects.filter(id__in=set(tests_ids)) for flag, tests_ids in result.items()}
         return result
 
-    def _predict_tests_priority_top_by_percent(self, test_queryset, commit_queryset):
-        tests_ids_by_priorities = list()
+    def get_test_prioritization_top_by_percent(self, test_queryset, commit_queryset, percent, params=None):
+
+        if params is None:
+            params = {}
+
+        keyword = params.get("keyword", "")
+
+        result = {'t': Test.objects.none()}
+
+        test_from_ml = list()
 
         tests_ids = '{}'.format(', '.join(map(str, test_queryset.values_list('id', flat=True))))
         commits_ids = '{}'.format(', '.join(map(str, commit_queryset.values_list('id', flat=True))))
@@ -355,37 +379,28 @@ class MLPredictor(MLHolder):
 
         if df.empty is True:
             for test_id in list(test_queryset.values_list('id', flat=True)):
-                tests_ids_by_priorities.append((0.0, test_id))
-            return tests_ids_by_priorities
+                test_from_ml.append((0.0, test_id))
+        else:
+            for test_id in df['test_id'].unique():
+                for _, row in df[df['test_id'] == test_id].iterrows():
+                    test_on_commit_prediction = 0
+                    names = row['test_names']
+                    if keyword:
+                        ratio = similarity(keyword, names[0])
+                        if ratio >= 0.5:
+                            test_on_commit_prediction = 1
 
-        # df.dropna(axis=1, how='all', inplace=True)
+                    if test_on_commit_prediction != 1:
+                        test_on_commit_prediction = self._predict_row(row)
 
-        for test_id in df['test_id'].unique():
-            max_prediction = 0
-            for _, row in df[df['test_id'] == test_id].iterrows():
-                test_on_commit_prediction = self._predict(row)
-                # if test_on_commit_prediction > max_prediction:
-                #     max_prediction = test_on_commit_prediction
-                #     if self._is_test_high(max_prediction) is True:
-                #         break
-                tests_ids_by_priorities.append((test_on_commit_prediction, test_id))
-        return tests_ids_by_priorities
+                    test_from_ml.append((test_on_commit_prediction, test_id))
 
-    def get_test_prioritization_top_by_percent(self, test_queryset, commit_queryset, percent):
-        result = Test.objects.none()
-
-        test_from_ml = self._predict_tests_priority_top_by_percent(test_queryset, commit_queryset)
         test_from_ml.sort(key=lambda x: x[0])
         test_from_ml_ids = list(set([x[1] for x in test_from_ml]))
 
         if len(test_from_ml) == 0:
             return result
 
-        # test_count = test_queryset.distinct('id').count()
-        # if test_count < 10:
-        #     test_count = test_count * 10
-        #
-        # count_by_percent = int((percent * test_count) / 100)
         count_by_percent = int((percent * len(test_from_ml)) / 100)
 
         test_from_ml_normal_filtered = list(filter(lambda x: x[0] > 0.3, test_from_ml))
@@ -401,6 +416,6 @@ class MLPredictor(MLHolder):
         else:
             test_ids = test_from_ml_ids[:count_by_percent]  # TODO: NEED REWORK. Maybe need get from original queryset.
 
-        result = Test.objects.filter(id__in=test_ids)
+        result['t'] = Test.objects.filter(id__in=test_ids).distinct('name')
 
-        return result.distinct('name')
+        return result

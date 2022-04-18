@@ -136,6 +136,8 @@ class ExternalAPIViewSet(MultiSerializerViewSetMixin, viewsets.GenericViewSet):
         day = serializers.CharField(required=False)
         time = serializers.CharField(required=False)
 
+        keyword = serializers.CharField(required=False, default="")
+
         organization = serializers.ReadOnlyField()
 
         def _get_request(self):

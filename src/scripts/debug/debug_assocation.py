@@ -22,11 +22,11 @@ obj = Test.objects.get(id=90082)
 
 # New
 for test in Test.objects.filter(project_id=project_id).order_by('id'):
-    print "1\tTest: {}\nAreas: {}\nFiles: {}".format(test.name, test.associated_areas.count(),
-                                                     test.associated_files.count())
+    print("1\tTest: {}\nAreas: {}\nFiles: {}".format(test.name, test.associated_areas.count(),
+                                                     test.associated_files.count()))
     r = find_and_associate_areas(test)
     r2 = find_and_association_files(test)
-    print "2\tTest: {}\nAreas: {}\nFiles: {}".format(test.name, test.associated_areas.count(),
-                                                     test.associated_files.count())
+    print("2\tTest: {}\nAreas: {}\nFiles: {}".format(test.name, test.associated_areas.count(),
+                                                     test.associated_files.count()))
 
-    print "=" * 20
+    print("=" * 20)

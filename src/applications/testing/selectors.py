@@ -76,7 +76,7 @@ def prioritized_test_list(*, params=None):
             queryset = get_default_high_queryset(queryset, commit_list, params=params)
         else:
             if test_run_count >= TEST_RUNS_ML_USING_THRESHOLD:
-                queryset = ml_predictor.get_test_prioritization(queryset, commit_queryset)['h']
+                queryset = ml_predictor.get_test_prioritization(queryset, commit_queryset, params=params)['h']
                 queryset = queryset.distinct('name')
             else:
                 ml_prediction_results = ml_predictor.get_test_prioritization(queryset, commit_queryset)
@@ -92,7 +92,7 @@ def prioritized_test_list(*, params=None):
             queryset = get_default_medium_queryset(queryset, commit_list, params=params)
         else:
             if test_run_count >= TEST_RUNS_ML_USING_THRESHOLD:
-                queryset = ml_predictor.get_test_prioritization(queryset, commit_queryset)['m']
+                queryset = ml_predictor.get_test_prioritization(queryset, commit_queryset, params=params)['m']
                 queryset = queryset.distinct('name')
             else:
                 ml_prediction_results = ml_predictor.get_test_prioritization(queryset, commit_queryset)
@@ -108,7 +108,7 @@ def prioritized_test_list(*, params=None):
             queryset = get_default_low_queryset(queryset, commit_list, params=params)
         else:
             if test_run_count >= TEST_RUNS_ML_USING_THRESHOLD:
-                queryset = ml_predictor.get_test_prioritization(queryset, commit_queryset)['l']
+                queryset = ml_predictor.get_test_prioritization(queryset, commit_queryset, params=params)['l']
                 queryset = queryset.distinct('name')
             else:
                 ml_prediction_results = ml_predictor.get_test_prioritization(queryset, commit_queryset)
@@ -138,7 +138,7 @@ def prioritized_test_list(*, params=None):
         else:
             if test_run_count >= TEST_RUNS_ML_USING_THRESHOLD:
                 queryset = ml_predictor.get_test_prioritization_top_by_percent(
-                    queryset, commit_queryset, params["percent"])
+                    queryset, commit_queryset, params["percent"], params=params)['t']
                 queryset = queryset.distinct('name')
             else:
                 queryset = get_default_top20_queryset(queryset, commit_list, percent=params["percent"], params=params)
@@ -149,7 +149,7 @@ def prioritized_test_list(*, params=None):
         else:
             if test_run_count >= TEST_RUNS_ML_USING_THRESHOLD:
                 queryset = ml_predictor.get_test_prioritization_top_by_percent(
-                    queryset, commit_queryset, params["percent"])
+                    queryset, commit_queryset, params["percent"], params=params)['t']
                 queryset = queryset.distinct('name')
             else:
                 queryset = get_default_by_percent_queryset(
