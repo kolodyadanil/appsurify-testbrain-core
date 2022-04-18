@@ -342,10 +342,7 @@ class TestRunReportByDaySerializer(serializers.Serializer):
         """
         Tbh, Idk the calculation of the standard time
         """
-        max_execution_time = instance.get("max_execution_time", 0)
-        if not max_execution_time:
-            max_execution_time = 0
-        return max_execution_time * instance.get("test_runs__count", 0) * instance.get(
+        return instance.get("max_execution_time", 0) * instance.get("test_runs__count", 0) * instance.get(
             "tests__count", 0)
 
 
