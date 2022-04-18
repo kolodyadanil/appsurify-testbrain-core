@@ -5,6 +5,7 @@ import warnings
 
 from django.conf import settings
 from django.db import models
+from django.db.models import IntegerField
 from django.utils.translation import ugettext_lazy as _
 
 from .base_models import AbstractBaseOrganization
@@ -63,6 +64,7 @@ class AbstractOrganization(six.with_metaclass(OrgMeta, SharedBaseModel, Abstract
     slug = SlugField(max_length=200, blank=False, editable=True,
                      populate_from='name', unique=True,
                      help_text=_("The name in all lowercase, suitable for URL identification"))
+    subscription_paid_until = IntegerField(default=None, blank=True, null=True)
 
     class Meta(AbstractBaseOrganization.Meta):
         abstract = True
