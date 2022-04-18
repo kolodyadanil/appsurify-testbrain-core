@@ -47,7 +47,7 @@ class StripeCheckoutView(APIView):
                     'quantity': 1
                 }],
             )
-            return redirect(checkout_session.url, code=303)
+            return Response(status=status.HTTP_200_OK, data={'id': checkout_session.id, 'url': checkout_session.url})
         except Exception as e:
             return Response(status=status.HTTP_400_BAD_REQUEST, data={'error': {'message': str(e)}})
 
