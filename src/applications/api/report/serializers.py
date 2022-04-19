@@ -333,10 +333,14 @@ class TestRunReportByDaySerializer(serializers.Serializer):
     number_of_tests = serializers.IntegerField(source='tests__count', default=0, read_only=True)
     execution_time = serializers.FloatField(default=0, read_only=True)
     standard_execution_time = serializers.SerializerMethodField(method_name="get_standard_execution_time")
+    standard_test_number = serializers.SerializerMethodField(method_name="get_standard_test_number")
     number_of_pass_results = serializers.IntegerField(source='passed_tests__count', default=0, read_only=True)
     number_of_fail_results = serializers.IntegerField(source='failed_tests__count', default=0, read_only=True)
     number_of_broken_results = serializers.IntegerField(source='broken_tests__count', default=0, read_only=True)
     number_of_not_run_results = serializers.IntegerField(source='not_run_tests__count', default=0, read_only=True)
+
+    def get_standard_test_number(selfself, instance):
+        return instance['standard_test_runs']
 
     def get_standard_execution_time(self, instance):
         """
