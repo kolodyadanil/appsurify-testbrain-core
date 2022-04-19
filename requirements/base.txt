@@ -52,3 +52,4 @@ psutil
 pid
 dask
 stripe
+django-csp
