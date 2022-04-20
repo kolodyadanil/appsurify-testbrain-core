@@ -31,23 +31,43 @@ class StripePublicKeys(APIView):
 
 class StripeCheckoutView(APIView):
     def post(self, request):
-        price = request.data['productPrice']
-        customerEmail = request.data['customerEmail']
         # TODO: for testing, delete when we set 'DOMAIN' in .env
         domain_url = os.getenv('DOMAIN') or "https://appsurify.dev.appsurify.com"
+        success_url = f"{domain_url}/success"
+        cancel_url = f"{domain_url}/canceled"
 
+        price = request.data['productPrice']
+        customerEmail = request.data['customerEmail']
+
+        customers = stripe.Customer.list(email=customerEmail)
+        kwargs = {
+            'success_url': success_url,
+            'cancel_url': cancel_url,
+            'mode': 'subscription',
+            'line_items':
+                [
+                    {
+                        'price': price,
+                        'adjustable_quantity':
+                            {
+                                'enabled': True,
+                                'minimum': 1,
+                                'maximum': 999,
+                            },
+                        'quantity': 1,
+                    }
+                ]
+        }
+
+        if customers:
+            current_customer = customers['data'][0]
+            kwargs.update({'customer': current_customer['id']})
+        else:
+            kwargs.update({'customer_email': customerEmail})
         try:
-            checkout_session = stripe.checkout.Session.create(
-                success_url=domain_url + '/success',
-                cancel_url=domain_url + '/canceled',
-                mode='subscription',
-                customer_email=customerEmail,
-                line_items=[{
-                    'price': price,
-                    'quantity': 1
-                }],
-            )
-            return Response(status=status.HTTP_200_OK, data={'id': checkout_session.id, 'url': checkout_session.url})
+            checkout_session = stripe.checkout.Session.create(**kwargs)
+            return Response(status=status.HTTP_200_OK,
+                            data={'id': checkout_session.id, 'url': checkout_session.url})
         except Exception as e:
             return Response(status=status.HTTP_400_BAD_REQUEST, data={'error': {'message': str(e)}})
 
@@ -58,6 +78,22 @@ class StripeCheckoutSession(APIView):
         id = request.args.get('sessionId')
         checkout_session = stripe.checkout.Session.retrieve(id)
         return Response(status=status.HTTP_200_OK, data=checkout_session)
+
+
+class StripeGetSubscriptionActiveSeats(APIView):
+    def get(self, request, *args, **kwargs):
+        email = request.user.email
+        customers = stripe.Customer.list(email=email)
+        quantity = 0
+        seats = []
+        if customers:
+            current_customer = customers['data'][0]
+            subscriptions = stripe.Subscription.list(customer=current_customer['id'])
+            for subscription in subscriptions['data']:
+                quantity += subscription['quantity']
+                seats.append({'id': subscription['id'], 'seats': subscription['quantity'],
+                              'paid_until': subscription['current_period_end']})
+        return Response(status=status.HTTP_200_OK, data={"active_seats": quantity, 'seats': seats})
 
 
 @authentication_classes([])
