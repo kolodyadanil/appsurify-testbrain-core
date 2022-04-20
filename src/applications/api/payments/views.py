@@ -85,12 +85,15 @@ class StripeGetSubscriptionActiveSeats(APIView):
         email = request.user.email
         customers = stripe.Customer.list(email=email)
         quantity = 0
+        seats = []
         if customers:
             current_customer = customers['data'][0]
             subscriptions = stripe.Subscription.list(customer=current_customer['id'])
             for subscription in subscriptions['data']:
                 quantity += subscription['quantity']
-        return Response(status=status.HTTP_200_OK, data={"active_seats": quantity})
+                seats.append({'id': subscription['id'], 'seats': subscription['quantity'],
+                              'paid_until': subscription['current_period_end']})
+        return Response(status=status.HTTP_200_OK, data={"active_seats": quantity, 'seats': seats})
 
 
 @authentication_classes([])
