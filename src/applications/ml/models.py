@@ -162,14 +162,14 @@ class MLModel(models.Model):
 
     @classmethod
     def train_model(cls, test_suite_id):
-        queryset = MLModel.objects.filter(
+        queryset = cls.objects.filter(
             test_suite_id=test_suite_id,
             state=States.PREPARED
         ).order_by("test_suite", "index")
 
         for ml_model in queryset:
             try:
-                prev_ml_model = MLModel.objects.filter(test_suite_id=test_suite_id, index=ml_model.index - 1).last()
+                prev_ml_model = cls.objects.filter(test_suite_id=test_suite_id, index=ml_model.index - 1).last()
                 if prev_ml_model == States.PREPARED or prev_ml_model is None:
                     result = ml_model.train()
                 else:
