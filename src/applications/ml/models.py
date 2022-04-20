@@ -170,7 +170,7 @@ class MLModel(models.Model):
         for ml_model in queryset:
             try:
                 prev_ml_model = cls.objects.filter(test_suite_id=test_suite_id, index=ml_model.index - 1).last()
-                if prev_ml_model == States.PREPARED or prev_ml_model is None:
+                if prev_ml_model == States.TRAINED or prev_ml_model is None:
                     result = ml_model.train()
                 else:
                     print(f"<TestSuite: {ml_model.test_suite.id}> - SKIPPED")
