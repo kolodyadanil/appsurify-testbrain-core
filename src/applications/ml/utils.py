@@ -13,7 +13,7 @@ def initialize_empty_models():
 
 def perform_prepare_models():
     print("Get TestSuites for storing datasets...")
-    queryset = MLModel.objects.filter(state=States.PENDING).order_by("test_suite", "index")
+    queryset = MLModel.objects.filter(state=States.PENDING).order_by("test_suite", "index")[:10]
 
     for ml_model in queryset:
         try:
@@ -27,7 +27,7 @@ def perform_prepare_models():
 
 def perform_train_models():
     print("Get TestSuites for training datasets...")
-    queryset = TestSuite.objects.filter(models__isnull=False).order_by("project", "id")
+    queryset = TestSuite.objects.filter(models__isnull=False).order_by("project", "id")[:10]
 
     for test_suite in queryset:
         try:
