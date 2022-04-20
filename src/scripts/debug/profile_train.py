@@ -4,7 +4,7 @@ import django
 django.setup()
 
 
-from applications.ml.neural_network import MLTrainer
+from applications.ml.network import MLTrainer
 
 
 mlt = MLTrainer(test_suite_id=346)

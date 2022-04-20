@@ -4,7 +4,7 @@ from .models import MLModel
 
 
 class MLModelAdmin(admin.ModelAdmin):
-    list_display = ('id', 'test_suite', 'dataset_status', 'model_status', 'created', 'updated')
+    list_display = ('id', 'test_suite', 'state', 'index', 'fr', 'to', 'created', 'updated')
 
 
 admin.site.register(MLModel, MLModelAdmin)

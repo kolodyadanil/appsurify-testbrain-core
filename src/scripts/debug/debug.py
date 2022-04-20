@@ -5,7 +5,7 @@ django.setup()
 
 from applications.vcs.models import Commit
 from applications.testing.models import TestSuite, TestRun, Test
-from applications.ml.neural_network import *
+from applications.ml.network import *
 
 print("HELLO!")
 

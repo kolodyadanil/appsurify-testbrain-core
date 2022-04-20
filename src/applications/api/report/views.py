@@ -22,7 +22,7 @@ from applications.vcs.utils.bugspots import Bugspots
 from .filters import *
 from .serializers import *
 
-from applications.ml.neural_network import MLPredictor
+from applications.ml.network import MLPredictor
 
 
 def get_object_or_404(queryset, *filter_args, **filter_kwargs):

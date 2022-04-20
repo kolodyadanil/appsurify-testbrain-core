@@ -1,5 +1,6 @@
-WITH min_date AS (SELECT now() - interval '90 days' as min_date),
-max_date AS (SELECT now() as max_date)
+WITH
+    min_date AS (SELECT '{min_date}'::timestamp as min_date),
+    max_date AS (SELECT '{max_date}'::timestamp as max_date)
 SELECT
 		ttrr.test_id,
         COALESCE(MAX(CASE WHEN (tdc.defect_id IS NOT NULL) AND td.type IN (3,4) AND td.close_type IN (1,3) THEN 1 ELSE 0 END), 0) AS max_test_changed,

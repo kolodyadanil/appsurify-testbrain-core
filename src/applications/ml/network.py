@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import os
-import django
 import textdistance
 import pickle
 import hashlib
@@ -13,10 +12,9 @@ from sklearn.model_selection import cross_val_score
 
 from django.conf import settings
 from django.db import connection
-from django.core.exceptions import ObjectDoesNotExist
 
 from applications.testing.models import TestSuite, Test
-from applications.ml.models import MLModel
+
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -32,7 +30,9 @@ def similarity(value1, value2):
 
 
 def dictfetchall(cursor):
-    "Returns all rows from a cursor as a dict"
+    """
+    Returns all rows from a cursor as a dict
+    """
     columns = [col[0] for col in cursor.description]
     return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
@@ -86,21 +86,40 @@ class TestPriorityMLModel(object):
 
 
 class MLHolder(object):
-
-    sql_template = open(settings.BASE_DIR / "applications" / "ml" / "sql" / "predict.sql", "r", encoding="utf-8").read()
+    sql_template_filename = settings.BASE_DIR / "applications" / "ml" / "sql" / "predict.sql"
+    sql_template = open(sql_template_filename, "r", encoding="utf-8").read()
 
     encode_columns = []
     decode_columns = []
 
-    def __init__(self, test_suite_id, auto_save=True, auto_load=True, **kwargs):
-        self.auto_save = auto_save
-        self.auto_load = auto_load
+    _model = None
 
-        self.test_suite_id = test_suite_id
-        self.test_suite = TestSuite.objects.get(id=test_suite_id)
+    def __init__(self, ml_model, **kwargs):
+        self.ml_model = ml_model
+        self.ml_model_filepath = self.ml_model.model_path / self.ml_model.model_filename
 
-        self.model_path, self.model_filename = MLModel.get_model_filepath(self.test_suite)
-        self.model_filepath = self.model_path / self.model_filename
+        self.load()
+
+    def load(self):
+        try:
+            if os.path.getsize(self.ml_model_filepath) > 0:
+                infile = open(f"{self.ml_model_filepath}", "rb")
+                unpickler = pickle.Unpickler(infile)
+                self._model = unpickler.load()
+            else:
+                self._model = None
+        except IOError:
+            self._model = None
+        except Exception as e:
+            self._model = None
+
+    def save(self):
+        outfile = open(f"{self.ml_model_filepath}", "wb")
+        pickle.dump(self._model, outfile)
+
+    @property
+    def is_loaded(self):
+        return self._model is not None
 
 
 class MLTrainer(MLHolder):
@@ -124,60 +143,43 @@ class MLTrainer(MLHolder):
         ('defect_caused_by_commits_folders', 'defect_caused_by_commits_folders'),
     ]
 
-    def __init__(self, test_suite_id, **kwargs):
-        super(MLTrainer, self).__init__(test_suite_id=test_suite_id, **kwargs)
-        self.model = None
-
-    def save(self):
-        outfile = open(f"{self.model_filepath}", "wb")
-        pickle.dump(self.model, outfile)
-
-    def get_dataset_files(self):
-        return MLModel.get_dataset_file_list(self.test_suite)
-
     def train(self):
-
-        clf = CatBoostClassifier(auto_class_weights='Balanced', random_state=0, verbose=False)
-
-        is_init = True
-
-        _x = []
-        _y = []
 
         model_classes = {}
 
-        self.model = TestPriorityMLModel()
+        is_init = True
 
-        dataset_files = self.get_dataset_files()
+        if self.is_loaded:
+            clf = self._model.classifier
+        else:
+            self._model = TestPriorityMLModel()
+            clf = CatBoostClassifier(auto_class_weights='Balanced', random_state=0, verbose=False)
+
+        dataset_files = self.ml_model.dataset_filepaths
 
         print("Processing all datasets for store classes...")
         for dataset_file in dataset_files:
-
             df = pd.read_csv(dataset_file, quoting=2)
-
             for column_name, new_columns_prefix in self.encode_columns:
                 df[column_name] = df[column_name].apply(parse_list_entry)
-                binarizer = getattr(self.model, f"{column_name}_binarizer", MultiLabelBinarizer())
+                binarizer = getattr(self._model, f"{column_name}_binarizer", MultiLabelBinarizer())
                 binarizer.fit_transform(df[column_name])
-
                 if column_name not in model_classes:
                     model_classes[column_name] = set()
-
                 model_classes[column_name].update(binarizer.classes_)
 
         print("Processing fits...")
         for dataset_file in dataset_files:
-
-            print(f"<TestSuite: {self.test_suite_id}> - {dataset_file}")
-
+            print(f"<TestSuite: {self.ml_model.test_suite_id}> - {dataset_file}")
             df = pd.read_csv(dataset_file, quoting=2)
-
             if len(df.index) < 10:
-                print('Empty dataset for this TestSuite id: "{}" {}'.format(self.test_suite_id, str(dataset_file)))
+                print('Empty dataset for this TestSuite id: "{}" {}'.format(
+                    self.ml_model.test_suite_id, str(dataset_file)))
                 continue
 
             if len(df.columns) < 5:
-                print('Small dataset for this TestSuite id: "{}" {}'.format(self.test_suite_id, str(dataset_file)))
+                print('Small dataset for this TestSuite id: "{}" {}'.format(
+                    self.ml_model.test_suite_id, str(dataset_file)))
                 continue
 
             # Keep only allowed columns
@@ -186,7 +188,7 @@ class MLTrainer(MLHolder):
 
             for column_name, new_columns_prefix in self.encode_columns:
                 df[column_name] = df[column_name].apply(parse_list_entry)
-                binarizer = getattr(self.model, f"{column_name}_binarizer", MultiLabelBinarizer())
+                binarizer = getattr(self._model, f"{column_name}_binarizer", MultiLabelBinarizer())
                 binarizer.set_params(classes=list(model_classes[column_name]))
                 df = df.join(
                     pd.DataFrame(
@@ -207,35 +209,29 @@ class MLTrainer(MLHolder):
                 is_init = False
                 clf.fit(x_res, y_res)
             else:
-
                 # For local test only
-                validation_model = CatBoostClassifier()
-                validation_model.load_model(f"{self.model_filepath}.init.cbm")
-                cv = 5
-                print('CV recall', cross_val_score(validation_model, x_res, y_res, cv=cv,
-                                                   scoring='recall', fit_params=dict(verbose=False),
-                                                   error_score="raise"))
-                print('CV accuracy', cross_val_score(validation_model, x_res, y_res, cv=cv,
-                                                     scoring='balanced_accuracy', fit_params=dict(verbose=False),
-                                                     error_score="raise"))
+                # validation_model = CatBoostClassifier()
+                # validation_model.load_model(f"{self.ml_model_filepath}.init.cbm")
+                # cv = 5
+                # print('CV recall', cross_val_score(validation_model, x_res, y_res, cv=cv,
+                #                                    scoring='recall', fit_params=dict(verbose=False),
+                #                                    error_score="raise"))
+                # print('CV accuracy', cross_val_score(validation_model, x_res, y_res, cv=cv,
+                #                                      scoring='balanced_accuracy', fit_params=dict(verbose=False),
+                #                                      error_score="raise"))
 
                 # Improve fit
-                clf.fit(x_res, y_res, init_model=f"{self.model_filepath}.init.cbm")
+                clf.fit(x_res, y_res, init_model=f"{self.ml_model_filepath}.init.cbm")
 
-            clf.save_model(f"{self.model_filepath}.init.cbm")
+            clf.save_model(f"{self.ml_model_filepath}.init.cbm")
 
-            _x = x_res
-            _y = y_res
-
-        self.model.classifier = clf
-
-        if self.auto_save:
-            self.save()
+        self._model.classifier = clf
+        self.save()
 
         # For global test only
         # cv = 5
-        # print(cross_val_score(self.model.classifier, _x, _y, cv=cv, scoring='recall'))
-        # print(cross_val_score(self.model.classifier, _x, _y, cv=cv))
+        # print(cross_val_score(self._model.classifier, _x, _y, cv=cv, scoring='recall'))
+        # print(cross_val_score(self._model.classifier, _x, _y, cv=cv))
         return True
 
 
@@ -271,29 +267,6 @@ class MLPredictor(MLHolder):
         ('defect_closed_by_caused_by_intersection_areas', 'defect_closed_by_caused_by_intersection_areas'),
     ]
 
-    def __init__(self, test_suite_id, **kwargs):
-        super(MLPredictor, self).__init__(test_suite_id=test_suite_id, **kwargs)
-        self.model = None
-        if self.auto_load:
-            self.load()
-
-    def load(self):
-        self.model = None
-        if self.model_filepath:
-            try:
-                if os.path.getsize(self.model_filepath) > 0:
-                    infile = open(f"{self.model_filepath}", "rb")
-                    unpickler = pickle.Unpickler(infile)
-                    self.model = unpickler.load()
-            except IOError:
-                self.model = None
-            except Exception as e:
-                self.model = None
-
-    @property
-    def is_loaded(self):
-        return self.model is not None
-
     def _get_flag_from_prediction_num(self, prediction):
         for item in self.PRIORITY_FLAGS_TO_INTERVALS_MAP.items():
             flag = item[0]
@@ -327,7 +300,7 @@ class MLPredictor(MLHolder):
             # TODO: Check keyword here
             row[column_name] = hash_value(row[column_name])
 
-            binarizer = getattr(self.model, column_name_ml_prefix + '_binarizer')
+            binarizer = getattr(self._model, column_name_ml_prefix + '_binarizer')
 
             iterables_for_concatenate.append(
                 binarizer.transform([row[column_name]])
@@ -336,9 +309,9 @@ class MLPredictor(MLHolder):
         x = np.concatenate(iterables_for_concatenate, axis=1)
 
         if probability:
-            result = self.model.classifier.predict_proba(x)[0]
+            result = self._model.classifier.predict_proba(x)[0]
         else:
-            result = self.model.classifier.predict(x)[0]
+            result = self._model.classifier.predict(x)[0]
 
         return result
 
@@ -442,3 +415,18 @@ class MLPredictor(MLHolder):
         result['t'] = Test.objects.filter(id__in=test_ids).distinct('name')
 
         return result
+
+
+def train_model(ml_model):
+    result = None
+    ml_trainer = MLTrainer(ml_model=ml_model)
+    result = ml_trainer.train()
+    return result
+
+
+def load_model(ml_model):
+    result = None
+    ml_predictor = MLPredictor(ml_model=ml_model)
+    if ml_predictor.is_loaded:
+        result = ml_predictor
+    return result

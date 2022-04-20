@@ -1,28 +1,17 @@
 # -*- coding: utf-8 -*-
 import os
 import sys
-import time
 import django
-from django.utils import timezone
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "system.settings")
 django.setup()
 
 from pidfile import PIDFile, AlreadyRunningError
-
-from django.conf import settings
-
-from applications.ml.utils import (
-    fix_missed,
-    fix_expired,
-    fix_broken
-)
+from applications.ml.utils import initialize_empty_models
 
 
 def main():
-    fix_missed()
-    fix_expired()
-    fix_broken()
+    initialize_empty_models()
 
 
 if __name__ == "__main__":

@@ -3,49 +3,54 @@ import pathlib
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.db import models, connection
+from django.utils import timezone
+from datetime import timedelta
 from django.conf import settings
+from applications.ml.database import prepare_dataset_to_csv
+from applications.ml.network import train_model, load_model
+
+
+class States(models.TextChoices):
+    PENDING = "PENDING", "PENDING"
+    PREPARING = "PREPARING", "PREPARING"
+    PREPARED = "PREPARED", "PREPARED"
+    TRAINING = "TRAINING", "TRAINING"
+    TRAINED = "TRAINED", "TRAINED"
+    ERROR = "ERROR", "ERROR"
 
 
 class MLModel(models.Model):
 
-    class Status(models.TextChoices):
-        PENDING = "PENDING", "PENDING"
-        PROCESSING = "PROCESSING", "PROCESSING"
-        SUCCESS = "SUCCESS", "SUCCESS"
-        FAILURE = "FAILURE", "FAILURE"
-        UNKNOWN = "UNKNOWN", "UNKNOWN"
-
     test_suite = models.ForeignKey(
         "testing.TestSuite",
-        verbose_name="test_suite",
         related_name="models",
         on_delete=models.CASCADE
     )
 
-    test = models.ForeignKey(
+    tests = models.ManyToManyField(
         "testing.Test",
-        verbose_name="test",
-        related_name="models",
-        null=True,
-        on_delete=models.CASCADE
+        blank=True
     )
 
-    dataset_status = models.CharField(
-        verbose_name="dataset status",
+    state = models.CharField(
+        verbose_name="state",
         max_length=128,
-        default=Status.UNKNOWN,
-        choices=Status.choices,
+        default=States.PENDING,
+        choices=States.choices,
         blank=False,
         null=False
     )
 
-    model_status = models.CharField(
-        verbose_name="model status",
-        max_length=128,
-        default=Status.UNKNOWN,
-        choices=Status.choices,
-        blank=False,
-        null=False
+    index = models.IntegerField(default=0)
+
+    fr = models.DateTimeField(
+        verbose_name="from datetime",
+        null=True
+    )
+
+    to = models.DateTimeField(
+        verbose_name="to datetime",
+        null=True
     )
 
     created = models.DateTimeField(
@@ -61,75 +66,165 @@ class MLModel(models.Model):
     )
 
     class Meta(object):
-        unique_together = ["test_suite", "test"]
-        ordering = ["id", "test_suite", "test", ]
+        unique_together = ["test_suite", "index", ]
+        ordering = ["id", "test_suite", "index", ]
         verbose_name = "model"
         verbose_name_plural = "models"
 
     def __str__(self):
-        return f"<Model: {self.id} (TestSuite: {self.test_suite_id})>"
+        return f"<Model: {self.id} (TestSuite: {self.test_suite_id})> {self.state}"
+
+    def dataset_sql(self, test):
+        sql_template_filepath = settings.BASE_DIR / "applications" / "ml" / "sql" / "dataset.sql"
+        sql_template = open(sql_template_filepath, "r", encoding="utf-8").read()
+
+        min_date = self.fr
+        max_date = self.to
+
+        sql = sql_template.format(
+            test_suite_id=self.test_suite_id,
+            test_id=test.id,
+            min_date=min_date,
+            max_date=max_date
+        )
+        return sql
 
     @property
-    def dataset_sql(self):
-        sql_template = open(settings.BASE_DIR / "applications" / "ml" / "sql" / "dataset.sql", "r",
-                            encoding="utf-8").read()
-        sql = sql_template.format(test_suite_id=self.test_suite_id, test_id=self.test_id)
-        return sql
+    def dataset_filename(self):
+        return "{test_id}.csv"
 
     @property
     def dataset_path(self):
         project = self.test_suite.project
         organization = project.organization
-        directory = pathlib.PosixPath("/mnt/testbrain-data") / "ml" / "datasets" / \
-                    str(organization.id) / str(project.id) / str(self.test_suite_id)
+        directory = pathlib.PosixPath(settings.STORAGE_ROOT) / "ml" / "datasets" / \
+                    str(organization.id) / str(project.id) / str(self.test_suite_id) / str(self.index)
         return directory
 
     @property
-    def dataset_filename(self):
-        return f"{self.test_id}.csv"
+    def dataset_filepaths(self):
+        files = []
+        test_ids = list(self.tests.all().values_list('id', flat=True))
+        for test_id in test_ids:
+            dataset_filename = self.dataset_filename.format(test_id=test_id)
+            dataset_path = self.dataset_path
+            dataset_filepath = dataset_path / dataset_filename
+            if dataset_filepath.exists():
+                files.append(dataset_filepath)
+        return files
 
     @property
-    def model_path(self):  # TODO: Refactoring
-        directory, _ = self.get_model_filepath(self.test_suite)
+    def model_filename(self):
+        return f"{self.index}.m"
+
+    @property
+    def model_path(self):
+        project = self.test_suite.project
+        organization = project.organization
+        directory = pathlib.PosixPath(settings.STORAGE_ROOT) / "ml" / "models" / \
+                    str(organization.id) / str(project.id) / str(self.test_suite.id)
         return directory
 
     @property
-    def model_filename(self):  # TODO: Refactoring
-        _, filename = self.get_model_filepath(self.test_suite)
-        return filename
+    def tests_for_train(self):
+        sql_template_filepath = settings.BASE_DIR / "applications" / "ml" / "sql" / "test.sql"
+        sql_template = open(sql_template_filepath, "r", encoding="utf-8").read()
 
-    @staticmethod
-    def get_test_list(test_suite):
-        sql_template = open(settings.BASE_DIR / "applications" / "ml" / "sql" / "test.sql", "r",
-                            encoding="utf-8").read()
-        sql = sql_template.format(test_suite_id=test_suite.id)
+        min_date = self.fr
+        max_date = self.to
+
+        sql = sql_template.format(test_suite_id=self.test_suite_id, min_date=min_date, max_date=max_date)
         with connection.cursor() as cursor:
             cursor.execute(sql)
             columns = [col[0] for col in cursor.description]
             rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        return list([row['test_id'] for row in rows])
 
-    @staticmethod
-    def get_dataset_file_list(test_suite):
-        files = []
+        test_ids = list([row['test_id'] for row in rows])
+        return self.test_suite.tests.filter(id__in=test_ids)
+
+    def prepare(self):
+        self.state = States.PREPARING
+        self.save()
+        # TODO: RUN function with threads
+        result = prepare_dataset_to_csv(ml_model=self)
+        self.state = States.PREPARED
+        self.save()
+        return result
+
+    def train(self):
+        self.state = States.TRAINING
+        self.save()
+        # TODO: RUN function with threads
+        result = train_model(ml_model=self)
+        self.state = States.TRAINED
+        self.save()
+        return
+
+    @classmethod
+    def train_model(cls, test_suite_id):
         queryset = MLModel.objects.filter(
-            test_suite=test_suite,
-            dataset_status=MLModel.Status.SUCCESS
-        ).order_by("test_id").only("test")
-        for item in queryset:
-            filepath = item.dataset_path / item.dataset_filename
-            if filepath.exists():
-                files.append(filepath)
-        return files
+            test_suite_id=test_suite_id,
+            state=States.PREPARED
+        ).order_by("test_suite", "index")
 
-    @staticmethod
-    def get_model_filepath(test_suite):
-        project = test_suite.project
-        organization = project.organization
-        directory = pathlib.PosixPath(settings.STORAGE_ROOT) / "ml" / "models" / \
-                    str(organization.id) / str(project.id)
-        filename = f"{test_suite.id}.model"
-        return directory, filename
+        for ml_model in queryset:
+            try:
+                prev_ml_model = MLModel.objects.filter(test_suite_id=test_suite_id, index=ml_model.index - 1).last()
+                if prev_ml_model == States.PREPARED or prev_ml_model is None:
+                    result = ml_model.train()
+                else:
+                    print(f"<TestSuite: {ml_model.test_suite.id}> - SKIPPED")
+                    raise Exception("SKIPPED")
+                print(f"<TestSuite: {ml_model.test_suite.id}> - {result}")
+            except Exception as e:
+                print(f"<TestSuite: {ml_model.test_suite.id}> - {e}")
+                raise e
+
+    @classmethod
+    def open_model(cls, test_suite_id):
+        ml_model = cls.objects.filter(test_suite_id=test_suite_id, state=States.TRAINED).order_by("index").last()
+        model = load_model(ml_model)
+        return model
+
+    @classmethod
+    def create_sequence(cls, test_suite_id):
+
+        current_datetime = timezone.now()
+
+        model = cls.objects.filter(test_suite_id=test_suite_id).last()
+
+        if model is None:
+            fr_datetime = timezone.now() - timedelta(weeks=28)
+            to_datetime = fr_datetime + timedelta(weeks=4)
+            model = MLModel.objects.create(
+                test_suite_id=test_suite_id,
+                index=0,
+                fr=fr_datetime,
+                to=to_datetime,
+                state=States.PENDING
+            )
+            tests = list(model.tests_for_train)
+            model.tests.set(tests)
+
+        while model is not None:
+            next_fr = model.to
+            next_to = next_fr + timedelta(weeks=4)
+
+            if current_datetime >= next_to:
+                model = MLModel.objects.create(
+                    test_suite_id=test_suite_id,
+                    index=model.index + 1,
+                    fr=next_fr,
+                    to=next_to,
+                    state=States.PENDING
+                )
+                tests = list(model.tests_for_train)
+                model.tests.set(tests)
+            else:
+                model = None
+
+        return cls.objects.filter(test_suite_id=test_suite_id).count()
+
 
 
 @receiver(post_save, sender=MLModel)

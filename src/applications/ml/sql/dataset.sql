@@ -1,6 +1,6 @@
 WITH test_suite_id AS (SELECT {test_suite_id} AS test_suite_id, {test_id} as test_id),
-min_date AS (SELECT now() - interval '120 days' as min_date),
-max_date AS (SELECT now() as max_date),
+min_date AS (SELECT '{min_date}'::timestamp as min_date),
+max_date AS (SELECT '{max_date}'::timestamp as max_date),
 ttrr AS
 (
     SELECT

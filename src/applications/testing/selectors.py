@@ -8,14 +8,14 @@ from applications.testing.models import Test, TestRun, TestSuite, TestRunResult,
 from applications.vcs.models import Commit, Area, Branch
 from applications.vcs.utils.analysis import calculate_user_analysis, calculate_user_analysis_by_range, \
     avg_per_range, calculate_similar_by_commit
-from applications.ml.neural_network import MLPredictor
+from applications.ml.models import MLModel
 
 
 LOOKUP_SEP = '__'
 
 
 TEST_RUNS_ML_USING_THRESHOLD = 500
-MINIMAL_NUMBER_OF_TESTRUNS_FOR_ML_MODEL_USNIG = 50
+MINIMAL_NUMBER_OF_TESTRUNS_FOR_ML_MODEL_USING = 50
 
 
 class Priority(models.IntegerChoices):
@@ -64,10 +64,10 @@ def prioritized_test_list(*, params=None):
         test_suites=test_suite
     )
 
-    ml_predictor = MLPredictor(test_suite_id=test_suite.id)
+    ml_predictor = MLModel.open_model(test_suite_id=test_suite.id)
     ml_model_existing_flag = ml_predictor.is_loaded
 
-    if ml_model_existing_flag is False or test_run_count < MINIMAL_NUMBER_OF_TESTRUNS_FOR_ML_MODEL_USNIG:
+    if ml_model_existing_flag is False or test_run_count < MINIMAL_NUMBER_OF_TESTRUNS_FOR_ML_MODEL_USING:
         use_sql = True
 
     priority = params["priority"]
