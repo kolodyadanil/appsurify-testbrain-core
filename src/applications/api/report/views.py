@@ -17,7 +17,8 @@ from datetime import timedelta, date
 
 from applications.api.common.views import MultiSerializerViewSetMixin
 from applications.project.permissions import IsOwnerOrReadOnly
-from applications.vcs.utils.analysis import calculate_user_analysis, calculate_user_analysis_by_range, avg_per_range, calculate_similar_by_commit
+from applications.vcs.utils.analysis import calculate_user_analysis, calculate_user_analysis_by_range, avg_per_range, \
+    calculate_similar_by_commit
 from applications.vcs.utils.bugspots import Bugspots
 from .filters import *
 from .serializers import *
@@ -1908,6 +1909,14 @@ class TestRunReportModelViewSetByDayViewSet(TestRunReportModelViewSet):
         # print '#4: {}'.format(time.time() - start_time)
         page = self.paginate_queryset(queryset)
         # print '#5: {}'.format(time.time() - start_time)
+        sum = 0
+        i = 1
+        # Todo: WIP. This code counts step by step average values for all values in THIS dict. But we need to start
+        # count values from 60 days before first value.
+        for p in page:
+            sum += p['test_runs__count']
+            i = i + 1
+            p.update({"standard_test_runs": sum / i})
         if page is not None:
             # print '#6.0: {}'.format(time.time() - start_time)
             serializer = self.get_serializer(page, many=True)
