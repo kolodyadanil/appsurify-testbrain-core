@@ -64,6 +64,8 @@ from django.contrib.sites.models import Site
 from django.template.defaultfilters import slugify
 from applications.allauth.socialaccount.models import SocialApp
 
+from django.utils.translation import gettext_lazy as _
+
 
 class DynamicFieldsModelSerializer(serializers.ModelSerializer):
     """
@@ -814,3 +816,8 @@ class UserRelatedSerializer(BaseRelatedSerializer):
     class Meta(object):
         model_class = get_user_model()
         model_serializer_class = UserSerializer
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField()
+    new_password = serializers.CharField()
