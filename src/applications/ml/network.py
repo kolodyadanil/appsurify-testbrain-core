@@ -97,7 +97,14 @@ class MLHolder(object):
     def __init__(self, ml_model, **kwargs):
         self.ml_model = ml_model
         self.ml_model_filepath = self.ml_model.model_path / self.ml_model.model_filename
-
+        # file_candidates = [
+        #     f"{self.ml_model.model_path}.model",
+        #     f"{self.ml_model.model_path / self.ml_model.model_filename}"
+        # ]
+        # for ml_model_filepath in file_candidates:
+        #     if os.path.getsize(ml_model_filepath) > 0:
+        #         self.ml_model_filepath = ml_model_filepath
+        #         break
         self.load()
 
     def load(self):

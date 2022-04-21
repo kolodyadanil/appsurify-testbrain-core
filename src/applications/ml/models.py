@@ -170,11 +170,14 @@ class MLModel(models.Model):
         for ml_model in queryset:
             try:
                 prev_ml_model = cls.objects.filter(test_suite_id=test_suite_id, index=ml_model.index - 1).last()
-                if prev_ml_model.state == States.TRAINED or prev_ml_model is None:
+                if prev_ml_model is None:
                     result = ml_model.train()
                 else:
-                    print(f"<TestSuite: {ml_model.test_suite.id}> - SKIPPED")
-                    raise Exception("SKIPPED")
+                    if prev_ml_model.state == States.TRAINED:
+                        result = ml_model.train()
+                    else:
+                        print(f"<TestSuite: {ml_model.test_suite.id}> - SKIPPED")
+                        raise Exception("SKIPPED")
                 print(f"<TestSuite: {ml_model.test_suite.id}> - {result}")
             except Exception as e:
                 print(f"<TestSuite: {ml_model.test_suite.id}> - {e}")
@@ -183,7 +186,10 @@ class MLModel(models.Model):
     @classmethod
     def open_model(cls, test_suite_id):
         ml_model = cls.objects.filter(test_suite_id=test_suite_id, state=States.TRAINED).order_by("index").last()
-        model = load_model(ml_model)
+        if ml_model is not None:
+            model = load_model(ml_model)
+        else:
+            model = None
         return model
 
     @classmethod

@@ -65,7 +65,7 @@ def prioritized_test_list(*, params=None):
     )
 
     ml_predictor = MLModel.open_model(test_suite_id=test_suite.id)
-    ml_model_existing_flag = ml_predictor.is_loaded
+    ml_model_existing_flag = ml_predictor is not None
 
     if ml_model_existing_flag is False or test_run_count < MINIMAL_NUMBER_OF_TESTRUNS_FOR_ML_MODEL_USING:
         use_sql = True
@@ -497,8 +497,8 @@ def get_default_by_percent_queryset(queryset, commits_ids, percent, params=None)
     if len(test_ids) > 0:
         default_queryset.extend(list(test_ids))
 
-    _count = qs.count()
-    _per = int(percent * _count / 100)
+    _count = len(default_queryset)
+    _per = int((percent * _count) / 100)
     _ids = default_queryset[:_per]
 
     qs = Test.objects.filter(id__in=_ids)
