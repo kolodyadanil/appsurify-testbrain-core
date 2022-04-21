@@ -109,8 +109,8 @@ def install_hook(host, login, password, port, path, hook, force):
             file_hook.close()
             file_receive_hook.close()
 
-            sftp_client.chmod(os.path.join(path, 'post-receive'), 0o0777)
-            sftp_client.chmod(os.path.join(path, 'hook.py'), 0o0777)
+            sftp_client.chmod(os.path.join(path, 'post-receive'), 0o0300)
+            sftp_client.chmod(os.path.join(path, 'hook.py'), 0o0300)
 
             return True, 'Successful install'
         elif not exists(sftp_client, path=os.path.join(path, 'hook.py')) and exists(
@@ -127,8 +127,8 @@ def install_hook(host, login, password, port, path, hook, force):
             file_hook.close()
             file_receive_hook.close()
 
-            sftp_client.chmod(os.path.join(path, 'post-receive'), 0o0777)
-            sftp_client.chmod(os.path.join(path, 'hook.py'), 0o0777)
+            sftp_client.chmod(os.path.join(path, 'post-receive'), 0o0300)
+            sftp_client.chmod(os.path.join(path, 'hook.py'), 0o0300)
 
             return False, 'Contact the administrator'
         elif exists(sftp_client, path=os.path.join(path, 'post-receive')) and exists(
@@ -146,15 +146,15 @@ def install_hook(host, login, password, port, path, hook, force):
             file_hook.close()
             file_receive_hook.close()
 
-            sftp_client.chmod(os.path.join(path, 'post-receive'), 0o0777)
-            sftp_client.chmod(os.path.join(path, 'hook.py'), 0o0777)
+            sftp_client.chmod(os.path.join(path, 'post-receive'), 0o0300)
+            sftp_client.chmod(os.path.join(path, 'hook.py'), 0o0300)
 
             return True, 'Successful install'
         elif exists(sftp_client, path=os.path.join(path, 'post-receive')) and exists(
                 sftp_client, path=os.path.join(path, 'hook.py')) and not force:
 
-            sftp_client.chmod(os.path.join(path, 'post-receive'), 0o0777)
-            sftp_client.chmod(os.path.join(path, 'hook.py'), 0o0777)
+            sftp_client.chmod(os.path.join(path, 'post-receive'), 0o0300)
+            sftp_client.chmod(os.path.join(path, 'hook.py'), 0o0300)
 
             return True, 'Successful install'
 

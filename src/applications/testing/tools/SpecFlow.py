@@ -4,6 +4,7 @@ from collections import OrderedDict
 from datetime import timedelta
 import subprocess
 import lxml.etree as ET
+import defusedxml.ElementTree as dET
 import xmltodict
 from django.conf import settings
 from django.db import transaction, models
@@ -137,7 +138,7 @@ class ImportUtils(object):
         if self.type_xml == 'nunit3':
             xslt = ET.parse(os.path.join(settings.BASE_DIR, 'applications/testing/tools/nunit3-junit.xslt'))
             transform = ET.XSLT(xslt)
-            dom = ET.fromstring(self.infile)
+            dom = dET.fromstring(self.infile)
             new_dom = transform(dom)
             new_dom_str = ET.tostring(new_dom, pretty_print=True)
             infile = new_dom_str
