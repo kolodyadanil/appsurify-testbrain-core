@@ -309,8 +309,10 @@ class TestRunReportSerializer(serializers.Serializer):
         current_testrun = TestRun.objects.filter(id=instance['id'])
         previous_test_run_id = current_testrun.values('previous_test_run_id')[0]['previous_test_run_id']
         if previous_test_run_id:
-            test_run_result = TestRunResult.objects.filter(test_run_id=previous_test_run_id)[:1]
-            previous_execution_time = test_run_result.values('execution_time')[0]['execution_time']
+            previous_execution_time = 0
+            test_run_results = TestRunResult.objects.filter(test_run_id=previous_test_run_id)
+            for test_run_result in test_run_results:
+                previous_execution_time += test_run_result.execution_time
             return previous_execution_time
         return None
 
