@@ -302,6 +302,20 @@ class TestRunReportSerializer(serializers.Serializer):
     percentage_of_pass_results = serializers.IntegerField(default=0, read_only=True)
     percentage_of_flaky_failure_results = serializers.IntegerField(default=0, read_only=True)
 
+    previous_execution_time = serializers.SerializerMethodField(method_name="get_previous_execution_time")
+
+    @staticmethod
+    def get_previous_execution_time(instance):
+        current_testrun = TestRun.objects.filter(id=instance['id'])
+        previous_test_run_id = current_testrun.values('previous_test_run_id')[0]['previous_test_run_id']
+        if previous_test_run_id:
+            test_run_result = TestRunResult.objects.filter(test_run_id=previous_test_run_id)[:1]
+            previous_execution_time = test_run_result.values('execution_time')[0]['execution_time']
+            return previous_execution_time
+        return None
+
+
+
     @staticmethod
     def get_status(instance):
         """
