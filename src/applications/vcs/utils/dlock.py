@@ -3,7 +3,7 @@ import time
 import logging
 import contextlib
 import random
-from hashlib import md5
+from hashlib import sha256
 
 from django.core.cache import cache as django_cache
 
@@ -15,7 +15,7 @@ class DistLockException(Exception):
 
 @contextlib.contextmanager
 def dist_lock(key, attempts=10, expires=300):
-    key_hexdigest = md5(key).hexdigest()
+    key_hexdigest = sha256(key).hexdigest()
     key = '__d_lock_%s' % key_hexdigest
 
     got_lock = False
