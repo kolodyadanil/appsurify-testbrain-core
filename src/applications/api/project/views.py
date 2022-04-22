@@ -17,6 +17,7 @@ from applications.project.permissions import IsOwnerOrReadOnly, IsAdminOrganizat
 from .filters import *
 from .serializers import *
 
+
 UserModel = get_user_model()
 
 

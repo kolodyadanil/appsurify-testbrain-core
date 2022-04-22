@@ -9,8 +9,8 @@ from celery.schedules import crontab
 # ------------------------------------------------------------------------------
 CELERY_BROKER_URL = env.str("BROKER_URL", default="amqp://guest:guest@localhost:5672//")
 # CELERY_RESULT_BACKEND = env.str("REDIS_URL", default="redis://localhost:6379/0")
-CELERY_RESULT_BACKEND = 'django-db'
-CELERY_CACHE_BACKEND = 'django-cache'
+CELERY_RESULT_BACKEND = "django-db"
+CELERY_CACHE_BACKEND = "django-cache"
 
 CELERY_TIMEZONE = "UTC"
 CELERY_BROKER_TRANSPORT_OPTIONS = {
@@ -69,8 +69,11 @@ CELERY_TASK_ROUTES = {
 
     # analyze 2
     'applications.integration.tasks.analyze_fast_model_task': {'queue': 'analyze', 'priority': 80},
+    'applications.integration.ssh_v2.tasks.fast_model_analyzer_task': {'queue': 'analyze', 'priority': 80},
     'applications.integration.tasks.analyze_slow_models_task': {'queue': 'analyze', 'priority': 70},
+    'applications.integration.ssh_v2.tasks.slow_models_analyzer_task': {'queue': 'analyze', 'priority': 70},
     'applications.integration.tasks.analyze_output_task': {'queue': 'analyze', 'priority': 60},
+    'applications.integration.ssh_v2.tasks.output_analyse_task': {'queue': 'analyze', 'priority': 60},
     'applications.testing.tasks.add_association_for_test': {'queue': 'analyze', 'priority': 50},
 
     # common
@@ -79,10 +82,7 @@ CELERY_TASK_ROUTES = {
 
     # default
     'applications.testing.tasks.periodic_add_association': {'queue': 'default', 'priority': 50},
-    'applications.testing.tasks.build_test_prioritization_ml_models': {'queue': 'default', 'priority': 50},
 
-    # build
-    'applications.testing.tasks.build_test_prioritization_ml_model_for_test_suite': {'queue': 'build', 'priority': 100},
 }
 
 CELERY_TASK_ACKS_LATE = True
@@ -92,34 +92,33 @@ CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_REJECT_ON_WORKER_LOST = True
 CELERY_TASK_SEND_SENT_EVENT = True
 
-CELERY_TASK_SOFT_TIME_LIMIT = 60 * 60 * 12  # 12 hours
-CELERY_TASK_TIME_LIMIT = 60 * 60 * 24 * 2  # 2 days
-
-CELERY_WORKER_POOL = env.str("WORKER_POOL", default="prefork")
-CELERY_WORKER_CONCURRENCY = env.int("WORKER_CONCURRENCY", default=4)
-CELERY_WORKER_PREFETCH_MULTIPLIER = env.int("WORKER_PREFETCH_MULTIPLIER", default=4)
+CELERY_TASK_SOFT_TIME_LIMIT = 60 * 60 * 6  # 12 hours
+CELERY_TASK_TIME_LIMIT = 60 * 60 * 24 * 1  # 2 days
 
 CELERY_WORKER_CONSUMER = "celery.worker.consumer:Consumer"
+CELERY_WORKER_AUTOSCALER = "celery.worker.autoscale:Autoscaler"
 
-CELERY_WORKER_MAX_TASKS_PER_CHILD = env.int("WORKER_MAX_TASKS_PER_CHILD", default=500)
+CELERY_WORKER_POOL = env.str("WORKER_POOL", default="prefork")
+CELERY_WORKER_POOL_RESTARTS = True
+CELERY_WORKER_CONCURRENCY = env.int("WORKER_CONCURRENCY", default=2)
+CELERY_WORKER_PREFETCH_MULTIPLIER = env.int("WORKER_PREFETCH_MULTIPLIER", default=1)
+# CELERY_WORKER_MAX_TASKS_PER_CHILD = env.int("WORKER_MAX_TASKS_PER_CHILD", default=10)
 
 CELERY_WORKER_TIMER_PRECISION = 1.0
-CELERY_WORKER_LOST_WAIT = 15.0
-CELERY_WORKER_AUTOSCALER = "celery.worker.autoscale:Autoscaler"
+CELERY_WORKER_LOST_WAIT = 30.0
 
 CELERY_WORKER_ENABLE_REMOTE_CONTROL = True
 CELERY_WORKER_SEND_TASK_EVENTS = True
 
 CELERY_ENABLE_REMOTE_CONTROL = True
 
+
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_BEAT_SCHEDULE = {
-    "create_ml_models_for_tests_prioritization": {
-        "task": "applications.testing.tasks.build_test_prioritization_ml_models",
-        "schedule": 60 * 60 * 2,  # Start task every 2 hours
-    },
-    'periodic_add_association': {
-        'task': 'applications.testing.tasks.periodic_add_association',
-        'schedule': crontab(hour=8, minute=0, day_of_week='saturday'),
-    },
+    # "periodic_add_association": {
+    #     "task": "applications.testing.tasks.periodic_add_association",
+    #     "schedule": crontab(hour=8, minute=0, day_of_week="saturday"),
+    # },
 }
+
+CELERYD_POOL_RESTARTS = CELERY_WORKER_POOL_RESTARTS

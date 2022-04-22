@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-
 import os
+import sys 
 from django.conf import settings
 from django.template import Template, Context
 

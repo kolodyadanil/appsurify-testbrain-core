@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-
 import re
 import operator
 import collections
@@ -24,7 +22,7 @@ from applications.vcs.utils.bugspots import Bugspots
 from .filters import *
 from .serializers import *
 
-from applications.testing.utils.predict_tests_priorities.predict_tests_priorities import *
+from applications.ml.network import MLPredictor
 
 
 def get_object_or_404(queryset, *filter_args, **filter_kwargs):
@@ -1854,7 +1852,8 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
 
     def get_queryset(self):
         queryset = super(TestReportModelViewSet, self).get_queryset()
-        queryset = queryset.filter(project__organization=get_current_organization(self.request))
+        current_organization = get_current_organization(self.request)
+        queryset = queryset.filter(project__organization=current_organization)
         return queryset
 
     def list(self, request, *args, **kwargs):
@@ -2299,30 +2298,51 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
 
     @action(methods=['GET', ], detail=False, url_path=r'changed')
     def changed(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
+        queryset = self.filter_queryset(self.get_queryset()).distinct('id')
 
-        newest_test_run = TestRun.objects.filter(
-            id__in=set(list(queryset.values_list('test_runs__id', flat=True)))).order_by('-created').first()
-
-        if request.query_params.has_key('test_run'):
+        if 'test_run' in request.query_params:
             value = request.query_params['test_run']
             try:
                 newest_test_run = TestRun.objects.get(id=value)
             except TestRun.DoesNotExist:
                 raise APIException('TestRun not found!')
+        else:
+            newest_test_run = TestRun.objects.filter(
+                id__in=set(list(queryset.values_list('test_runs__id', flat=True)))).order_by('-created').first()
 
-        newest_current_test_run_results = TestRunResult.objects.filter(test_run=newest_test_run,
-                                                          test=models.OuterRef('id')).order_by('-created')
-
-        newest_previous_test_run_results = TestRunResult.objects.filter(test_run=newest_test_run.previous_test_run,
-                                                                        test=models.OuterRef('id')).order_by('-created')
-
-        queryset = queryset.annotate(
-            current_status=models.Subquery(newest_current_test_run_results.values('status')[:1]),
-            previous_status=models.Subquery(newest_previous_test_run_results.values('status')[:1])
-        ).filter(
-            ~models.Q(current_status=models.F('previous_status'))
-        )
+        # TODO: A very ugly solution to a performance problem
+        organization = get_current_organization(self.request)
+        queryset = queryset.raw("""
+SELECT
+        "testing_test"."id", "testing_test"."project_id", "testing_test"."area_id",
+        "testing_test"."author_id", "testing_test"."name", "testing_test"."mix_name",
+        "testing_test"."class_name", "testing_test"."testsuite_name",
+        "testing_test"."description", "testing_test"."extra_data",
+        "testing_test"."type", "testing_test"."tags", "testing_test"."lines",
+        "testing_test"."parameters", "testing_test"."meta", "testing_test"."priority",
+        "testing_test"."usage", "testing_test"."timeout",
+        "testing_test"."created", "testing_test"."updated",
+        U0."status" AS "current_status",
+        U1."status" AS "previous_status"
+FROM "testing_test"
+INNER JOIN "project_project" ON ("testing_test"."project_id" = "project_project"."id")
+LEFT JOIN LATERAL (SELECT U0."status", U0.test_run_id
+	FROM "testing_testrunresult" U0
+	WHERE (U0."test_id" = "testing_test"."id"
+	AND U0."test_run_id" = %s)
+	ORDER BY U0."created" DESC
+	LIMIT 1) U0 ON true
+LEFT JOIN "testing_testrun" tr ON U0.test_run_id = tr.id
+LEFT JOIN LATERAL (SELECT U1."status"
+	FROM "testing_testrunresult" U1
+	WHERE (U1."test_id" = "testing_test"."id"
+	AND U1."test_run_id" = tr.previous_test_run_id)
+	ORDER BY U1."created" DESC
+	LIMIT 1) U1 ON true
+WHERE
+"project_project"."organization_id" = %s
+ AND U0.status IS DISTINCT FROM U1.status
+        """, [newest_test_run.pk, organization.pk])
 
         page = self.paginate_queryset(queryset)
         if page is not None:
@@ -2349,7 +2369,6 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
             execution_time_max=models.Max('test_runs__test_run_results__execution_time',
                                           output_field=models.FloatField()),
         )
-
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
@@ -2416,7 +2435,7 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
         return Response(serializer.data)
 
     @staticmethod
-    def get_last_run_result_commit(project, target_branch, test_suite):
+    def get_last_run_result_commit(project, target_branch, test_suite, commit):
         """
         Return last commit of commits set that has 'target_branch' in 'branches' and have test runs.
 
@@ -2427,16 +2446,23 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
         :param test_suite: py:obj:`TestSuite` object
         :return: py:obj:`Commit` object or may raise NotFound exception
         """
-
+        time_threshold = commit.timestamp - timedelta(days=1)
         last_run_commit_list = Commit.objects.filter(project=project,
-                                                     branches=target_branch,
-                                                     test_runs__isnull=False,
-                                                     test_runs__test_suite=test_suite).order_by('-timestamp')
+                                                        branches=target_branch,
+                                                        test_runs__isnull=False,
+                                                        test_runs__test_suite=test_suite,
+                                                        timestamp__gt=time_threshold,
+                                                        timestamp__lt=commit.timestamp).order_by('-timestamp')
+    
         if len(last_run_commit_list) == 0:
-            err_msg = "No one commit in branch '{0}' has not associated "                                 \
-                      "test runs in specified test suite '{1}'".format(target_branch.name, test_suite.name)
-            raise NotFound(detail=err_msg)
-        return last_run_commit_list[0]
+            all_commits = Commit.objects.filter(project=project,
+                                                branches=target_branch,
+                                                timestamp__gt=time_threshold,
+                                                timestamp__lt=commit.timestamp).order_by('timestamp')
+            if len(all_commits) == 0:
+                return commit
+            return all_commits.last()
+        return last_run_commit_list.first()
 
     @staticmethod
     def get_commits_list(target_branch, first_commit, second_commit, exclusive=False):
@@ -2504,7 +2530,7 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
                 if isinstance(commit_arg, str) and not re.match(r'^\d*$', commit_arg):
                     raise ValidationError({'detail': "Argument '{0}' should be integer".format(arg)})
                 try:
-                    commit_arg = Commit.objects.get(project=project, id=commit_arg)
+                    commit_arg = Commit.objects.get(project=project, sha=commit_arg)
                     if arg == 'commit':
                         commit = commit_arg
                     elif arg == 'from_commit':
@@ -2552,7 +2578,7 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
                 raise ValidationError({'detail': "Argument 'test_suite' is not specified"})
             if from_commit:
                 raise ValidationError({'detail': "Argument 'from_commit' not needed."})
-            last_res_commit = self.get_last_run_result_commit(project, target_branch, test_suite)
+            last_res_commit = self.get_last_run_result_commit(project, target_branch, test_suite, commit)
             commits_ids = self.get_commits_list(target_branch, commit, last_res_commit)
         elif commit_type in ['BetweenInclusive', 'BetweenExclusive']:
             if not target_branch:
@@ -2923,14 +2949,12 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
     #             for name_test_suite in list_name_test_suite:
     #                 name_for_search.append(name_test_suite.name)
     #             name_test = name_test.filter(testsuite_name__in = name_for_search)
-
     #         if day is not None and int(priority_param) == 11:
     #             to_date   = datetime.datetime.now()
     #             from_date = to_date - timedelta(days=int(day))
     #             name_test  = name_test.filter(created__range=(from_date, to_date))
     #     except:
     #         raise APIException('Test not found!')
-
     #     return name_test
 
     def get_all_queryset(self, queryset):
@@ -2954,6 +2978,31 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
             from_date = to_date - timedelta(days=day_val)
             queryset = queryset.filter(created__range=(from_date, to_date))
         return queryset.distinct('name')
+
+    def get_highest_tests_under_time(self, queryset):
+        """
+        This function returns the highest tests set under time in minutes
+        """
+        time = self.request.query_params.get('time', None)
+        queryset = self.filter_queryset(queryset)
+        if time is not None:
+            time = int(time)
+            queryset = queryset.order_by('-priority')
+            id_set = set()
+            for test in queryset:
+                testrunresult_set = TestRunResult.objects.filter(test=test).filter(status='pass').order_by('execution_started')
+                last_pass = testrunresult_set.first()
+                if last_pass is not None:
+                    if last_pass.execution_time < time*60:
+                        id_set.add(last_pass.id)
+                    else:
+                        break
+                else:
+                    continue
+            queryset = queryset.filter(id__in=id_set)
+            return queryset.distinct('name')
+        else: 
+            raise APIException('Time is required in minute(s).')
 
     def get_default_by_percent_queryset(self, queryset, commits_ids, percent):
         default_queryset = list()

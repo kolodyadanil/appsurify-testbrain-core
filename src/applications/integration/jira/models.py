@@ -13,10 +13,8 @@ from applications.testing.models import Defect
 import sys
 import jira
 
-PY2 = sys.version_info[0] == 2
-PY3 = sys.version_info[0] == 3
-
 # Building module urlparse deprecated in Python 3.x
+from urllib.parse import urlparse
 
 
 User = get_user_model()

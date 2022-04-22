@@ -197,7 +197,7 @@ class NotificationDaemon(Daemon):
     def cron(self):
 
         try:
-            pf = file(self.pidfile, 'r')
+            pf = open(self.pidfile, 'r')
             pf_val = pf.read().strip()
 
             if pf_val == '':
@@ -217,7 +217,7 @@ class NotificationDaemon(Daemon):
 
         if self.pidfile:
             pid = os.getpid()
-            file(self.pidfile, 'w+').write("%s\n" % pid)
+            open(self.pidfile, 'w+').write("%s\n" % pid)
 
         try:
             # TODO: Special obligitary close connection created by parent process

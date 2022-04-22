@@ -3,12 +3,7 @@ import re
 import os
 import uuid
 
-try:
-    from urllib.parse import urlparse, urljoin, quote, unquote
-except ImportError:
-    from urlparse import urlparse, urljoin, unquote
-    from urllib import quote
-
+from urllib.parse import urlencode
 import tornado.gen
 import tornado.web
 import tornado.auth

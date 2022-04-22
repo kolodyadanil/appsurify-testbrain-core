@@ -2,7 +2,7 @@
 from __future__ import unicode_literals
 
 from django.db.models.constants import LOOKUP_SEP
-from rest_framework_filters import *
+from rest_framework_filters import FilterSet, Filter, NumberFilter, BooleanFilter
 from django_filters.fields import Lookup
 
 
@@ -35,7 +35,7 @@ class AreaReportFilterSet(FilterSet):
 
 class FileReportFilterSet(FilterSet):
 
-    area = NumberFilter(label='area', method='filter_is_associated')
+    area = NumberFilter(field_name='area', method='filter_is_associated')
 
     class Meta(object):
         model = File
@@ -51,7 +51,7 @@ class FileReportFilterSet(FilterSet):
 
 class CommitReportFilterSet(FilterSet):
 
-    area = NumberFilter(label='areas__id', method='filter_area')
+    area = NumberFilter(field_name='areas__id', method='filter_area')
 
     class Meta(object):
         model = Commit
@@ -79,26 +79,26 @@ class TestSuiteReportFilterSet(FilterSet):
 
 class TestRunReportFilterSet(FilterSet):
 
-    type = NumberFilter(label='test_run_type')
-    status = NumberFilter(label='test_run_status')
-    is_local = BooleanFilter(label='test_run_is_local')
+    test_run_type = NumberFilter(field_name='test_run_type')
+    status = NumberFilter(field_name='test_run_status')
+    is_local = BooleanFilter(field_name='test_run_is_local')
 
     class Meta(object):
         model = TestRunResult
-        fields = ('project', 'test_suite', 'type', 'status', 'is_local')
+        fields = ('project', 'test_suite', 'test_run_type', 'status', 'is_local')
 
 
 class TestReportFilterSet(FilterSet):
-    project = NumberFilter(label='project__id')
-    area = NumberFilter(label='area__id')
-    test_suite = NumberFilter(label='test_suites__id')
-    test_run = NumberFilter(label='test_runs__id')
-    # test_run = NumberFilter(label='test_runs__id')
-    # is_local = BooleanFilter(label='test_runs__is_local')
+    project = NumberFilter(field_name='project__id')
+    area = NumberFilter(field_name='area__id')
+    test_suites = NumberFilter(field_name='test_suites__id')
+    test_run = NumberFilter(field_name='test_runs__id')
+    # test_run = NumberFilter(field_name='test_runs__id')
+    # is_local = BooleanFilter(field_name='test_runs__is_local')
 
     class Meta(object):
         model = Test
-        fields = ('project', 'area', 'test_suite', 'test_run', )
+        fields = ('project', 'area', 'test_suites', 'test_run', )
 
 
 class TestRunResultReportFilterSet(FilterSet):
@@ -110,7 +110,7 @@ class TestRunResultReportFilterSet(FilterSet):
 
 class DefectReportFilterSet(FilterSet):
 
-    test_run = NumberFilter(label='found_test_runs__id')
+    test_run = NumberFilter(field_name="found_test_runs__id")
 
     class Meta(object):
         model = Defect

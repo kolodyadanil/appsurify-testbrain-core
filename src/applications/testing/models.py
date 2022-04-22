@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
@@ -29,18 +27,116 @@ from collections import Counter
 User = get_user_model()
 
 
+class TestReport(models.Model):
+
+    class Format(models.TextChoices):
+        UNKNOWN = "UNKNOWN", "UNKNOWN"
+        NUNIT3 = "NUNIT3", "NUNIT3"
+        JUNIT = "JUNIT", "JUNIT"
+        TRX = "TRX", "TRX"
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "PENDING"
+        PROCESSING = "PROCESSING", "PROCESSING"
+        SUCCESS = "SUCCESS", "SUCCESS"
+        FAILURE = "FAILURE", "FAILURE"
+        UNKNOWN = "UNKNOWN", "UNKNOWN"
+
+    project = models.ForeignKey(
+        "project.Project",
+        related_name="test_reports",
+        blank=False,
+        null=False,
+        on_delete=models.CASCADE
+    )
+
+    test_suite = models.ForeignKey(
+        "testing.TestSuite",
+        related_name="test_reports",
+        blank=False,
+        null=False,
+        on_delete=models.CASCADE
+    )
+
+    test_run_name = models.CharField(
+        max_length=255,
+        blank=True,
+        null=False
+    )
+
+    commit_sha = models.CharField(
+        max_length=255,
+        blank=False,
+        null=False
+    )
+
+    name = models.CharField(
+        max_length=255,
+        blank=True,
+        null=False
+    )
+
+    source = models.TextField(
+        blank=False,
+        null=False
+    )
+
+    destination = models.TextField(
+        blank=True,
+        null=False
+    )
+
+    format = models.CharField(
+        verbose_name="format",
+        max_length=128,
+        default=Format.UNKNOWN,
+        choices=Format.choices,
+        blank=False,
+        null=False
+    )
+
+    status = models.CharField(
+        verbose_name="status",
+        max_length=128,
+        default=Status.UNKNOWN,
+        choices=Status.choices,
+        blank=False,
+        null=False
+    )
+
+    created = models.DateTimeField(
+        verbose_name="created",
+        auto_now_add=True,
+        help_text="Auto-generated field"
+    )
+
+    updated = models.DateTimeField(
+        verbose_name="updated",
+        auto_now=True,
+        help_text="Auto-generated and auto-updated field"
+    )
+
+    class Meta(object):
+        ordering = ["-id", "-project", "-test_suite"]
+        verbose_name = "test report"
+        verbose_name_plural = "test reports"
+
+    def __str__(self):
+        return f"<TestReport: {self.id} (TestSuite: {self.test_suite_id})>"
+
+
 class TestType(models.Model):
     """
     TestType object
     """
 
-    project = models.ForeignKey('project.Project', related_name='test_types', blank=False, null=False,
+    project = models.ForeignKey("project.Project", related_name="test_types", blank=False, null=False,
                                 on_delete=models.CASCADE)
 
     name = models.CharField(max_length=255, blank=False, null=False)
 
-    rerun_all = models.BooleanField(default=True, help_text='rerun all')
-    rerun_flaky = models.BooleanField(default=True, help_text='rerun flaky')
+    rerun_all = models.BooleanField(default=True)
+    rerun_flaky = models.BooleanField(default=True)
 
     number_of_reruns = models.IntegerField(default=1, blank=False, null=False)
     report_after_failure = models.BooleanField(default=True, blank=False, null=False)
@@ -54,12 +150,12 @@ class TestType(models.Model):
     updated = models.DateTimeField(auto_now=True, db_index=True)
 
     class Meta(object):
-        unique_together = ('project', 'name')
-        verbose_name = _(u'test type')
-        verbose_name_plural = _(u'test types')
+        unique_together = ["project", "name", ]
+        verbose_name = "test type"
+        verbose_name_plural = "test types"
 
-    def __unicode__(self):
-        return u'{id} {name}'.format(id=self.id, name=self.name)
+    def __str__(self):
+        return f"<TestType: {self.id} ({self.name})>"
 
     @classmethod
     def get_default(cls, project):
@@ -94,8 +190,18 @@ class Test(models.Model):
 
     area = models.ForeignKey('vcs.Area', related_name='tests', blank=True, null=True, on_delete=models.CASCADE)
 
-    associated_files = models.ManyToManyField('vcs.File', related_name='associated_files', blank=True)
-    associated_areas = models.ManyToManyField('vcs.Area', related_name='associated_areas', blank=True)
+    associated_files = models.ManyToManyField(
+        "vcs.File",
+        related_name="associated_files",
+        blank=True,
+        through="TestAssociatedFiles"
+    )
+    associated_areas = models.ManyToManyField(
+        "vcs.Area",
+        related_name="associated_areas",
+        blank=True,
+        through="TestAssociatedAreas"
+    )
 
     author = models.ForeignKey(User, related_name='tests', blank=True, null=True, on_delete=models.CASCADE)
 
@@ -284,8 +390,8 @@ class TestSuite(models.Model):
         verbose_name = _(u'test suite')
         verbose_name_plural = _(u'test suites')
 
-    def __unicode__(self):
-        return u'{id} {name}'.format(id=self.id, name=self.name)
+    def __str__(self):
+        return f"<TestSuite: {self.id} ({self.name}) (Project: {self.project.name})>"
 
     @property
     def last_test_run(self):
@@ -386,13 +492,13 @@ class TestRun(MPTTModel):
     @property
     def execution_time(self):
         aggregate_data = self.test_run_results.aggregate(
-            sum_execution=functions.Coalesce(models.Sum('execution_time'), 0))
+            sum_execution=functions.Coalesce(models.Sum('execution_time'), 0, output_field=models.FloatField()))
         return aggregate_data['sum_execution']
 
     @property
     def execution_time_avg(self):
         aggregate_data = self.test_run_results.aggregate(
-            avg_execution=functions.Coalesce(models.Avg('execution_time'), 0))
+            avg_execution=functions.Coalesce(models.Avg('execution_time'), 0, output_field=models.FloatField()))
         return aggregate_data['avg_execution']
 
     @property
@@ -859,7 +965,7 @@ class TestRunResult(models.Model):
     test_suite_updated = models.DateTimeField(blank=False, null=False, db_index=True)
 
     test_run = models.ForeignKey('TestRun', related_name='test_run_results', blank=False, null=False,
-                                 on_delete=models.DO_NOTHING)
+                                 on_delete=models.CASCADE)
     test_run_name = models.CharField(max_length=255, blank=False, null=False)
     test_run_type = models.IntegerField(default=TestRun.TYPE_MANUAL, blank=False, null=False)
     test_run_status = models.IntegerField(default=TestRun.STATUS_WAIT, blank=False, null=False)
@@ -870,24 +976,24 @@ class TestRunResult(models.Model):
     test_run_updated = models.DateTimeField(blank=False, null=False, db_index=True)
 
     area = models.ForeignKey('vcs.Area', related_name='test_run_results', blank=True, null=True,
-                             on_delete=models.DO_NOTHING)
+                             on_delete=models.CASCADE)
     area_name = models.CharField(max_length=255, blank=True, null=True)
     area_created = models.DateTimeField(blank=True, null=True, db_index=True)
     area_updated = models.DateTimeField(blank=True, null=True, db_index=True)
 
     test = models.ForeignKey('Test', related_name='test_run_results', blank=False, null=False,
-                             on_delete=models.DO_NOTHING)
+                             on_delete=models.CASCADE)
     test_name = models.CharField(max_length=1000, blank=False, null=False)
     test_created = models.DateTimeField(blank=False, null=False, db_index=True)
     test_updated = models.DateTimeField(blank=False, null=False, db_index=True)
 
     step = models.ForeignKey('Step', related_name='test_run_results', blank=True, null=True,
-                             on_delete=models.DO_NOTHING)
+                             on_delete=models.CASCADE)
     step_name = models.CharField(max_length=255, blank=True, null=True)
     step_index_number = models.IntegerField(default=0, blank=True, null=True)
 
     commit = models.ForeignKey('vcs.Commit', related_name='test_run_results', blank=True, null=True,
-                               on_delete=models.DO_NOTHING)
+                               on_delete=models.CASCADE)
     commit_timestamp = models.DateTimeField(default=timezone.now, blank=False, null=False)
     commit_display_id = models.CharField(max_length=255, blank=True, null=True)
     commit_created = models.DateTimeField(blank=True, null=True, db_index=True)
@@ -916,6 +1022,7 @@ class TestRunResult(models.Model):
         indexes = [
             models.Index(fields=['-created'], name='testrunresult_created_idx'),
         ]
+
     def __unicode__(self):
         return u'{id} {result} {status}'.format(id=self.id, result=self.result, status=self.status)
 
@@ -932,15 +1039,15 @@ class TestRunResult(models.Model):
 
 class TestRunResultAttachment(models.Model):
     project = models.ForeignKey('project.Project', related_name='test_run_result_attachments', blank=False, null=False,
-                                on_delete=models.DO_NOTHING)
+                                on_delete=models.CASCADE)
 
     test_suite = models.ForeignKey('TestSuite', related_name='test_run_result_attachments', blank=False, null=False,
-                                   on_delete=models.DO_NOTHING)
+                                   on_delete=models.CASCADE)
     test_run = models.ForeignKey('TestRun', related_name='test_run_result_attachments', blank=False, null=False,
-                                 on_delete=models.DO_NOTHING)
+                                 on_delete=models.CASCADE)
 
     test_run_result = models.ForeignKey('TestRunResult', related_name='test_run_result_attachments', blank=False,
-                                        null=False, on_delete=models.DO_NOTHING)
+                                        null=False, on_delete=models.CASCADE)
 
     name = models.CharField(max_length=255, blank=False, null=False)
 
@@ -976,6 +1083,7 @@ class Defect(models.Model):
     TYPE_INVALID_TEST = 4
     TYPE_LOCAL = 5
     TYPE_OUTSIDE = 6
+    TYPE_NEW_TEST = 7
 
     TYPE_CHOICE = (
         (TYPE_ENVIRONMENTAL, _(u'ENVIRONMENTAL')),
@@ -983,7 +1091,8 @@ class Defect(models.Model):
         (TYPE_PROJECT, _(u'PROJECT')),
         (TYPE_INVALID_TEST, _(u'INVALID TEST')),
         (TYPE_LOCAL, _(u'LOCAL')),
-        (TYPE_OUTSIDE, _(u'OUTSIDE SCOPE'))
+        (TYPE_OUTSIDE, _(u'OUTSIDE SCOPE')),
+        (TYPE_NEW_TEST, _(u'NEW TEST')),
     )
 
     STATUS_NEW = 1
@@ -1027,8 +1136,8 @@ class Defect(models.Model):
     )
 
     project = models.ForeignKey('project.Project', related_name='defects', blank=False, null=False,
-                                on_delete=models.DO_NOTHING)
-    owner = models.ForeignKey(User, related_name='owned_defects', blank=True, null=True, on_delete=models.DO_NOTHING)
+                                on_delete=models.CASCADE)
+    owner = models.ForeignKey(User, related_name='owned_defects', blank=True, null=True, on_delete=models.CASCADE)
     # watchers = models.ManyToManyField(User, related_name='watched_defects', blank=True)
 
     name = models.CharField(max_length=255, blank=False, null=False)
@@ -1075,7 +1184,13 @@ class Defect(models.Model):
     caused_by_test_runs = models.ManyToManyField('TestRun', related_name='caused_defects', blank=True)
     caused_by_test_run_results = models.ManyToManyField('TestRunResult', related_name='caused_defects', blank=True)
     caused_by_tests = models.ManyToManyField('Test', related_name='caused_defects', blank=True)
-    caused_by_commits = models.ManyToManyField('vcs.Commit', related_name='caused_defects', blank=True)
+
+    caused_by_commits = models.ManyToManyField(
+        "vcs.Commit",
+        related_name="caused_defects",
+        blank=True,
+        through="DefectCausedByCommits"
+    )
 
     # TODO: Link to objects in which defects are reopen (who init reopen defect)
     reopen_test_suites = models.ManyToManyField('TestSuite', related_name='reopened_defects', blank=True)
@@ -1084,32 +1199,37 @@ class Defect(models.Model):
     reopen_tests = models.ManyToManyField('Test', related_name='reopened_defects', blank=True)
     reopen_commits = models.ManyToManyField('vcs.Commit', related_name='reopened_defects', blank=True)
     original_defect = models.ForeignKey('self', related_name='reopened_defect', blank=True, null=True,
-                                        on_delete=models.DO_NOTHING)
+                                        on_delete=models.CASCADE)
 
     # TODO: Link to objects in which defects are created (who init this defect)
     created_by_test_suite = models.ForeignKey('TestSuite', related_name='created_defects', blank=True, null=True,
-                                              on_delete=models.DO_NOTHING)
+                                              on_delete=models.CASCADE)
     created_by_test_run = models.ForeignKey('TestRun', related_name='created_defects', blank=True, null=True,
-                                            on_delete=models.DO_NOTHING)
+                                            on_delete=models.CASCADE)
     created_by_test_run_result = models.ForeignKey('TestRunResult', related_name='created_defects', blank=True,
-                                                   null=True, on_delete=models.DO_NOTHING)
+                                                   null=True, on_delete=models.CASCADE)
     created_by_test = models.ForeignKey('Test', related_name='created_defects', blank=True, null=True,
-                                        on_delete=models.DO_NOTHING)
+                                        on_delete=models.CASCADE)
     created_by_commit = models.ForeignKey('vcs.Commit', related_name='created_defects', blank=True, null=True,
-                                          on_delete=models.DO_NOTHING)
+                                          on_delete=models.CASCADE)
 
     # TODO: Link to objects in which defects are closed (who init closed defect)
     closed_test_suite = models.ForeignKey('TestSuite', related_name='closed_defects', blank=True, null=True,
-                                          on_delete=models.DO_NOTHING)
+                                          on_delete=models.CASCADE)
     closed_test_run = models.ForeignKey('TestRun', related_name='closed_defects', blank=True, null=True,
-                                        on_delete=models.DO_NOTHING)
+                                        on_delete=models.CASCADE)
     closed_test_run_result = models.ForeignKey('TestRunResult', related_name='closed_defects', blank=True, null=True,
-                                               on_delete=models.DO_NOTHING)
+                                               on_delete=models.CASCADE)
     closed_test = models.ForeignKey('Test', related_name='closed_defects', blank=True, null=True,
-                                    on_delete=models.DO_NOTHING)
+                                    on_delete=models.CASCADE)
     closed_commit = models.ForeignKey('vcs.Commit', related_name='closed_defects', blank=True, null=True,
-                                      on_delete=models.DO_NOTHING)
-    closed_by_commits = models.ManyToManyField('vcs.Commit', related_name='closed_by_defects', blank=True)
+                                      on_delete=models.CASCADE)
+    closed_by_commits = models.ManyToManyField(
+        "vcs.Commit",
+        related_name="closed_by_defects",
+        blank=True,
+        through="DefectClosedByCommits"
+    )
 
     created = models.DateTimeField(auto_now_add=True, db_index=True)
     updated = models.DateTimeField(auto_now=True, db_index=True)
@@ -1763,3 +1883,80 @@ class DefectAttachment(models.Model):
 
     def __unicode__(self):
         return u'{id} {name}'.format(id=self.id, name=self.name)
+
+
+class TimeStampedM2M(models.Model):
+    created = models.DateTimeField(
+        verbose_name="created",
+        auto_now_add=True,
+        help_text="Auto-generated field"
+    )
+
+    updated = models.DateTimeField(
+        verbose_name="updated",
+        auto_now_add=True,
+        help_text="Auto-generated and auto-updated field"
+    )
+
+    class Meta(object):
+        abstract = True
+
+
+class DefectCausedByCommits(TimeStampedM2M):
+    commit = models.ForeignKey(
+        "vcs.Commit",
+        on_delete=models.CASCADE
+    )
+
+    defect = models.ForeignKey(
+        "Defect",
+        on_delete=models.CASCADE
+    )
+
+    class Meta(object):
+        db_table = "testing_defect_caused_by_commits"
+
+
+class DefectClosedByCommits(TimeStampedM2M):
+    commit = models.ForeignKey(
+        "vcs.Commit",
+        on_delete=models.CASCADE
+    )
+
+    defect = models.ForeignKey(
+        "Defect",
+        on_delete=models.CASCADE
+    )
+
+    class Meta(object):
+        db_table = "testing_defect_closed_by_commits"
+
+
+class TestAssociatedFiles(TimeStampedM2M):
+    file = models.ForeignKey(
+        "vcs.File",
+        on_delete=models.CASCADE
+    )
+
+    test = models.ForeignKey(
+        "Test",
+        on_delete=models.CASCADE
+    )
+
+    class Meta(object):
+        db_table = "testing_test_associated_files"
+
+
+class TestAssociatedAreas(TimeStampedM2M):
+    area = models.ForeignKey(
+        "vcs.Area",
+        on_delete=models.CASCADE
+    )
+
+    test = models.ForeignKey(
+        "Test",
+        on_delete=models.CASCADE
+    )
+
+    class Meta(object):
+        db_table = "testing_test_associated_areas"

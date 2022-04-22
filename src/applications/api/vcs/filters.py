@@ -39,7 +39,7 @@ class AreaFilterSet(FilterSet):
 
     def filter_show_default(self, qs, name, value):
         if not value:
-            qs = qs.exclude(label='Default Area')
+            qs = qs.exclude(field_name='Default Area')
         return qs
 
     def filter_only_empty(self, qs, name, value):
@@ -83,7 +83,7 @@ class TagFilterSet(FilterSet):
 
 class FileFilterSet(FilterSet):
 
-    area = NumberFilter(label='area', method='filter_is_associated')
+    area = NumberFilter(field_name='area', method='filter_is_associated')
 
     class Meta(object):
         model = File

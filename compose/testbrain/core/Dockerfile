@@ -10,6 +10,7 @@ ENV PYTHONIOENCODING 'utf-8'
 ENV GIT_PYTHON_REFRESH 'quiet'
 ENV GIT_DISCOVERY_ACROSS_FILESYSTEM 1
 
+ENV PYTHONPATH "/opt/app/python:$PYTHONPATH"
 ENV PATH "/opt/app/bin:$PATH"
 ENV DJANGO_STORAGE_ROOT '/opt/app/storage'
 
@@ -23,7 +24,7 @@ RUN apt-get update -y && apt-get install -y \
     libpq-dev gettext wget gnupg p7zip-full openssh-server \
     ssh net-tools git gcc make software-properties-common \
     locales libcurl4-openssl-dev librtmp-dev libssl-dev default-jre \
-    cron mailutils postfix \
+    cron mailutils postfix postgresql-client nano htop rsyslog\
     && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false
 
 # Requirements are installed here to ensure they will be cached.
@@ -42,13 +43,15 @@ RUN mkdir -p \
     /opt/app/python/static \
     /opt/app/pids \
     /opt/app/logs \
+    /opt/app/crons \
     ${DJANGO_STORAGE_ROOT}
 
 COPY ./bin /opt/app/bin
 RUN chmod -R +x /opt/app/bin
 RUN ln -s /opt/app/bin/perforce/nix/p4 /opt/app/bin/p4
 
-COPY ./compose/testbrain/core/cron/notification /etc/cron.d/notification
+COPY ./compose/testbrain/core/notify/cron /opt/app/crons/cron-notify
+COPY ./compose/testbrain/core/ml/cron /opt/app/crons/cron-ml
 
 COPY ./compose/testbrain/core/docker-entrypoint /docker-entrypoint
 RUN sed -i 's/\r$//g' /docker-entrypoint
@@ -61,6 +64,14 @@ RUN chmod +x /start-worker
 COPY ./compose/testbrain/core/celery/beat/start /start-beat
 RUN sed -i 's/\r$//g' /start-beat
 RUN chmod +x /start-beat
+
+COPY ./compose/testbrain/core/notify/start /start-notify
+RUN sed -i 's/\r$//g' /start-notify
+RUN chmod +x /start-notify
+
+COPY ./compose/testbrain/core/ml/start /start-ml
+RUN sed -i 's/\r$//g' /start-ml
+RUN chmod +x /start-ml
 
 COPY ./compose/testbrain/core/celery/flower/start /start-flower
 RUN sed -i 's/\r$//g' /start-flower

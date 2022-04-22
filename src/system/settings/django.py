@@ -3,11 +3,15 @@
 from system.env import env, BASE_DIR
 
 DEBUG = env.bool("DJANGO_DEBUG", default=True)
+DEBUG_SITE_ID = env.int("DJANGO_DEBUG_SITE_ID", default=0)
 
 PLATFORM = env.str("PLATFORM", default="on-premises")
 
 if PLATFORM == "on-premises":
     SITE_ID = 1
+
+if DEBUG_SITE_ID != 0:
+    SITE_ID = DEBUG_SITE_ID
 
 SECRET_KEY = env.str("DJANGO_SECRET_KEY", default="FAKE###T[*R)+Grx!%CwWXm)m+^;nFwTd,tc6Fhi/B@1Sd(XMC")
 
@@ -62,6 +66,7 @@ LOCAL_APPS = [
     "applications.project",
     "applications.vcs",
     "applications.testing",
+    "applications.ml",
     "applications.notification",
     "applications.integration",
     "applications.integration.github",
@@ -198,5 +203,5 @@ USE_X_FORWARDED_PORT = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 512 * 1024
-DATA_UPLOAD_MAX_MEMORY_SIZE = 512 * 1024 * 1024
-FILE_UPLOAD_MAX_MEMORY_SIZE = 512 * 1024 * 1024
+DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024 * 1024

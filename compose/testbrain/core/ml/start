@@ -1,0 +1,9 @@
+#!/bin/bash
+set -e
+set -o errexit
+set -o nounset
+
+
+cp /opt/app/crons/cron-ml /etc/cron.d/cron
+crontab /etc/cron.d/cron
+/usr/sbin/cron -f && tail -f /opt/app/logs/cron-helper-*.log

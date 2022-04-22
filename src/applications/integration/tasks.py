@@ -31,7 +31,7 @@ def make_clone_workflow(project_id, repository_id, model_name):
 
 
 def make_processing_workflow(project_id, repository_id, model_name, data=None, since_time=None):
-    workflow = processing_commits_task.signature(
+    common_workflow = processing_commits_task.signature(
         kwargs=dict(
             project_id=project_id,
             repository_id=repository_id,
@@ -42,7 +42,7 @@ def make_processing_workflow(project_id, repository_id, model_name, data=None, s
         immutable=True
     )
 
-    workflow.link((
+    common_workflow.link((
         processing_files_task.signature(
             kwargs=dict(
                 project_id=project_id,
@@ -82,6 +82,17 @@ def make_processing_workflow(project_id, repository_id, model_name, data=None, s
         )
     ))
 
+    fast_workflow = processing_commits_fast_task.signature(
+        kwargs=dict(
+            project_id=project_id,
+            repository_id=repository_id,
+            model_name=model_name,
+            data=data
+        ),
+        immutable=True
+    )
+
+    workflow = (fast_workflow | common_workflow)
     return workflow
 
 
@@ -116,6 +127,19 @@ def make_analytics_workflow(project_id, repository_id, model_name, data=None, si
 
 
 @app.task(bind=True)
+def processing_commits_fast_task(self, project_id=None, repository_id=None, model_name=None, data=None):
+    try:
+        RepositoryModel = get_repository_model(model_name)
+        repository = RepositoryModel.objects.get(id=repository_id)
+
+        result = repository.processing_commits_fast(project=repository.project, repository=repository, data=data)
+
+        return {'project_id': project_id, 'repository_id': repository_id, 'model_name': model_name}
+    except Exception as exc:
+        raise self.retry(exc=exc, countdown=5, max_retries=3)
+
+
+@app.task(bind=True)
 def processing_commits_task(self, project_id=None, repository_id=None, model_name=None, data=None, since_time=None):
     try:
         RepositoryModel = get_repository_model(model_name)
@@ -124,7 +148,7 @@ def processing_commits_task(self, project_id=None, repository_id=None, model_nam
         ref, before, after = None, None, None
         if data:
             webhook_data = repository.handling_push_webhook_payload(data=data)
-            ref, before, after = webhook_data['ref'], webhook_data['before'], webhook_data['after']
+            refspec, before, after = webhook_data['ref'], webhook_data['before'], webhook_data['after']
 
         result = processing_commits(project=repository.project, repository=repository,
                                     ref=ref, before=before, after=after, since_time=since_time)

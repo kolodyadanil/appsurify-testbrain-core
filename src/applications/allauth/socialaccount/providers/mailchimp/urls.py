@@ -1,7 +1,0 @@
-"""Register urls for MailChimpProvider"""
-from applications.allauth.socialaccount.providers.oauth2.urls import default_urlpatterns
-
-from .provider import MailChimpProvider
-
-
-urlpatterns = default_urlpatterns(MailChimpProvider)

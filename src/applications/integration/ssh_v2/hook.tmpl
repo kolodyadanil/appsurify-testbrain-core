@@ -18,8 +18,7 @@ import logging.config
 try:
     import requests
     from requests.adapters import HTTPAdapter
-    from requests.sessions import Session
-    from requests.adapters import Retry
+    from urllib3.util.retry import Retry
 except ImportError:
     warnings.warn("Please install 'requests'. 'pip install requests'")
     sys.exit(1)
@@ -29,6 +28,9 @@ _ver = sys.version_info
 
 #: Python 2.x?
 is_py2 = (_ver[0] == 2)
+
+if is_py2:
+    raise Exception("Python 2.x is deprecated.")
 
 #: Python 3.x?
 is_py3 = (_ver[0] == 3)
@@ -121,18 +123,18 @@ COMMAND_FILE_TREE = u"git diff --name-only {} {}"
 COMMAND_GET_ALL_PROCESS = u"ps -A -o pid"
 
 # PATTERNS
-RE_OCTAL_BYTE = re.compile(br"""\\\\([0-9]{3})""")
+RE_OCTAL_BYTE = re.compile(r"""\\\\([0-9]{3})""")
 RE_COMMIT_HEADER = re.compile(
-    br"""^Commit:\t(?P<sha>[0-9A-Fa-f]+)\nDate:\t(?P<date>.*)\nTree:\t(?P<tree>[0-9A-Fa-f]+)\nParents:\t(?P<parents>.*)\nAuthor:\t(?P<author>.*)\nCommitter:\t(?P<committer>.*)\nMessage:\t(?P<message>.*)?(?:\n\n|$)?(?P<file_stats>(?:^:.+\n)+)?(?P<file_numstats>(?:.+\t.*\t.*\n)+)?(?:\n|\n\n|$)?(?P<patch>(?:diff[ ]--git(?:.+\n)+)+)?(?:\n\n|$)?""",
+    r"""^Commit:\t(?P<sha>[0-9A-Fa-f]+)\nDate:\t(?P<date>.*)\nTree:\t(?P<tree>[0-9A-Fa-f]+)\nParents:\t(?P<parents>.*)\nAuthor:\t(?P<author>.*)\nCommitter:\t(?P<committer>.*)\nMessage:\t(?P<message>.*)?(?:\n\n|$)?(?P<file_stats>(?:^:.+\n)+)?(?P<file_numstats>(?:.+\t.*\t.*\n)+)?(?:\n|\n\n|$)?(?P<patch>(?:diff[ ]--git(?:.+\n)+)+)?(?:\n\n|$)?""",
     re.VERBOSE | re.MULTILINE)
 RE_COMMIT_DIFF = re.compile(
-    br"""^diff[ ]--git[ ](?P<a_path_fallback>"?a/.+?"?)[ ](?P<b_path_fallback>"?b/.+?"?)\n(?:^old[ ]mode[ ](?P<old_mode>\d+)\n^new[ ]mode[ ](?P<new_mode>\d+)(?:\n|$))?(?:^similarity[ ]index[ ]\d+%\n^rename[ ]from[ ](?P<rename_from>.*)\n^rename[ ]to[ ](?P<rename_to>.*)(?:\n|$))?(?:^new[ ]file[ ]mode[ ](?P<new_file_mode>.+)(?:\n|$))?(?:^deleted[ ]file[ ]mode[ ](?P<deleted_file_mode>.+)(?:\n|$))?(?:^index[ ](?P<a_blob_id>[0-9A-Fa-f]+)\.\.(?P<b_blob_id>[0-9A-Fa-f]+)[ ]?(?P<b_mode>.+)?(?:\n|$))?(?:^---[ ](?P<a_path>[^\t\n\r\f\v]*)[\t\r\f\v]*(?:\n|$))?(?:^\+\+\+[ ](?P<b_path>[^\t\n\r\f\v]*)[\t\r\f\v]*(?:\n|$))?""",
+    r"""^diff[ ]--git[ ](?P<a_path_fallback>"?a/.+?"?)[ ](?P<b_path_fallback>"?b/.+?"?)\n(?:^old[ ]mode[ ](?P<old_mode>\d+)\n^new[ ]mode[ ](?P<new_mode>\d+)(?:\n|$))?(?:^similarity[ ]index[ ]\d+%\n^rename[ ]from[ ](?P<rename_from>.*)\n^rename[ ]to[ ](?P<rename_to>.*)(?:\n|$))?(?:^new[ ]file[ ]mode[ ](?P<new_file_mode>.+)(?:\n|$))?(?:^deleted[ ]file[ ]mode[ ](?P<deleted_file_mode>.+)(?:\n|$))?(?:^index[ ](?P<a_blob_id>[0-9A-Fa-f]+)\.\.(?P<b_blob_id>[0-9A-Fa-f]+)[ ]?(?P<b_mode>.+)?(?:\n|$))?(?:^---[ ](?P<a_path>[^\t\n\r\f\v]*)[\t\r\f\v]*(?:\n|$))?(?:^\+\+\+[ ](?P<b_path>[^\t\n\r\f\v]*)[\t\r\f\v]*(?:\n|$))?""",
     re.VERBOSE | re.MULTILINE)
 RE_COMMIT_BRANCH = re.compile(
-    br"""(refs/(remotes/)?origin/)?(\*\s)?(?P<branch>.*)""",
+    r"""(refs/(remotes/)?origin/)?(\*\s)?(?P<branch>.*)""",
     re.VERBOSE | re.MULTILINE)
-RE_TAGGER = re.compile(br"""(?P<username>.*)\t(?P<email>.*)""")
-RE_SHA = re.compile(br"""\b[0-9a-f]{5,40}\b""")
+RE_TAGGER = re.compile(r"""(?P<username>.*)\t(?P<email>.*)""")
+RE_SHA = re.compile(r"""\b[0-9a-f]{5,40}\b""")
 
 
 # HELP CLASSES
@@ -394,19 +396,19 @@ def _octal_repl(match_obj):
 
 
 def _decode_path(path, has_ab_prefix=True):
-    if path == b'/dev/null':
+    if path == '/dev/null':
         return None
 
-    if path.startswith(b'"') and path.endswith(b'"'):
-        path = (path[1:-1].replace(b'\\n', b'\n')
-                .replace(b'\\t', b'\t')
-                .replace(b'\\"', b'"')
-                .replace(b'\\\\', b'\\'))
+    if path.startswith('"') and path.endswith('"'):
+        path = (path[1:-1].replace('\\n', '\n')
+                .replace('\\t', '\t')
+                .replace('\\"', '"')
+                .replace('\\\\', '\\'))
 
     try:
         path = RE_OCTAL_BYTE.sub(_octal_repl, path)
         if has_ab_prefix:
-            assert path.startswith(b'a/') or path.startswith(b'b/')
+            assert path.startswith('a/') or path.startswith('b/')
             path = path[2:]
     except UnicodeDecodeError:
         logging.error("Error decode path: {}".format(path))
@@ -460,7 +462,7 @@ def _parse_stats(text):
 
     for line in text.splitlines():
         try:
-            line = line.decode(DEFAULT_ENCODE)
+            line = line
         except Exception as e:
             pass
 
@@ -474,8 +476,8 @@ def _parse_stats(text):
         score_str = "".join(_change_type[1:])
         score = int(score_str) if score_str.isdigit() else None
         path = path.strip()
-        a_path = path.encode(DEFAULT_ENCODE)
-        b_path = path.encode(DEFAULT_ENCODE)
+        a_path = path
+        b_path = path
         deleted_file = False
         new_file = False
         rename_from = None
@@ -500,8 +502,8 @@ def _parse_stats(text):
             status = "added"
         elif change_type == "R":
             a_path, b_path = path.split("\t", 1)
-            a_path = a_path.encode(DEFAULT_ENCODE)
-            b_path = b_path.encode(DEFAULT_ENCODE)
+            a_path = a_path
+            b_path = b_path
             rename_from, rename_to = a_path, b_path
             previous_filename = a_path
             filename = b_path
@@ -546,8 +548,8 @@ def _parse_patch(text):
         a_mode = old_mode or deleted_file_mode or (a_path and (b_mode or new_mode or new_file_mode))
         b_mode = b_mode or new_mode or new_file_mode or (b_path and a_mode)
 
-        a_blob_id = a_blob_id and a_blob_id.decode(DEFAULT_ENCODE)
-        b_blob_id = b_blob_id and b_blob_id.decode(DEFAULT_ENCODE)
+        a_blob_id = a_blob_id and a_blob_id
+        b_blob_id = b_blob_id and b_blob_id
 
         a_blob = binascii.a2b_hex(a_blob_id) if a_blob_id else a_blob_id
         b_blob = binascii.a2b_hex(b_blob_id) if b_blob_id else b_blob_id
@@ -578,8 +580,8 @@ def _parse_patch(text):
             filename=filename, previous_filename=previous_filename, sha=sha,
             status=status, a_path=a_path, b_path=b_path, a_blob_id=a_blob_id,
             a_blob=a_blob, b_blob_id=b_blob_id, b_blob=b_blob,
-            a_mode=a_mode and a_mode.decode(DEFAULT_ENCODE),
-            b_mode=b_mode and b_mode.decode(DEFAULT_ENCODE),
+            a_mode=a_mode and a_mode,
+            b_mode=b_mode and b_mode,
             new_file=new_file, deleted_file=deleted_file, rename_from=rename_from,
             rename_to=rename_to, change_type=change_type, score=""
         )
@@ -648,16 +650,34 @@ def execute(commandLine):
         if DEBUG:
             logging.error("Execution '{}'".format(repr(commandLine)))
         raise Exception(error)
+    if isinstance(out, bytes):
+        out = out.decode("utf-8")
     return out
 
+
+def requests_retry_session(
+    retries=3,
+    backoff_factor=0.3,
+    status_forcelist=(500, 502, 503, 504),
+    session=None,
+):
+    session = session or requests.Session()
+    retry = Retry(
+        total=retries,
+        read=retries,
+        connect=retries,
+        backoff_factor=backoff_factor,
+        status_forcelist=status_forcelist,
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    return session
 
 def request(event, data):
     headers = {"Content-Type": "application/json", "X-Git-Event": event, "token": API_KEY}
     try:
-        session = Session()
-        session.mount('http://', HTTPAdapter(max_retries=3))
-        session.mount('https://', HTTPAdapter(max_retries=3))
-        resp = session.post(url=POST_URL, data=data, headers=headers, verify=False, allow_redirects=True)
+        resp = requests_retry_session().post(url=POST_URL, data=data, headers=headers, verify=False, allow_redirects=True)
         result = (resp.status_code, resp.reason)
     except Exception as e:
         print("Request error: ", e)
@@ -864,7 +884,7 @@ def get_parent_list(sha_list, remotes=False, blame=False, once=False):
 
         for filename in set(filename_list_1 + filename_list_2 + filename_list_3):
 
-            if isinstance(filename, str):
+            if isinstance(filename, bytes):
                 filename = filename.decode('utf-8', errors='ignore')
 
             try:
@@ -998,7 +1018,7 @@ def get_commit_list(sha_list, remotes=False, blame=False, once=False):
 
         for filename in set(filename_list_1 + filename_list_2 + filename_list_3):
 
-            if isinstance(filename, str):
+            if isinstance(filename, bytes):
                 filename = filename.decode('utf-8', errors='ignore')
 
             try:
@@ -1295,10 +1315,10 @@ def performSync(remotes=False, force=False, blame=False):
 
         except Exception as e:
             logging.error("Error some operation with branch. Branch '{}' commit '{}' msg '{}'".format(
-                branch, end_sha, e.message), exc_info=DEBUG)
+                branch, end_sha, e), exc_info=DEBUG)
             time.sleep(15)
 
-    time.sleep(10)
+    time.sleep(15)
     try:
         tags = get_tag_list()
 
@@ -1324,7 +1344,7 @@ def performSync(remotes=False, force=False, blame=False):
             if status_code in [200, 201]:
                 _set_last_commit_sha(tag, end_sha)
 
-            time.sleep(10)
+            time.sleep(15)
 
     except Exception as e:
         pass
@@ -1432,10 +1452,7 @@ if __name__ == "__main__":
     current_script_name = os.path.basename(__file__)
 
     if "install" in sys.argv:
-        if is_py3:
-            git_path = input('Enter Full GIT path [{}]: '.format(os.path.join(os.getcwd(), '.git')))
-        else:
-            git_path = raw_input('Enter Full GIT path [{}]: '.format(os.path.join(os.getcwd(), '.git')))
+        git_path = input('Enter Full GIT path [{}]: '.format(os.path.join(os.getcwd(), '.git')))
         if not git_path:
             git_path = os.path.join(os.getcwd(), '.git')
         result = performInstall(git_path)
