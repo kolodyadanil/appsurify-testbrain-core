@@ -1,7 +1,9 @@
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 PYTHONPATH=/opt/app/python
+BASH_ENV=/etc/environment
 
 # m h dom mon dow user  command
 */2 * * * * cd /opt/app/python; python scripts/cron-helper-datasets.py >>/opt/app/logs/cron-helper-datasets.log 2>&1
 */2 * * * * cd /opt/app/python; python scripts/cron-helper-models.py >>/opt/app/logs/cron-helper-models.log 2>&1
+5 */1 * * * cd /opt/app/python; python scripts/cron-helper-checker.py >>/opt/app/logs/cron-helper-checker.log 2>&1

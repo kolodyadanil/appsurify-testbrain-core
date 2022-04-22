@@ -11,7 +11,7 @@ x-testbrain-docker: &testbrian
   build:
     context: .
     dockerfile: ./compose/testbrain/core/Dockerfile
-  image: appsurifyinc/testbrain-core:1.5.4
+  image: appsurifyinc/testbrain-core:latest
   depends_on:
     - postgres
     - rabbitmq
@@ -45,7 +45,7 @@ services:
   worker-immediate:
     <<: *testbrian
     container_name: testbrain-worker-immediate
-    command: celery -A system worker -E --loglevel=INFO --queues immediate
+    command: celery -A system worker -E --hostname=immediate@%h --loglevel=INFO --pool prefork --concurrency 2 --queues immediate
     depends_on:
       - api
       - postgres
@@ -55,7 +55,7 @@ services:
   worker:
     <<: *testbrian
     restart: always
-    command: /start-worker
+    command: celery -A system worker -E --hostname=common@%h --loglevel=INFO --pool prefork --concurrency 2
     deploy:
       replicas: 2
     depends_on:
@@ -114,7 +114,7 @@ services:
     build:
       context: .
       dockerfile: ./compose/postgres/Dockerfile
-    image: appsurifyinc/testbrain-postgres:1.5.4
+    image: appsurifyinc/testbrain-postgres:latest
     container_name: testbrain-postgres
     restart: always
     volumes:
@@ -129,7 +129,7 @@ services:
     build:
       context: .
       dockerfile: ./compose/rabbitmq/Dockerfile
-    image: appsurifyinc/testbrain-rabbitmq:1.5.4
+    image: appsurifyinc/testbrain-rabbitmq:latest
     container_name: testbrain-rabbitmq
     restart: always
     volumes:
