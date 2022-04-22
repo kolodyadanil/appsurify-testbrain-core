@@ -167,7 +167,10 @@ class MLModel(models.Model):
             state=States.PREPARED
         ).order_by("test_suite", "index")
 
+        print(f"Total models for TestSuite: {test_suite_id} - {queryset.count()}")
+
         for ml_model in queryset:
+            ml_model.save()
             try:
                 prev_ml_model = cls.objects.filter(test_suite_id=test_suite_id, index=ml_model.index - 1).last()
                 if prev_ml_model is None:
@@ -176,11 +179,11 @@ class MLModel(models.Model):
                     if prev_ml_model.state == States.TRAINED:
                         result = ml_model.train()
                     else:
-                        print(f"<TestSuite: {ml_model.test_suite.id}> - SKIPPED")
+                        # print(f"<TestSuite: {ml_model.test_suite.id}> - SKIPPED")
                         raise Exception("SKIPPED")
-                print(f"<TestSuite: {ml_model.test_suite.id}> - {result}")
+                # print(f"<TestSuite: {ml_model.test_suite.id}> - {result}")
             except Exception as e:
-                print(f"<TestSuite: {ml_model.test_suite.id}> - {e}")
+                # print(f"<TestSuite: {ml_model.test_suite.id}> - {e}")
                 raise e
 
     @classmethod

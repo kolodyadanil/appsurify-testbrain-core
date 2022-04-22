@@ -13,9 +13,10 @@ def initialize_empty_models():
 
 def perform_prepare_models():
     print("Get TestSuites for storing datasets...")
-    queryset = MLModel.objects.filter(state=States.PENDING).order_by("test_suite", "index")
+    queryset = MLModel.objects.filter(state=States.PENDING).order_by("test_suite", "index", "updated")[:5]
 
     for ml_model in queryset:
+        ml_model.save()
         try:
             print(f"Prepare <TestSuite: {ml_model.test_suite.id}>")
             result = ml_model.prepare()
@@ -27,13 +28,14 @@ def perform_prepare_models():
 
 def perform_train_models():
     print("Get TestSuites for training datasets...")
-    queryset = TestSuite.objects.filter(models__isnull=False).order_by("project", "id")
+    queryset = list(set(TestSuite.objects.filter(
+        models__state=States.PREPARED).order_by("project", "id", "models__updated")))[:5]
 
     for test_suite in queryset:
         try:
             print(f"Train <TestSuite: {test_suite.id}>")
             result = MLModel.train_model(test_suite_id=test_suite.id)
-            print(f"<TestSuite: {test_suite.id}> - {result}")
+            # print(f"<TestSuite: {test_suite.id}> - {result}")
         except Exception as e:
-            print(f"<TestSuite: {test_suite.id}> - {e}")
+            # print(f"<TestSuite: {test_suite.id}> - {e}")
             continue
