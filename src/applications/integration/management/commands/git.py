@@ -31,7 +31,6 @@ COMMAND_COMMIT_BRANCH = "git branch --contains {}"
 
 DEBUG = True
 COMMIT_COUNT = 10
-BASE_URL = 'http://0.0.0.0:9000/api/ssh_v2/hook/'
 
 RE_COMMIT_HEADER = re.compile(
     r"""^Commit:\t(?P<sha>[0-9A-Fa-f]+)\nDate:\t(?P<date>.*)\nTree:\t(?P<tree>[0-9A-Fa-f]+)\nParents:\t(?P<parents>.*)\nAuthor:\t(?P<author>.*)\nCommitter:\t(?P<committer>.*)\nMessage:\t(?P<message>.*)?(?:\n\n|$)?(?P<file_stats>(?:^:.+\n)+)?(?P<file_numstats>(?:.+\t.*\t.*\n)+)?(?:\n|\n\n|$)?(?P<patch>(?:diff[ ]--git(?:.+\n)+)+)?(?:\n\n|$)?""",
@@ -84,8 +83,8 @@ def request(url, token, data, event):
     return result
 
 
-def get_project_id(project_name, token):
-    url = BASE_URL + 'fetch/?project_name={}'.format(project_name)
+def get_project_id(base_url, project_name, token):
+    url = base_url + '/api/ssh_v2/hook/fetch/?project_name={}'.format(project_name)
     headers = {"Content-Type": "application/json",
                 "token": token}
     try:
@@ -270,16 +269,16 @@ def wrap_push_event(ref, commit):
         }
         return json.dumps(data)
     except Exception as e:
-        logging.debug("Incorrect chunk: '{}'. {}".format(','.join(commit_list), e), exc_info=DEBUG)
+        logging.debug("Incorrect chunk: '{}'. {}".format(commit, e), exc_info=DEBUG)
         return json.dumps({})
 
 
 parser = argparse.ArgumentParser(description='Sync a number of commits before a specific commit')
 
 
-# parser.add_argument('--url', type=str, 
-#                     help='Enter domain/api/ssh_v2/hook/project_id')
-parser.add_argument('--project', type=str, 
+parser.add_argument('--url', type=str, 
+                    help='Enter your organization url')
+parser.add_argument('--project', type=str,
                     help='Enter project name')
 parser.add_argument('--token', type=str,
                     help='The API key to communicate with API')
@@ -291,23 +290,24 @@ parser.add_argument('--number', type=int,
 
 args = parser.parse_args()
 
-# url = args.url
+base_url = args.url.rstrip('/')
 project = args.project
 token = args.token
 start = args.start
 number = args.number if args.number else 100
 
 
-def performPush(token, start, number):
+project_id = json.loads(get_project_id(base_url=base_url, project_name=project, token=token))["project_id"]
+url = base_url + '/api/ssh_v2/hook/{}/'.format(project_id)
+
+
+def performPush(url, token, start, number):
     sha_list = get_commits_sha(start, number)
     for sha in sha_list:
         commit = get_commit(sha)
         ref = get_commit_branch(sha)[0]
         data = wrap_push_event(ref, commit)
-        
-        project_id = json.loads(get_project_id(project_name=project, token=token))["project_id"]
-        url = BASE_URL + '{}/'.format(project_id)
-        
+
         status_code, content = request(url, token, data, event='push')
 
-performPush(token, start, number)
+performPush(url=url, token=token, start=start, number=number)

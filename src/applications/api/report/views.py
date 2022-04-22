@@ -3004,7 +3004,7 @@ WHERE
             queryset = queryset.filter(id__in=id_set)
             return queryset.distinct('name')
         else: 
-            raise APIException('Time is required in minute(s).')
+            raise APIException("param 'time' is required in minute(s).")
 
     def get_default_by_percent_queryset(self, queryset, commits_ids, percent):
         default_queryset = list()
