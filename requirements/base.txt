@@ -54,3 +54,5 @@ python-pidfile
 dask
 pqdm
 imblearn
+stripe
+django-csp

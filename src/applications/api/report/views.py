@@ -17,7 +17,8 @@ from datetime import timedelta, date
 
 from applications.api.common.views import MultiSerializerViewSetMixin
 from applications.project.permissions import IsOwnerOrReadOnly
-from applications.vcs.utils.analysis import calculate_user_analysis, calculate_user_analysis_by_range, avg_per_range, calculate_similar_by_commit
+from applications.vcs.utils.analysis import calculate_user_analysis, calculate_user_analysis_by_range, avg_per_range, \
+    calculate_similar_by_commit
 from applications.vcs.utils.bugspots import Bugspots
 from .filters import *
 from .serializers import *
@@ -1704,6 +1705,16 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
                     )
                 ), distinct=True
             ),
+            skipped_tests__count=models.Count(
+                models.Case(
+                    models.When(
+                        models.Q(
+                            # test_run_id=models.F('test_run_id'),
+                            last_test_run_result=TestRunResult.STATUS_SKIPPED
+                        ), then=models.F('test_id')
+                    )
+                ), distinct=True
+            ),
             failed_tests__count=models.Count(
                 models.Case(
                     models.When(
@@ -1735,6 +1746,7 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
                     )
                 ), distinct=True
             ),
+            execution_time=models.Sum('execution_time'),
             id=models.F('test_run_id'),
             name=models.F('test_run_name'),
             type=models.F('test_run_type'),
@@ -1762,10 +1774,11 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
             'created_defects__count',
             'founded_defects__flaky_failure__count',
             'passed_tests__count',
+            'skipped_tests__count',
             'failed_tests__count',
             'broken_tests__count',
             'not_run_tests__count',
-
+            'execution_time',
         )
         # print '#3: {}'.format(time.time() - start_time)
         queryset = qs
@@ -1787,6 +1800,132 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
         serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
+
+class TestRunReportModelViewSetByDayViewSet(TestRunReportModelViewSet):
+    filter_class = TestRunReportByDayFilterSet
+    filter_action_classes = {
+        'list': TestRunReportByDayFilterSet,
+        'retrieve': None
+    }
+
+    serializer_class = TestRunReportByDaySerializer
+    serializer_action_classes = {
+        'list': TestRunReportByDaySerializer,
+        'retrieve': None
+    }
+
+    def list(self, request, *args, **kwargs):
+        # import time
+        # start_time = time.time()
+        queryset = self.filter_queryset(self.get_queryset())
+        # print '#1: {}'.format(time.time()-start_time)
+        sub_queryset = (
+            queryset
+                .filter(test_id=models.OuterRef('project_id'))
+                .values('status')[:1]
+        )
+        # print '#2: {}'.format(time.time() - start_time)
+        qs = queryset.annotate(day=TruncDay('start_date')).values('day').annotate(
+            test_runs__count=models.Count(models.F('test_run_id'), distinct=True),
+            last_test_run_result=models.Subquery(sub_queryset),
+            max_execution_time=models.Max(
+                models.Case(
+                    models.When(test_run_id=models.F('id'), then=models.F('execution_time')),
+                )
+            ),
+
+            tests__count=models.Count(
+                models.Case(
+                    models.When(test_run_id=models.F('test_run_id'), then=models.F('test_id')),
+                ), distinct=True
+            ),
+
+            passed_tests__count=models.Count(
+                models.Case(
+                    models.When(
+                        models.Q(
+                            # test_run_id=models.F('test_run_id'),
+                            last_test_run_result=TestRunResult.STATUS_PASS
+                        ), then=models.F('test_id')
+                    )
+                ), distinct=True
+            ),
+            skipped_tests__count=models.Count(
+                models.Case(
+                    models.When(
+                        models.Q(
+                            # test_run_id=models.F('test_run_id'),
+                            last_test_run_result=TestRunResult.STATUS_SKIPPED
+                        ), then=models.F('test_id')
+                    )
+                ), distinct=True
+            ),
+            failed_tests__count=models.Count(
+                models.Case(
+                    models.When(
+                        models.Q(
+                            # test_run_id=models.F('test_run_id'),
+                            last_test_run_result=TestRunResult.STATUS_FAIL
+                        ), then=models.F('test_id')
+                    )
+                ), distinct=True
+            ),
+            broken_tests__count=models.Count(
+                models.Case(
+                    models.When(
+                        models.Q(
+                            # test_run_id=models.F('test_run_id'),
+                            last_test_run_result=TestRunResult.STATUS_BROKEN
+                        ), then=models.F('test_id')
+                    )
+                ), distinct=True
+            ),
+            not_run_tests__count=models.Count(
+                models.Case(
+                    models.When(
+                        models.Q(
+                            # test_run_id=models.F('test_run_id'),
+                            last_test_run_result__in=[TestRunResult.STATUS_PENDING, TestRunResult.STATUS_SKIPPED,
+                                                      TestRunResult.STATUS_NOT_RUN]
+                        ), then=models.F('test_id')
+                    )
+                ), distinct=True
+            ),
+            execution_time=models.Sum('execution_time'),
+        ).values(
+            "passed_tests__count",
+            "skipped_tests__count",
+            "failed_tests__count",
+            "broken_tests__count",
+            "not_run_tests__count",
+            "execution_time",
+            'tests__count',
+            'day', 'test_runs__count', 'max_execution_time')
+        # print '#3: {}'.format(time.time() - start_time)
+        queryset = qs
+        # print '#4: {}'.format(time.time() - start_time)
+        page = self.paginate_queryset(queryset)
+        # print '#5: {}'.format(time.time() - start_time)
+        sum = 0
+        i = 1
+        # Todo: WIP. This code counts step by step average values for all values in THIS dict. But we need to start
+        # count values from 60 days before first value.
+        for p in page:
+            sum += p['test_runs__count']
+            i = i + 1
+            p.update({"standard_test_runs": sum / i})
+        if page is not None:
+            # print '#6.0: {}'.format(time.time() - start_time)
+            serializer = self.get_serializer(page, many=True)
+            # print '#6.1: {}'.format(time.time() - start_time)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        # print '#6.2: {}'.format(time.time() - start_time)
+        # data =
+        # print '#7: {}'.format(time.time() - start_time)
         return Response(serializer.data)
 
 
@@ -2453,7 +2592,7 @@ WHERE
                                                         test_runs__test_suite=test_suite,
                                                         timestamp__gt=time_threshold,
                                                         timestamp__lt=commit.timestamp).order_by('-timestamp')
-    
+
         if len(last_run_commit_list) == 0:
             all_commits = Commit.objects.filter(project=project,
                                                 branches=target_branch,
@@ -2949,12 +3088,14 @@ WHERE
     #             for name_test_suite in list_name_test_suite:
     #                 name_for_search.append(name_test_suite.name)
     #             name_test = name_test.filter(testsuite_name__in = name_for_search)
+
     #         if day is not None and int(priority_param) == 11:
     #             to_date   = datetime.datetime.now()
     #             from_date = to_date - timedelta(days=int(day))
     #             name_test  = name_test.filter(created__range=(from_date, to_date))
     #     except:
     #         raise APIException('Test not found!')
+
     #     return name_test
 
     def get_all_queryset(self, queryset):
@@ -3001,7 +3142,7 @@ WHERE
                     continue
             queryset = queryset.filter(id__in=id_set)
             return queryset.distinct('name')
-        else: 
+        else:
             raise APIException('Time is required in minute(s).')
 
     def get_default_by_percent_queryset(self, queryset, commits_ids, percent):

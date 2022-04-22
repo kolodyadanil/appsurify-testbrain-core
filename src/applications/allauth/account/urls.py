@@ -31,4 +31,6 @@ urlpatterns = [
     url(r'^check-username/$', views.check_username, name='account_check_username'),
     url(r'^check-user-email/$', views.check_user_email, name='account_check_user_email'),
     url(r'^check-user-password/$', views.check_user_password, name='account_check_user_password'),
+
+    url(r'^change-user-password/$', views.change_user_password, name='account_change_user_password'),
 ]
