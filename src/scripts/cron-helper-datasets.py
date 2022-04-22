@@ -1,43 +1,31 @@
 # -*- coding: utf-8 -*-
 import os
 import sys
-import time
+
 import django
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "system.settings")
 django.setup()
 
-from pid.decorator import pidfile
-from pid import PidFileAlreadyRunningError
-
-from django.conf import settings
-
-from applications.testing.models import TestSuite
-from applications.ml.models import MLModel
-from applications.ml.utils import (
-    fix_missed_models,
-    fix_expired_models,
-    fix_broken_models,
-    perform_dataset_to_csv
-)
+from pidfile import PIDFile, AlreadyRunningError
+from applications.ml.utils import perform_prepare_models
 
 
-@pidfile()
 def main():
-    fix_missed_models()
-    fix_expired_models()
-    fix_broken_models()
-
-    for ml_model in MLModel.objects.filter(dataset_status=MLModel.Status.PENDING).order_by("-updated")[:5]:
-        try:
-            perform_dataset_to_csv(ml_model=ml_model)
-        except Exception as exc:
-            print(exc)
-            continue
+    perform_prepare_models()
+    return
 
 
 if __name__ == "__main__":
     try:
-        main()
-    except (IOError, BlockingIOError, PidFileAlreadyRunningError) as e:
+        with PIDFile("cron-helper-datasets.pid"):
+            print('Process started')
+            main()
+    except (IOError, BlockingIOError) as e:
         sys.exit(123)
+    except AlreadyRunningError:
+        # print('Already running.')
+        sys.exit(124)
+    except Exception as e:
+        print(e)
+        sys.exit(125)

@@ -249,7 +249,7 @@ def cleanup_email_addresses(request, addresses):
     return list(e2a.values()), primary_address
 
 
-def setup_user_email(request, user, addresses):
+def setup_user_email(request, user, addresses, email_verified=False):
     """
     Creates proper EmailAddress for the user that was just signed
     up. Only sets up, doesn't do any other handling such as sending
@@ -268,7 +268,7 @@ def setup_user_email(request, user, addresses):
 
     email = user_email(user)
     if email:
-        priority_addresses.append(EmailAddress(user=user, email=email, primary=True, verified=False))
+        priority_addresses.append(EmailAddress(user=user, email=email, primary=True, verified=email_verified))
 
     addresses, primary = cleanup_email_addresses(request, priority_addresses + addresses)
     for a in addresses:

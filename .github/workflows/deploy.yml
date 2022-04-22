@@ -1,0 +1,64 @@
+name: Deploy development
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [development]
+
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main repo
+        uses: actions/checkout@v2
+
+      - name: Checkout tools
+        uses: actions/checkout@v3
+        with:
+          repository: Appsurify/appsurify-testbrain-deploy
+          path: tools
+          token: ${{ secrets.DEPLOY_GIT_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          push: true
+          tags: docker.io/appsurifyinc/testbrain-core:development
+          file: compose/testbrain/core/Dockerfile
+          cache-from: type=registry,ref=docker.io/appsurifyinc/testbrain-core:development
+
+      - uses: azure/login@v1
+        with:
+          creds: '${{ secrets.AZURE_CREDENTIALS }}'
+
+      - uses: azure/aks-set-context@v2.0
+        with:
+          resource-group: "rg-aks-testbrain-dev"
+          cluster-name: "aks-testbrain-dev"
+
+      - uses: azure/setup-kubectl@v2.0
+        id: install
+
+      - run: |
+          cd tools/azure/aks/dev/
+          kubectl rollout restart -f ./statefulsets/testbrain-django-api-statefulset.yaml
+          kubectl rollout restart -f ./statefulsets/testbrain-celery-beat-statefulset.yaml
+          kubectl rollout restart -f ./statefulsets/testbrain-celery-flower-statefulset.yaml
+          kubectl rollout restart -f ./statefulsets/testbrain-cron-ml-statefulset.yaml
+          kubectl rollout restart -f ./statefulsets/testbrain-cron-notify-statefulset.yaml
+          kubectl rollout restart -f ./statefulsets/worker/
+
