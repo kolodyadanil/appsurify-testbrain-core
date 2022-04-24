@@ -324,8 +324,7 @@ class ProjectSummarySerializer(BaseProjectSerializer):
         else:
             time_savings_seconds = reduce(lambda x, y: x + y,
                                           map(lambda x: standard_execution_time - x['sum'], execution_time_by_test_run))
-
-        return dict(
+        result = dict(
             **TestRunResult.objects.filter(**filter_dict).aggregate(
                 count=models.Count("id"),
                 execution_time_seconds=models.Sum('execution_time'),
@@ -335,10 +334,13 @@ class ProjectSummarySerializer(BaseProjectSerializer):
                     models.Case(models.When(models.Q(status=TestRunResult.STATUS_PASS), then=models.F('id')))),
                 broken=models.Count(
                     models.Case(models.When(models.Q(status=TestRunResult.STATUS_BROKEN), then=models.F('id')))),
-                skipped=models.Count(
-                    models.Case(models.When(models.Q(status=TestRunResult.STATUS_SKIPPED), then=models.F('id')))),
+                # skipped=models.Count(
+                #     models.Case(models.When(models.Q(status=TestRunResult.STATUS_SKIPPED), then=models.F('id')))),
             ),
             time_savings_seconds=time_savings_seconds)
+        skipped = result['count'] - result['failed'] - result['passed'] - result['broken']
+        result.update({'skipped': skipped})
+        return result
 
     @swagger_serializer_method(serializer_or_field=ProjectSetupStatusSerializer)
     def get_setup_status(self, project):
