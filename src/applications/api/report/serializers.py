@@ -293,7 +293,8 @@ class TestRunReportSerializer(serializers.Serializer):
     execution_time = serializers.FloatField(default=0, read_only=True)
     status = serializers.SerializerMethodField(method_name="get_status")
 
-    number_of_skipped_results = serializers.IntegerField(source='skipped_tests__count', default=0, read_only=True)
+    # number_of_skipped_results = serializers.IntegerField(source='skipped_tests__count', default=0, read_only=True)
+    number_of_skipped_results = serializers.SerializerMethodField(method_name="get_skipped_tests_count")
     number_of_pass_results = serializers.IntegerField(source='passed_tests__count', default=0, read_only=True)
     number_of_fail_results = serializers.IntegerField(source='failed_tests__count', default=0, read_only=True)
     number_of_broken_results = serializers.IntegerField(source='broken_tests__count', default=0, read_only=True)
@@ -303,6 +304,13 @@ class TestRunReportSerializer(serializers.Serializer):
     percentage_of_flaky_failure_results = serializers.IntegerField(default=0, read_only=True)
 
     previous_execution_time = serializers.SerializerMethodField(method_name="get_previous_execution_time")
+
+    @staticmethod
+    def get_skipped_tests_count(instance):
+        skipped_results = instance['tests__count'] - instance['passed_tests__count'] - \
+                          instance['failed_tests__count'] - instance['broken_tests__count']
+        return skipped_results
+
 
     @staticmethod
     def get_previous_execution_time(instance):
