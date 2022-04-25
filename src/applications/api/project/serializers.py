@@ -368,7 +368,10 @@ class ProjectSummarySerializer(BaseProjectSerializer):
         else:
             test_bind = ProjectStatus.NOT_STARTED
 
-        building_model = ProjectStatus.NOT_STARTED
+        if len(project.test_runs.all()) > 50:
+            building_model = ProjectStatus.SUCCESSFUL
+        else:
+            building_model = ProjectStatus.NOT_STARTED
 
         # model = test_suite.model if test_suite else None
         # if model:
