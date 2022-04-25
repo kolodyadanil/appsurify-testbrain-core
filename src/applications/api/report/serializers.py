@@ -311,12 +311,9 @@ class TestRunReportSerializer(serializers.Serializer):
         test_runs = TestRun.objects.filter(test_suite=instance['test_suite_id']).values()
         current_date = test_runs[len(test_runs)-1]['start_date']
         minus60days = current_date - datetime.timedelta(days=60)
-        for test_run in test_runs:
-            if test_run['start_date'] >= minus60days and test_run['start_date'] <= current_date:
-                test_result = TestRunResult.objects.filter(test_suite=instance['test_suite_id'], test_run_id=test_run['id']).values()
-                tests_num = len(test_result)
-                if tests_num > self.std_num:
-                    self.std_num = tests_num
+        if instance['start_date'] >= minus60days and instance['start_date'] <= current_date:
+            if instance['tests__count'] > self.std_num:
+                self.std_num = instance['tests__count']
 
         skipped_results = self.std_num - instance['passed_tests__count'] - \
                           instance['failed_tests__count'] - instance['broken_tests__count']
