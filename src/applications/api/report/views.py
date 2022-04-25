@@ -2677,7 +2677,10 @@ WHERE
                     else:
                         raise APIException('Unknown argument type')
                 except Commit.DoesNotExist:
-                    raise ValidationError({'detail': "Commit from '{0}' not found".format(commit_arg)})
+                    # TODO: find out why there was Validation Error here if there is not high or medium or low
+                    #  priority tests.
+                    # raise ValidationError({'detail': "Commit from '{0}' not found".format(commit_arg)})
+                    return []
 
         target_branch_id = self.request.query_params.get('target_branch')
         if target_branch_id:
