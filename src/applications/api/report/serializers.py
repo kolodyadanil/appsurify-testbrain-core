@@ -2,6 +2,7 @@
 from __future__ import unicode_literals
 
 import copy
+import datetime
 import inspect
 import traceback
 
@@ -304,11 +305,22 @@ class TestRunReportSerializer(serializers.Serializer):
     percentage_of_flaky_failure_results = serializers.IntegerField(default=0, read_only=True)
 
     previous_execution_time = serializers.SerializerMethodField(method_name="get_previous_execution_time")
+    std_num = 0
 
-    @staticmethod
-    def get_skipped_tests_count(instance):
-        skipped_results = instance['tests__count'] - instance['passed_tests__count'] - \
+    def get_skipped_tests_count(self, instance):
+        test_runs = TestRun.objects.filter(test_suite=instance['test_suite_id']).values()
+        current_date = test_runs[len(test_runs)-1]['start_date']
+        minus60days = current_date - datetime.timedelta(days=60)
+        for test_run in test_runs:
+            if test_run['start_date'] >= minus60days and test_run['start_date'] <= current_date:
+                test_result = TestRunResult.objects.filter(test_suite=instance['test_suite_id'], test_run_id=test_run['id']).values()
+                tests_num = len(test_result)
+                if tests_num > self.std_num:
+                    self.std_num = tests_num
+
+        skipped_results = self.std_num - instance['passed_tests__count'] - \
                           instance['failed_tests__count'] - instance['broken_tests__count']
+        self.std_num = 0
         return skipped_results
 
 
