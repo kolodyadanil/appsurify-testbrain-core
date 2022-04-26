@@ -191,12 +191,19 @@ def set_defect_as_flaky(sender, instance, created, **kwargs):
         try:
             test_run = test.recently_test_runs[0]
             if test_run.status == TestRun.STATUS_COMPLETE:
+                if not FlakyMLPredictor.is_loaded:
+                    test_run_results = test_run.test_run_results.all().values_list('status', flat=True)
+                    if Defect.is_flaky(test_run_results):
+                        defect.type = Defect.TYPE_FLAKY
+                    return 0
                 if FlakyMLPredictor._predict_defect_flakiness(defect) >= 0.8:
                     defect.type = Defect.TYPE_FLAKY
+                    return 1
                 else:
                     test_run_results = test_run.test_run_results.all().values_list('status', flat=True)
                     if Defect.is_flaky(test_run_results):
                         defect.type = Defect.TYPE_FLAKY
+                    return 2
         except:
             continue
 
