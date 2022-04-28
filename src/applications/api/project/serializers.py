@@ -388,7 +388,6 @@ class ProjectSummarySerializer(BaseProjectSerializer):
             test_bind=test_bind,
             building_model=building_model)
 
-    @swagger_serializer_method(serializer_or_field=SubscriptionSerializer)
     def get_subscription(self, project):
         paid_until = project.organization.subscription_paid_until if project.organization.subscription_paid_until else 0
         active = True if paid_until > int(time.time()) else False
