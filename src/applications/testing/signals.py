@@ -207,7 +207,7 @@ def set_defect_as_flaky(sender, instance, created, **kwargs):
         except:
             continue
 
-@receiver(post_save, sender=TestRun)
+# @receiver(post_save, sender=TestRun)
 def create_defect_and_add_commits_in_last_24hours(sender, instance, created, **kwargs):
     test_suite = instance.test_suite
     test_runs = TestRun.objects.filter(test_suite=test_suite).order_by('id')
