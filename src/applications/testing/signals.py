@@ -183,7 +183,9 @@ def model_test_run_result_perform_defect(sender, instance, created, **kwargs):
 
 
 from applications.ml.neural_network_flaky import MLPredictor as FlakyMLPredictor
-@receiver(post_save, sender=Defect)
+
+
+# @receiver(post_save, sender=Defect)
 def set_defect_as_flaky(sender, instance, created, **kwargs):
     defect = instance
     associated_tests = defect.associated_tests.all()
