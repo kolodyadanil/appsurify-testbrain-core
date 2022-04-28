@@ -3157,9 +3157,7 @@ WHERE
             attrs["commit"] = self._validate_commit(attrs)
             # attrs["test_suite"] = self._validate_test_suite(attrs)
 
-            test_suite = self._validate_test_suite(attrs)
-            if test_suite:
-                attrs["test_suite"] = test_suite
+            attrs["test_suite"] = self._validate_test_suite(attrs)
 
             test_run = self._validate_test_run(attrs)
             if test_run:
