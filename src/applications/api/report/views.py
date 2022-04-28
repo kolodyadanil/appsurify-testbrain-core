@@ -3125,20 +3125,16 @@ WHERE
             test_suite = attrs.pop("test_suite", "")
             test_suite_name = attrs.pop("test_suite_name", "")
 
-            if not test_suite and not test_suite_name:
-                raise serializers.ValidationError("Require set test_suite or test_suite_name")
-            elif test_suite and test_suite_name:
-                raise serializers.ValidationError("Set only one test_suite or test_suite_name")
-
+            test_suite_instance = None
             try:
                 if test_suite:
-                    attrs["test_suite"] = TestSuite.objects.get(project=attrs["project"], id=test_suite)
+                    test_suite_instance = TestSuite.objects.get(project=attrs["project"], id=test_suite)
                 if test_suite_name:
-                    attrs["test_suite"] = TestSuite.objects.get(project=attrs["project"], name__iexact=test_suite_name)
+                    test_suite_instance = TestSuite.objects.get(project=attrs["project"], name__iexact=test_suite_name)
             except TestSuite.DoesNotExist:
-                raise serializers.ValidationError("TestSuite not found")
+                test_suite_instance = None
 
-            return attrs["test_suite"]
+            return test_suite_instance
 
         def _validate_test_run(self, attrs):
             test_run = attrs.pop("test_run", "")
@@ -3159,7 +3155,11 @@ WHERE
             attrs["organization"] = get_current_organization(self._get_request())
             attrs["project"] = self._validate_project(attrs)
             attrs["commit"] = self._validate_commit(attrs)
-            attrs["test_suite"] = self._validate_test_suite(attrs)
+            # attrs["test_suite"] = self._validate_test_suite(attrs)
+
+            test_suite = self._validate_test_suite(attrs)
+            if test_suite:
+                attrs["test_suite"] = test_suite
 
             test_run = self._validate_test_run(attrs)
             if test_run:
