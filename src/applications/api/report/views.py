@@ -2150,14 +2150,14 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
         newest_test_run = TestRun.objects.filter(
             id__in=set(list(queryset.values_list('test_runs__id', flat=True)))).order_by('-created').first()
 
-        if self.request.query_params.has_key('test_run'):
+        if 'test_run' in self.request.query_params:
             value = self.request.query_params['test_run']
             try:
                 newest_test_run = TestRun.objects.get(id=value)
             except TestRun.DoesNotExist:
                 raise APIException('TestRun not found!')
 
-        if self.request.query_params.has_key('current_status'):
+        if 'current_status' in self.request.query_params:
             value = self.request.query_params['current_status']
             value = [x.lstrip().rstrip() for x in value.split(u',')]
             if TestRunResult.STATUS_SKIPPED in value:
@@ -2235,7 +2235,7 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
 
     def get_group_invalid_tests_queryset(self, queryset):
         extra_filters = dict()
-        if self.request.query_params.has_key('current_status'):
+        if 'current_status' in self.request.query_params:
             value = self.request.query_params['current_status']
             value = [x.lstrip().rstrip() for x in value.split(u',')]
             if TestRunResult.STATUS_SKIPPED in value:
@@ -2274,7 +2274,7 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
 
     def get_group_open_defect_tests_queryset(self, queryset):
         extra_filters = dict()
-        if self.request.query_params.has_key('current_status'):
+        if 'current_status' in self.request.query_params:
             value = self.request.query_params['current_status']
             value = [x.lstrip().rstrip() for x in value.split(u',')]
             if TestRunResult.STATUS_SKIPPED in value:
@@ -2313,7 +2313,7 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
 
     def get_group_ready_tests_queryset(self, queryset):
         extra_filters = dict()
-        if self.request.query_params.has_key('current_status'):
+        if 'current_status' in self.request.query_params:
             value = self.request.query_params['current_status']
             value = [x.lstrip().rstrip() for x in value.split(u',')]
             if TestRunResult.STATUS_SKIPPED in value:
@@ -2352,7 +2352,7 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
 
     def get_group_passed_tests_queryset(self, queryset):
         extra_filters = dict()
-        if self.request.query_params.has_key('current_status'):
+        if 'current_status' in self.request.query_params:
             value = self.request.query_params['current_status']
             value = [x.lstrip().rstrip() for x in value.split(u',')]
             if TestRunResult.STATUS_SKIPPED in value:
@@ -2363,7 +2363,7 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
         newest_test_run = TestRun.objects.filter(
             id__in=set(list(queryset.values_list('test_runs__id', flat=True)))).order_by('-created').first()
 
-        if self.request.query_params.has_key('test_run'):
+        if 'test_run' in self.request.query_params:
             value = self.request.query_params['test_run']
             try:
                 newest_test_run = TestRun.objects.get(id=value)
@@ -2518,7 +2518,7 @@ WHERE
 
     def get_open_defect_queryset(self, queryset):
         extra_filters = dict()
-        if self.request.query_params.has_key('commit'):
+        if 'commit' in self.request.query_params:
             value = self.request.query_params['commit']
             lookup_expr = LOOKUP_SEP.join(['test_suites__test_runs__commit__id', 'exact'])
             extra_filters = {lookup_expr: value}
@@ -2546,7 +2546,7 @@ WHERE
 
     def get_ready_defect_queryset(self, queryset):
         extra_filters = dict()
-        if self.request.query_params.has_key('commit'):
+        if 'commit' in self.request.query_params:
             value = self.request.query_params['commit']
             lookup_expr = LOOKUP_SEP.join(['test_suites__test_runs__commit__id', 'exact'])
             extra_filters = {lookup_expr: value}
