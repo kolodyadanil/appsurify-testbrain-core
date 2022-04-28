@@ -203,7 +203,7 @@ def set_defect_as_flaky(sender, instance, created, **kwargs):
                     test_run_results = test_run.test_run_results.all().values_list('status', flat=True)
                     if Defect.is_flaky(test_run_results):
                         defect.type = Defect.TYPE_FLAKY
-                    return 2
+                return 2
         except:
             continue
 
