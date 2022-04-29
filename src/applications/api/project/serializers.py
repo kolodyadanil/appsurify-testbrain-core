@@ -358,12 +358,20 @@ class ProjectSummarySerializer(BaseProjectSerializer):
         test_suite = project.test_suites.first()
 
         # If the integration is not set up an empty dict is returned.
-        repo_bind = ProjectStatus.SUCCESSFUL if len(integration) > 0 else ProjectStatus.NOT_STARTED
         utc = pytz.UTC
-        if project.test_run_results.all():
+        if not len(integration) > 0:
+            repo_bind = ProjectStatus.NOT_STARTED
+        elif len(project.commits.all()) > 0 and project.commits.all().latest('created').created < (datetime.datetime.today() - datetime.timedelta(3)).replace(tzinfo=utc):
+            repo_bind = ProjectStatus.FAILURE
+        else:
+            repo_bind = ProjectStatus.SUCCESSFUL
+
+        test_runs = project.test_runs.all()
+        if len(test_runs) > 0 and test_runs.latest('created').created < (datetime.datetime.today() - datetime.timedelta(3)).replace(tzinfo=utc):
+            test_bind = ProjectStatus.FAILURE
+        elif len(test_runs) > 0:
             test_bind = ProjectStatus.SUCCESSFUL
-        elif project.created < (datetime.datetime.today() - datetime.timedelta(days=8)).replace(
-                tzinfo=utc) and test_suite == ProjectStatus.SUCCESSFUL:
+        elif project.created < (datetime.datetime.today() - datetime.timedelta(days=8)).replace(tzinfo=utc) and test_suite == ProjectStatus.SUCCESSFUL:
             test_bind = ProjectStatus.FAILURE
         else:
             test_bind = ProjectStatus.NOT_STARTED
