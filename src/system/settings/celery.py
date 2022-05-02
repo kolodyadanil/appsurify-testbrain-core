@@ -82,6 +82,7 @@ CELERY_TASK_ROUTES = {
 
     # default
     'applications.testing.tasks.periodic_add_association': {'queue': 'default', 'priority': 50},
+    'applications.vcs.tasks.create_area_from_folders_task': {'queue': 'default', 'priority': 50},
 
 }
 
@@ -119,6 +120,10 @@ CELERY_BEAT_SCHEDULE = {
     #     "task": "applications.testing.tasks.periodic_add_association",
     #     "schedule": crontab(hour=8, minute=0, day_of_week="saturday"),
     # },
+    "create_area_from_folders_every_day": {
+        "task": "applications.vcs.tasks.create_area_from_folders_task",
+        "schedule": crontab(minute=0, hour=0),
+    },
 }
 
 CELERYD_POOL_RESTARTS = CELERY_WORKER_POOL_RESTARTS
