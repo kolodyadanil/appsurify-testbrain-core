@@ -13,6 +13,7 @@ ENV GIT_DISCOVERY_ACROSS_FILESYSTEM 1
 ENV PYTHONPATH "/opt/app/python:$PYTHONPATH"
 ENV PATH "/opt/app/bin:$PATH"
 ENV DJANGO_STORAGE_ROOT '/opt/app/storage'
+ENV DJANGO_LOGS_ROOT '/opt/app/logs'
 
 RUN mkdir -p /usr/share/man/man1
 

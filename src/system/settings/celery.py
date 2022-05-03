@@ -8,7 +8,6 @@ from celery.schedules import crontab
 # CELERY
 # ------------------------------------------------------------------------------
 CELERY_BROKER_URL = env.str("BROKER_URL", default="amqp://guest:guest@localhost:5672//")
-# CELERY_RESULT_BACKEND = env.str("REDIS_URL", default="redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = "django-db"
 CELERY_CACHE_BACKEND = "django-cache"
 
@@ -101,7 +100,7 @@ CELERY_WORKER_AUTOSCALER = "celery.worker.autoscale:Autoscaler"
 CELERY_WORKER_POOL = env.str("WORKER_POOL", default="prefork")
 CELERY_WORKER_POOL_RESTARTS = True
 CELERY_WORKER_CONCURRENCY = env.int("WORKER_CONCURRENCY", default=2)
-CELERY_WORKER_PREFETCH_MULTIPLIER = env.int("WORKER_PREFETCH_MULTIPLIER", default=1)
+CELERY_WORKER_PREFETCH_MULTIPLIER = env.int("WORKER_PREFETCH_MULTIPLIER", default=2)
 # CELERY_WORKER_MAX_TASKS_PER_CHILD = env.int("WORKER_MAX_TASKS_PER_CHILD", default=10)
 
 CELERY_WORKER_TIMER_PRECISION = 1.0
@@ -122,3 +121,5 @@ CELERY_BEAT_SCHEDULE = {
 }
 
 CELERYD_POOL_RESTARTS = CELERY_WORKER_POOL_RESTARTS
+
+CELERY_HIJACK_ROOT_LOGGER = True
