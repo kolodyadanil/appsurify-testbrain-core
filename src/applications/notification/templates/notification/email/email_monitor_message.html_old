@@ -1,0 +1,24 @@
+џ{% if period %}
+{% if period == 'immediately' %}<h1>Appsurify TestBrain Monitor</h1>
+    <p>You have requested notifications when the following areas/files are changed:</p>
+{% else %}<h1>Appsurify TestBrain {{ period }} Monitor Notification</h1>
+    <p>You have requested {{ period }} notifications when the following areas/files are changed:</p>{% endif %}
+{% endif %}
+{% if areas %}<p>Areas:
+{% for area in areas %}
+    <div>{{ area.name }}</div>
+{% endfor %}</p>{% endif %}<br>
+{% if files %}<p>Files:
+{% for file in files %}
+    <div>{{ file.full_filename }}</div>
+{% endfor %}</p>{% endif %}<br>
+
+{% for commit in commits %}
+<p>
+<div>Commit: {{ commit.sha }}</div>
+<div>Author: {{ commit.author.name }}</div>
+<div>Date: {{ commit.created|date:'d M, Y, h:i a' }} UTC</div>
+<div>Area(s): {% for area in commit.areas.all %} {{ area.name }} {% endfor %}</div>
+<div>File(s): {% for file in commit.files.all %} {{ file.full_filename }} {% endfor %}</div>
+</p>
+{% endfor %}

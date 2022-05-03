@@ -1,0 +1,10 @@
+Hi, {{ user.username }}!
+
+In your project {{ project.name }} a new defect has been created{% if defect.caused_by_test_run %} from test run "{{ defect.caused_by_test_run.name }}" which started at {{ defect.caused_by_test_run.start_date }}{% endif %}.
+
+Details of the defect can be found here {{ defect_url }}.
+
+We are sorry to be the bearers of bad news, but atleast you’ve found this early!
+
+Cheers,
+Your friends at Appsurify.

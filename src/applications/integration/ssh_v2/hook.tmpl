@@ -1,0 +1,1541 @@
+#!/usr/bin/env python
+# coding: utf-8
+import warnings
+import shutil
+import os
+import re
+import sys
+import json
+import subprocess
+import time
+import binascii
+import string
+import threading
+import errno
+import traceback
+import logging
+import logging.config
+try:
+    import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+except ImportError:
+    warnings.warn("Please install 'requests'. 'pip install requests'")
+    sys.exit(1)
+
+# Syntax sugar.
+_ver = sys.version_info
+
+#: Python 2.x?
+is_py2 = (_ver[0] == 2)
+
+if is_py2:
+    raise Exception("Python 2.x is deprecated.")
+
+#: Python 3.x?
+is_py3 = (_ver[0] == 3)
+
+#: OS Windows
+is_windows = (os.name == 'nt')
+
+#: OS MacOS or Linux
+is_posix = (os.name == 'posix')
+
+DEBUG = True
+F_NULL = open(os.devnull, "w")
+
+# VARIABLES AND CONSTANTS
+POST_URL = "{{HOOK_URL}}"
+USERNAME = "{{USERNAME}}"
+REPOSITORY = "{{PROJECT}}"
+API_KEY = "{{API_KEY}}"
+
+EVENT_INSTALL = u'install'
+EVENT_PUSH = u'push'
+EVENT_CREATE = u'create'
+EVENT_DELETE = u'delete'
+
+COMMIT_COUNT = 10
+
+DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), u'.testbrain.db')
+CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), u'.testbrain.cache')
+PID_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), u'.testbrain.pid')
+
+LOGGING_CONFIG = {
+    'version': 1,
+    'disable_existing_loggers': True,
+
+    'formatters': {
+        'default': {
+            'format': '[%(asctime)s] %(levelname)-8s [%(funcName)s:%(lineno)d] %(message)s',
+            'datefmt': '%Y-%m-%d %H:%M:%S'
+        },
+    },
+    'handlers': {
+        'console': {
+            'level': 'DEBUG',
+            'class': 'logging.StreamHandler',
+            'formatter': 'default'
+        },
+        'file': {
+            'level': 'DEBUG',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'formatter': 'default',
+            'filename': './testbrain.log',
+            'maxBytes': 10 * 1024 * 1024,
+            'backupCount': 7
+        },
+    },
+    'loggers': {
+        '': {
+            'level': 'INFO' if not DEBUG else 'DEBUG',
+            'handlers': ['console', 'file']
+        },
+    }
+}
+
+logging.config.dictConfig(LOGGING_CONFIG)
+
+EMPTY_REF = u"0000000000000000000000000000000000000000"
+EMPTY_TREE_SHA = u"4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
+DEFAULT_CHANGE_TYPE = (u"A", u"D", u"R", u"M", u"T")
+DEFAULT_ENCODE = u"utf-8"
+
+# COMMAND TEMPLATES
+COMMAND_REF_LIST = u"git for-each-ref"
+COMMAND_COMMIT_SHA_LIST = u"git log --reverse --pretty=format:'%H' {}..{} --since=3.days"
+COMMAND_TAG_COMMIT_SHA_LIST = u"git log --reverse --pretty=format:'%H' {}"
+COMMAND_REMOTES_COMMIT_SHA_LIST = u"git log --reverse --pretty=format:'%H' --remotes='*/{}' --since=3.days"
+COMMAND_HEADS_COMMIT_SHA_LIST = u"git log --reverse --pretty=format:'%H' --branches='*{}' --since=3.days"
+COMMAND_COMMIT_LIST = u"git show --reverse --first-parent --raw --numstat --abbrev=40 --full-index -p -M --pretty=format:'Commit:\t%H%nDate:\t%ai%nTree:\t%T%nParents:\t%P%nAuthor:\t%an\t%ae\t%ai%nCommitter:\t%cn\t%ce\t%ci%nMessage:\t%s%n' {}"
+
+if is_windows:
+    COMMAND_COMMIT_LIST = COMMAND_COMMIT_LIST.replace('\'', '')
+    COMMAND_COMMIT_LIST = COMMAND_COMMIT_LIST.replace('\t', '%x09')
+
+COMMAND_TAGGER = u"git for-each-ref --format='%(taggername)\t%(taggeremail)' refs/tags/{}"
+COMMAND_COMMIT_FILE_BLAME = u"git blame {}^ -L {},{} -- {}"
+COMMAND_COMMIT_FILE_BLAME_FIX = u"git log --pretty=%H -1 {}^ -- {}"
+COMMAND_COMMIT_BRANCH = u"git branch --contains {}"
+COMMAND_COMMIT_REMOTES = u"git branch -r --contains {}"
+COMMAND_FILE_TREE = u"git diff --name-only {} {}"
+COMMAND_GET_ALL_PROCESS = u"ps -A -o pid"
+
+# PATTERNS
+RE_OCTAL_BYTE = re.compile(r"""\\\\([0-9]{3})""")
+RE_COMMIT_HEADER = re.compile(
+    r"""^Commit:\t(?P<sha>[0-9A-Fa-f]+)\nDate:\t(?P<date>.*)\nTree:\t(?P<tree>[0-9A-Fa-f]+)\nParents:\t(?P<parents>.*)\nAuthor:\t(?P<author>.*)\nCommitter:\t(?P<committer>.*)\nMessage:\t(?P<message>.*)?(?:\n\n|$)?(?P<file_stats>(?:^:.+\n)+)?(?P<file_numstats>(?:.+\t.*\t.*\n)+)?(?:\n|\n\n|$)?(?P<patch>(?:diff[ ]--git(?:.+\n)+)+)?(?:\n\n|$)?""",
+    re.VERBOSE | re.MULTILINE)
+RE_COMMIT_DIFF = re.compile(
+    r"""^diff[ ]--git[ ](?P<a_path_fallback>"?a/.+?"?)[ ](?P<b_path_fallback>"?b/.+?"?)\n(?:^old[ ]mode[ ](?P<old_mode>\d+)\n^new[ ]mode[ ](?P<new_mode>\d+)(?:\n|$))?(?:^similarity[ ]index[ ]\d+%\n^rename[ ]from[ ](?P<rename_from>.*)\n^rename[ ]to[ ](?P<rename_to>.*)(?:\n|$))?(?:^new[ ]file[ ]mode[ ](?P<new_file_mode>.+)(?:\n|$))?(?:^deleted[ ]file[ ]mode[ ](?P<deleted_file_mode>.+)(?:\n|$))?(?:^index[ ](?P<a_blob_id>[0-9A-Fa-f]+)\.\.(?P<b_blob_id>[0-9A-Fa-f]+)[ ]?(?P<b_mode>.+)?(?:\n|$))?(?:^---[ ](?P<a_path>[^\t\n\r\f\v]*)[\t\r\f\v]*(?:\n|$))?(?:^\+\+\+[ ](?P<b_path>[^\t\n\r\f\v]*)[\t\r\f\v]*(?:\n|$))?""",
+    re.VERBOSE | re.MULTILINE)
+RE_COMMIT_BRANCH = re.compile(
+    r"""(refs/(remotes/)?origin/)?(\*\s)?(?P<branch>.*)""",
+    re.VERBOSE | re.MULTILINE)
+RE_TAGGER = re.compile(r"""(?P<username>.*)\t(?P<email>.*)""")
+RE_SHA = re.compile(r"""\b[0-9a-f]{5,40}\b""")
+
+
+# HELP CLASSES
+class ThreadWithReturnValue(threading.Thread):
+    def __init__(self, group=None, target=None, name=None, args=(), kwargs={}, Verbose=None):
+        threading.Thread.__init__(self, group, target, name, args, kwargs, Verbose)
+        self._return = None
+
+    def run(self):
+        if self._Thread__target is not None:
+            self._return = self._Thread__target(*self._Thread__args, **self._Thread__kwargs)
+
+    def join(self):
+        threading.Thread.join(self, timeout=2)
+        return self._return
+
+
+class FileLockException(Exception):
+    pass
+
+
+class FileLock(object):
+    """ A file locking mechanism that has context-manager support so
+        you can use it in a with statement. This should be relatively cross
+        compatible as it doesn't rely on msvcrt or fcntl for the locking.
+    """
+
+    def __init__(self, file_name, timeout=None, delay=.5):
+        """ Prepare the file locker. Specify the file to lock and optionally
+            the maximum timeout and the delay between each attempt to lock.
+        """
+        if timeout is not None and delay is None:
+            raise ValueError("If timeout is not None, then delay must not be None.")
+        self.is_locked = False
+        self.lockfile = os.path.join(os.getcwd(), "%s.lock" % file_name)
+        self.file_name = file_name
+        self.timeout = timeout
+        self.delay = delay
+
+    def check_process_running(self):
+        if not os.path.exists(PID_FILE):
+            # os.mknod(PID_FILE)  # TODO: OSError: [Errno 1] Operation not permitted
+            open(PID_FILE, 'w+').close()
+
+        # Read the pid value
+        f = open(PID_FILE, "r")
+        saved_process = f.read().strip()
+        f.close()
+
+        # Find all running process
+        process = subprocess.Popen(COMMAND_GET_ALL_PROCESS, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        my_pid, err = process.communicate()
+        list_pid = list()
+        for x in my_pid.splitlines():
+            if is_py3:
+                x = x.decode('UTF-8')
+            list_pid.append(x.strip())
+        if saved_process in list_pid:
+            return True
+
+        # If process is not running, overwrite current pid and continue
+        pidfile = open(PID_FILE, 'w')
+        pidfile.write(str(os.getpid()))
+        pidfile.close()
+        return False
+
+    def acquire(self):
+        """
+            Check if this hook script is running. If the script is running, it check again
+            every `wait` seconds. It does this until it either the check retun False or
+            exceeds `timeout` number of seconds, in which case it throws
+            an exception.
+        """
+        start_time = time.time()
+        is_process_running = self.check_process_running()
+        while True:
+            if is_process_running == False:
+                break
+            if self.timeout is None or (time.time() - start_time) >= self.timeout:
+                raise Exception("Timeout occured.")
+            time.sleep(self.delay)
+
+    def release(self):
+        """ Get rid of the lock by deleting the lockfile.
+            When working in a `with` statement, this gets automatically
+            called at the end.
+        """
+        pass
+
+    def __enter__(self):
+        """ Activated when used in the with statement.
+            Should automatically acquire a lock to be used in the with block.
+        """
+        if not self.is_locked:
+            self.acquire()
+        return self
+
+    def __exit__(self, type, value, traceback):
+        """ Activated at the end of the with statement.
+            It automatically releases the lock if it isn't locked.
+        """
+        if self.is_locked:
+            self.release()
+
+    def __del__(self):
+        """ Make sure that the FileLock instance doesn't leave a lockfile
+            lying around.
+        """
+        self.release()
+
+
+class SetEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, set):
+            return list(obj)
+        return json.JSONEncoder.default(self, obj)
+
+
+class CommitHistory(object):
+
+    def __init__(self, location):
+        self.cache = dict()
+        self.location = os.path.expanduser(location)
+        self.load(self.location)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.dump()
+
+    def load(self, location):
+        if os.path.exists(location):
+            self._load()
+        else:
+            logging.debug("Cache file \'{location}\' does not exists".format(location=location))
+        return True
+
+    def _load(self):
+        # self.cache = set(open(self.location, "r").read().splitlines())
+        self.cache = json.loads(open(self.location, "r").read())
+        for ref, elems in self.cache.items():
+            self.cache[ref] = set(elems)
+
+    def dump(self):
+        try:
+            # open(self.location, "w+").write('\n'.join(self.cache.__iter__()))
+            open(self.location, "w+").write(json.dumps(self.cache, cls=SetEncoder))
+            return True
+        except Exception as e:
+            logging.error(e, exc_info=DEBUG)
+            return False
+
+    def for_ref(self, ref):
+        if ref in self.cache:
+            return self.cache[ref]
+        else:
+            self.cache[ref] = set()
+            return self.cache[ref]
+
+    def add(self, ref, element):
+        if ref in self.cache:
+            self.cache[ref].add(element)
+        else:
+            self.cache[ref] = set()
+            self.cache[ref].add(element)
+        self.dump()
+        return True
+
+    def update(self, ref, elements):
+        if ref in self.cache:
+            self.cache[ref].update(elements)
+        else:
+            self.cache[ref] = set()
+            self.cache[ref].update(elements)
+        self.dump()
+        return True
+
+    def find(self, ref, element):
+        if ref in self.cache:
+            return element in self.cache[ref]
+        else:
+            return False
+
+    def delete(self, ref, element):
+        if ref in self.cache:
+            self.cache[ref].discard(element)
+        return True
+
+    def reset(self):
+        self.cache = {}
+        self.dump()
+        return True
+
+
+cache = CommitHistory(location=CACHE_FILE)
+
+
+class SimpleDB(object):
+    def __init__(self, location):
+        self.location = os.path.expanduser(location)
+        self.load(self.location)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.dumpdb()
+
+    def load(self, location):
+        if os.path.exists(location):
+            self._load()
+        else:
+            self.db = {}
+        return True
+
+    def _load(self):
+        self.db = json.load(open(self.location, "r"))
+
+    def dumpdb(self):
+        try:
+            json.dump(self.db, open(self.location, "w+"))
+            return True
+        except Exception as e:
+            logging.error("Error saving database file. '{}'".format(e), exc_info=DEBUG)
+            return False
+
+    def set(self, key, value):
+        try:
+            self.db[str(key)] = value
+            self.dumpdb()
+        except Exception as e:
+            logging.error("Error saving values to database. '{}'".format(e), exc_info=DEBUG)
+            return False
+
+    def get(self, key):
+        try:
+            return self.db[key]
+        except KeyError:
+            logging.debug("No Value Can Be Found for {}".format(key))
+            return False
+
+    def delete(self, key):
+        if not key in self.db:
+            return False
+        del self.db[key]
+        self.dumpdb()
+        return True
+
+    def resetdb(self):
+        self.db = {}
+        self.dumpdb()
+        return True
+
+
+database = SimpleDB(location=DB_FILE)  # TODO: Maybe need move to down
+
+
+# PRIVATE HELP FUNCTIONS
+def _octal_repl(match_obj):
+    value = match_obj.group(1)
+    value = int(value, 8)
+    value = chr(value)
+    return value
+
+
+def _decode_path(path, has_ab_prefix=True):
+    if path == '/dev/null':
+        return None
+
+    if path.startswith('"') and path.endswith('"'):
+        path = (path[1:-1].replace('\\n', '\n')
+                .replace('\\t', '\t')
+                .replace('\\"', '"')
+                .replace('\\\\', '\\'))
+
+    try:
+        path = RE_OCTAL_BYTE.sub(_octal_repl, path)
+        if has_ab_prefix:
+            assert path.startswith('a/') or path.startswith('b/')
+            path = path[2:]
+    except UnicodeDecodeError:
+        logging.error("Error decode path: {}".format(path))
+
+    return path
+
+
+def _pick_best_path(path_match, rename_match, path_fallback_match):
+    if path_match:
+        return _decode_path(path_match)
+
+    if rename_match:
+        return _decode_path(rename_match, has_ab_prefix=False)
+
+    if path_fallback_match:
+        return _decode_path(path_fallback_match)
+
+    return None
+
+
+def _parse_numstats(text):
+    hsh = {"total": {"additions": 0, "deletions": 0, "changes": 0, "total": 0, "files": 0}, "files": {}}
+    for line in text.splitlines():
+
+        (raw_insertions, raw_deletions, filename) = line.split("\t")
+
+        if '{' in filename:
+            root_path = filename[:filename.find("{")]
+            mid_path = filename[filename.find("{") + 1:filename.find("}")].split("=>")[-1].strip()
+            end_path = filename[filename.find("}") + 1:]
+            filename = root_path + mid_path + end_path
+            filename = filename.replace("//", "/")
+
+        if " => " in filename:
+            filename = filename.split(" => ")[1]
+
+        insertions = raw_insertions != "-" and int(raw_insertions) or 0
+        deletions = raw_deletions != "-" and int(raw_deletions) or 0
+        hsh["total"]["additions"] += insertions
+        hsh["total"]["deletions"] += deletions
+        hsh["total"]["changes"] += insertions + deletions
+        hsh["total"]["total"] += insertions + deletions
+        hsh["total"]["files"] += 1
+        hsh["files"][filename.strip()] = {"filename": filename.strip(), "additions": insertions, "deletions": deletions,
+                                          "changes": insertions + deletions}
+    return (hsh["total"], hsh["files"])
+
+
+def _parse_stats(text):
+    diffs = dict()
+
+    for line in text.splitlines():
+        try:
+            line = line
+        except Exception as e:
+            pass
+
+        if not line.startswith(":"):
+            continue
+
+        meta, _, path = line[1:].partition("\t")
+        old_mode, new_mode, a_blob_id, b_blob_id, _change_type = meta.split(None, 4)
+
+        change_type = _change_type[0]
+        score_str = "".join(_change_type[1:])
+        score = int(score_str) if score_str.isdigit() else None
+        path = path.strip()
+        a_path = path
+        b_path = path
+        deleted_file = False
+        new_file = False
+        rename_from = None
+        rename_to = None
+
+        a_blob = binascii.a2b_hex(a_blob_id)
+        b_blob = binascii.a2b_hex(b_blob_id)
+
+        filename = a_path
+        previous_filename = ""
+        status = ""
+        sha = b_blob_id
+        if change_type == "D":
+            b_blob_id = None
+            deleted_file = True
+            filename = a_path
+            status = "deleted"
+        elif change_type == "A":
+            a_blob_id = None
+            new_file = True
+            filename = a_path
+            status = "added"
+        elif change_type == "R":
+            a_path, b_path = path.split("\t", 1)
+            a_path = a_path
+            b_path = b_path
+            rename_from, rename_to = a_path, b_path
+            previous_filename = a_path
+            filename = b_path
+            status = "renamed"
+        elif change_type == "M":
+            status = "modified"
+        elif change_type == "T":
+            filename = a_path
+            status = "renamed"
+
+        diff = dict(
+            filename=filename, previous_filename=previous_filename, sha=sha,
+            status=status, a_path=a_path, b_path=b_path, a_blob_id=a_blob_id,
+            a_blob=a_blob, b_blob_id=b_blob_id, b_blob=b_blob,
+            a_mode=old_mode, b_mode=new_mode, new_file=new_file,
+            deleted_file=deleted_file, rename_from=rename_from, rename_to=rename_to,
+            change_type=change_type, score=score, patch=""
+        )
+
+        diffs[filename] = diff
+
+    return diffs
+
+
+def _parse_patch(text):
+    diffs = list()
+    previous_header = None
+
+    for header in RE_COMMIT_DIFF.finditer(text):
+        a_path_fallback, b_path_fallback, old_mode, new_mode, \
+        rename_from, rename_to, new_file_mode, deleted_file_mode, \
+        a_blob_id, b_blob_id, b_mode, a_path, b_path = header.groups()
+
+        new_file, deleted_file = bool(new_file_mode), bool(deleted_file_mode)
+        a_path = _pick_best_path(a_path, rename_from, a_path_fallback)
+        b_path = _pick_best_path(b_path, rename_to, b_path_fallback)
+
+        if previous_header is not None:
+            patch = text[previous_header.end():header.start()]
+            diffs[-1]["patch"] = patch
+
+        a_mode = old_mode or deleted_file_mode or (a_path and (b_mode or new_mode or new_file_mode))
+        b_mode = b_mode or new_mode or new_file_mode or (b_path and a_mode)
+
+        a_blob_id = a_blob_id and a_blob_id
+        b_blob_id = b_blob_id and b_blob_id
+
+        a_blob = binascii.a2b_hex(a_blob_id) if a_blob_id else a_blob_id
+        b_blob = binascii.a2b_hex(b_blob_id) if b_blob_id else b_blob_id
+
+        change_type = ""
+        filename = a_path
+        previous_filename = ""
+        status = ""
+        sha = b_blob_id
+        if new_file:
+            change_type = "A"
+            filename = b_path
+            status = "added"
+        elif deleted_file:
+            change_type = "D"
+            filename = a_path
+            status = "deleted"
+        elif a_path != b_path:
+            change_type = "R"
+            filename = b_path
+            previous_filename = a_path
+            status = "renamed"
+        elif (a_blob and b_blob and a_blob != b_blob) or (not a_blob and not b_blob and a_mode != b_mode):
+            change_type = "M"
+            status = "modified"
+
+        diff = dict(
+            filename=filename, previous_filename=previous_filename, sha=sha,
+            status=status, a_path=a_path, b_path=b_path, a_blob_id=a_blob_id,
+            a_blob=a_blob, b_blob_id=b_blob_id, b_blob=b_blob,
+            a_mode=a_mode and a_mode,
+            b_mode=b_mode and b_mode,
+            new_file=new_file, deleted_file=deleted_file, rename_from=rename_from,
+            rename_to=rename_to, change_type=change_type, score=""
+        )
+
+        diffs.append(diff)
+
+        previous_header = header
+
+        if diffs:
+            patch = text[header.end():]
+            diffs[-1]["patch"] = patch
+
+    dict_diffs = dict()
+    for diff in diffs:
+        dict_diffs[diff["filename"]] = diff
+
+    return dict_diffs
+
+
+def _parse_person(text):
+    (person_name, person_email, person_date) = text.split("\t")
+    person_date = person_date.split(" ")
+    person_date = "{}T{}{}".format(person_date[0], person_date[1], person_date[2])
+    return {"name": person_name, "email": person_email, "date": person_date}
+
+
+def _parse_tagger(text):
+    tagger = {"username": "", "email": ""}
+
+    match = RE_TAGGER.match(text)
+    if match:
+        tagger = match.groupdict(default='')
+
+    return {"tagger": tagger}
+
+
+def _chunked_list(lst, count):
+    for i in range(0, len(lst), count):
+        yield lst[i:i + count]
+
+
+def _get_last_commit_sha(key):
+    sha = database.get(key)
+    if sha is False:
+        sha = EMPTY_TREE_SHA
+    return sha
+
+
+def _set_last_commit_sha(key, val):
+    database.set(key, val)
+
+
+# COMMUNICATION FUNCTIONS
+def execute(commandLine):
+    process = subprocess.Popen(commandLine, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if is_py3:
+        out = process.stdout.read().strip().decode("UTF-8")
+        error = process.stderr.read().strip().decode("UTF-8")
+    else:
+        out = process.stdout.read().strip()
+        out = filter(lambda x: x in string.printable, out)
+        error = process.stderr.read().strip()
+        error = filter(lambda x: x in string.printable, error)
+    if error:
+        process.kill()
+        if DEBUG:
+            logging.error("Execution '{}'".format(repr(commandLine)))
+        raise Exception(error)
+    if isinstance(out, bytes):
+        out = out.decode("utf-8")
+    return out
+
+
+def requests_retry_session(
+    retries=3,
+    backoff_factor=0.3,
+    status_forcelist=(500, 502, 503, 504),
+    session=None,
+):
+    session = session or requests.Session()
+    retry = Retry(
+        total=retries,
+        read=retries,
+        connect=retries,
+        backoff_factor=backoff_factor,
+        status_forcelist=status_forcelist,
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    return session
+
+def request(event, data):
+    headers = {"Content-Type": "application/json", "X-Git-Event": event, "token": API_KEY}
+    try:
+        resp = requests_retry_session().post(url=POST_URL, data=data, headers=headers, verify=False, allow_redirects=True)
+        result = (resp.status_code, resp.reason)
+    except Exception as e:
+        print("Request error: ", e)
+        result = (None, None)
+    return result
+
+
+# BASE FUNCTIONS
+def get_branch_list():
+    branches = list()
+    output = execute(COMMAND_REF_LIST)
+
+    for line in output.splitlines():
+        if "HEAD" in line:
+            continue
+        if "heads" not in line:
+            continue
+
+        line = line.replace("refs/heads/", "")
+        line = (line.split()[0], line.split()[2])
+
+        branches.append(line)
+    return branches
+
+
+def get_remotes_list():
+    branches = list()
+    output = execute(COMMAND_REF_LIST)
+
+    for line in output.splitlines():
+        if "HEAD" in line:
+            continue
+        if "remotes" not in line:
+            continue
+
+        line = line.replace("refs/remotes/origin/", "")
+        line = (line.split()[0], line.split()[2])
+
+        branches.append(line)
+    return branches
+
+
+def get_tag_list():
+    tags = list()
+    output = execute(COMMAND_REF_LIST)
+
+    for line in output.splitlines():
+        if "HEAD" in line:
+            continue
+        if "tag" not in line:
+            continue
+
+        line = line.replace("refs/tags/", "")
+        line = (line.split()[0], line.split()[2])
+
+        tags.append(line)
+
+    return tags
+
+
+def get_branch_sha_list(branch, remotes=False):
+    sha_list = list()
+    cmd = COMMAND_REMOTES_COMMIT_SHA_LIST.format(branch) if remotes else COMMAND_HEADS_COMMIT_SHA_LIST.format(branch)
+    output = execute(cmd)
+    for line in output.splitlines():
+        line = line.rstrip().lstrip()
+        sha_list.append(line)
+    return sha_list
+
+
+def get_tag_sha_list(tag):
+    sha_list = list()
+    output = execute(COMMAND_TAG_COMMIT_SHA_LIST.format(tag))
+    for line in output.splitlines():
+        line = line.rstrip().lstrip()
+        sha_list.append(line)
+    return sha_list
+
+
+def get_sha_list(start, end):
+    sha_list = list()
+    output = execute(COMMAND_COMMIT_SHA_LIST.format(start, end))
+    for line in output.splitlines():
+        line = line.rstrip().lstrip()
+        sha_list.append(line)
+    return sha_list
+
+
+def get_commit_branch(sha, remotes=False):
+    branch_list = list()
+    if remotes:
+        output = execute(COMMAND_COMMIT_REMOTES.format(sha))
+    else:
+        output = execute(COMMAND_COMMIT_BRANCH.format(sha))
+
+    for line in output.splitlines():
+
+        if 'HEAD' in line:
+            continue
+
+        line = line.replace("*", "")
+        line = line.rstrip().lstrip()
+
+        if "refs/remotes/origin/" in line:
+            line = line[len("refs/remotes/origin/"):]
+        elif "remotes/origin/" in line:
+            line = line[len("remotes/origin/"):]
+        elif "origin/" in line:
+            line = line[len("origin/"):]
+        elif "refs/heads/" in line:
+            line = line[len("refs/heads/"):]
+        elif "heads/" in line:
+            line = line[len("heads/"):]
+
+        branch_list.append(line)
+
+    logging.debug("Commit '{}' exist in branches: '{}'".format(sha, len(branch_list)))
+    return list(set(branch_list))
+
+
+def get_file_tree(sha):
+    output = execute(COMMAND_FILE_TREE.format(EMPTY_TREE_SHA, sha))
+    paths_list = [path.rstrip().lstrip() for path in output.splitlines()]
+    return paths_list
+
+
+def get_parent_list(sha_list, remotes=False, blame=False, once=False):
+    commit_list = list()
+
+    commit_list_cmd = COMMAND_COMMIT_LIST.format(" ".join(sha_list))
+    if is_windows:
+        commit_list_cmd = commit_list_cmd.replace('\'', '')
+
+    output = execute(commit_list_cmd)
+
+    for commit_header in RE_COMMIT_HEADER.finditer(output):
+        commit_numstats = {"additions": 0, "deletions": 0, "changes": 0, "total": 0, "files": 0}
+
+        sha, \
+        date, \
+        tree, \
+        parents, \
+        author, \
+        committer, \
+        message, \
+        file_stats, \
+        file_numstats, \
+        patch = commit_header.groups()
+
+        # if cache.find(sha) and not once:
+        #     logging.debug("Commit '{}' already exists".format(sha))
+        #     continue
+
+        date = date.split(" ")
+        date = "{}T{}{}".format(date[0], date[1], date[2])
+
+        author = _parse_person(author)
+        committer = _parse_person(committer)
+        # branches = get_commit_branch(sha, remotes=remotes)
+
+        commit = dict(
+            sha=sha,
+            tree=tree,
+            # branches=branches,
+            parents=parents,
+            date=date,
+            message=message,
+            author=author,
+            committer=committer,
+            stats=commit_numstats,
+            files=[],
+            added=[],
+            removed=[],
+            modified=[]
+        )
+
+        if file_numstats:
+            commit_numstats, file_numstats = _parse_numstats(file_numstats)
+        else:
+            file_numstats = {}
+
+        if file_stats:
+            file_stats = _parse_stats(file_stats)
+        else:
+            file_stats = {}
+
+        if patch:
+            patch = _parse_patch(patch)
+        else:
+            patch = {}
+
+        filename_list_1 = []
+        filename_list_2 = []
+        filename_list_3 = []
+
+        for filename, data in file_numstats.items():
+            filename_list_1.append(filename)
+
+        for filename, data in file_stats.items():
+            filename_list_2.append(filename)
+
+        for filename, data in patch.items():
+            filename_list_3.append(filename)
+
+        for filename in set(filename_list_1 + filename_list_2 + filename_list_3):
+
+            if isinstance(filename, bytes):
+                filename = filename.decode('utf-8', errors='ignore')
+
+            try:
+                numstat = file_numstats[filename]
+                stat = file_stats[filename]
+                diff = patch[filename]
+            except Exception as e:
+                traceback.print_exc()
+                continue
+
+            if blame:
+                try:
+                    blame = get_commit_file_blame(filename=filename, sha=sha, patch=diff["patch"])
+                except Exception as e:
+                    blame = ""
+            else:
+                blame = ""
+
+            file_object = dict(
+                filename=filename,
+                additions=numstat["additions"],
+                deletions=numstat["deletions"],
+                changes=numstat["changes"],
+                sha=stat["sha"],
+                status=stat["status"],
+                previous_filename=stat["previous_filename"],
+                patch=diff["patch"],
+                blame=blame or ""
+            )
+
+            if stat["status"] == "added":
+                commit["added"].append(filename)
+            elif stat["status"] == "added":
+                commit["added"].append(filename)
+            elif stat["status"] == "deleted":
+                commit["removed"].append(filename)
+            elif stat["status"] == "modified":
+                commit["modified"].append(filename)
+            elif stat["status"] == "renamed":
+                commit["removed"].append(stat["previous_filename"])
+                commit["added"].append(filename)
+            elif stat["status"] == "unknown":
+                commit["modified"].append(filename)
+
+            commit["files"].append(file_object)
+
+        commit_list.append(commit)
+
+    return commit_list
+
+
+def get_commit_list(sha_list, remotes=False, blame=False, once=False):
+    commit_list = list()
+
+    commit_list_cmd = COMMAND_COMMIT_LIST.format(" ".join(sha_list))
+    if is_windows:
+        commit_list_cmd = commit_list_cmd.replace('\'', '')
+
+    output = execute(commit_list_cmd)
+
+    for commit_header in RE_COMMIT_HEADER.finditer(output):
+        commit_numstats = {"additions": 0, "deletions": 0, "changes": 0, "total": 0, "files": 0}
+
+        sha, \
+        date, \
+        tree, \
+        parents, \
+        author, \
+        committer, \
+        message, \
+        file_stats, \
+        file_numstats, \
+        patch = commit_header.groups()
+
+        # if cache.find(sha) and not once:
+        #     logging.debug("Commit '{}' already exists".format(sha))
+        #     continue
+
+        parents = get_parent_list([parent_sha for parent_sha in parents.split(" ") if parent_sha], remotes=remotes, blame=blame, once=once)
+
+        date = date.split(" ")
+        date = "{}T{}{}".format(date[0], date[1], date[2])
+
+        author = _parse_person(author)
+        committer = _parse_person(committer)
+        # branches = get_commit_branch(sha, remotes=remotes)
+
+        commit = dict(
+            sha=sha,
+            tree=tree,
+            # branches=branches,
+            parents=parents,
+            date=date,
+            message=message,
+            author=author,
+            committer=committer,
+            stats=commit_numstats,
+            files=[],
+            added=[],
+            removed=[],
+            modified=[]
+        )
+
+        if file_numstats:
+            commit_numstats, file_numstats = _parse_numstats(file_numstats)
+        else:
+            file_numstats = {}
+
+        if file_stats:
+            file_stats = _parse_stats(file_stats)
+        else:
+            file_stats = {}
+
+        if patch:
+            patch = _parse_patch(patch)
+        else:
+            patch = {}
+
+        filename_list_1 = []
+        filename_list_2 = []
+        filename_list_3 = []
+
+        for filename, data in file_numstats.items():
+            filename_list_1.append(filename)
+
+        for filename, data in file_stats.items():
+            filename_list_2.append(filename)
+
+        for filename, data in patch.items():
+            filename_list_3.append(filename)
+
+        for filename in set(filename_list_1 + filename_list_2 + filename_list_3):
+
+            if isinstance(filename, bytes):
+                filename = filename.decode('utf-8', errors='ignore')
+
+            try:
+                numstat = file_numstats[filename]
+                stat = file_stats[filename]
+                diff = patch[filename]
+            except Exception as e:
+                traceback.print_exc()
+                continue
+
+            if blame:
+                try:
+                    blame = get_commit_file_blame(filename=filename, sha=sha, patch=diff["patch"])
+                except Exception as e:
+                    blame = ""
+            else:
+                blame = ""
+
+            file_object = dict(
+                filename=filename,
+                additions=numstat["additions"],
+                deletions=numstat["deletions"],
+                changes=numstat["changes"],
+                sha=stat["sha"],
+                status=stat["status"],
+                previous_filename=stat["previous_filename"],
+                patch=diff["patch"],
+                blame=blame or ""
+            )
+
+            if stat["status"] == "added":
+                commit["added"].append(filename)
+            elif stat["status"] == "added":
+                commit["added"].append(filename)
+            elif stat["status"] == "deleted":
+                commit["removed"].append(filename)
+            elif stat["status"] == "modified":
+                commit["modified"].append(filename)
+            elif stat["status"] == "renamed":
+                commit["removed"].append(stat["previous_filename"])
+                commit["added"].append(filename)
+            elif stat["status"] == "unknown":
+                commit["modified"].append(filename)
+
+            commit["files"].append(file_object)
+
+        commit_list.append(commit)
+
+    return commit_list
+
+
+def get_commit_file_blame(filename, sha, patch, ignore=True):
+    if ignore:
+        return ""
+
+    blame = list()
+    patch_strings = patch.split("\n")
+    current_string_number = 0
+    previous_number = 0
+    group = []
+    groups = []
+    for stat_string in patch_strings:
+        if "@@" in stat_string:
+            try:
+                current_string_number = abs(
+                    int(stat_string.split(" @@ ")[0].split("@@ ")[-1].split(" ")[0].split(",")[0]))
+            except Exception:
+                continue
+        else:
+            if stat_string.startswith("-"):
+                if current_string_number - previous_number == 1:
+                    group.append(current_string_number)
+                else:
+                    groups.append(group)
+                    group = [current_string_number]
+                previous_number = current_string_number
+            current_string_number += 1
+    groups.append(group)
+
+    threads = list()
+
+    def _get_blame(sha, start_string, end_string, filename):
+        result = ""
+        try:
+            result = execute(COMMAND_COMMIT_FILE_BLAME.format(sha, start_string, end_string, filename))
+
+        except Exception as e:
+            if str(e).startswith("fatal: file "):
+                result = ""
+            elif str(e).startswith("fatal: no such"):
+                try:
+                    corrective_sha = execute(COMMAND_COMMIT_FILE_BLAME_FIX.format(sha, filename))
+                    result = execute(
+                        COMMAND_COMMIT_FILE_BLAME.format(corrective_sha, start_string, end_string, filename))
+                except Exception as e:
+                    result = ""
+            else:
+                result = ""
+
+        return result
+
+    for string_group in groups:
+        if not string_group:
+            continue
+
+        x = ThreadWithReturnValue(target=_get_blame, args=(sha, string_group[0], string_group[-1], filename,))
+        threads.append(x)
+        x.start()
+
+    for index, thread in enumerate(threads):
+        result = thread.join()
+        if result or result != "":
+            blame.append(result)
+
+    if len(blame) > 0:
+        return "\n\n".join(blame)
+    return ""
+
+
+# WRAPPER FUNCTIONS
+def wrap_install_event():
+    data = {
+        "repository": {
+            "full_name": "{}/{}".format(USERNAME, REPOSITORY),
+            "name": REPOSITORY,
+        }
+    }
+    return json.dumps(data)
+
+
+def wrap_push_event(ref, commit_list, file_tree=None):
+    try:
+        data = {
+            "before": commit_list[0]["sha"],
+            "after": commit_list[-1]["sha"],
+            "ref": ref,
+            "base_ref": "",
+            "ref_type": "commit",
+            "repository": {
+                "full_name": "{}/{}".format(USERNAME, REPOSITORY),
+                "name": REPOSITORY,
+            },
+            "commits": commit_list,
+            "size": len(commit_list),
+            "head_commit": commit_list[-1],
+            "file_tree": file_tree,
+        }
+        return json.dumps(data)
+    except Exception as e:
+        logging.debug("Incorrect chunk: '{}'. {}".format(','.join(commit_list), e), exc_info=DEBUG)
+        return json.dumps({})
+
+
+def wrap_delete_event(ref):
+    ref_type = ref.split("/")[1]
+    data = {
+        "ref": "/".join(ref.split("/")[2:]),
+        "ref_type": ref_type,
+        "repository": {
+            "full_name": "{}/{}".format(USERNAME, REPOSITORY),
+            "name": REPOSITORY,
+        }
+    }
+    return json.dumps(data)
+
+
+def wrap_tag_event(ref, sha):
+    output = execute(COMMAND_TAGGER.format(ref))
+    tagger = _parse_tagger(output)
+
+    data = {
+        "ref": ref,
+        "ref_type": "tag",
+        "sha": sha,
+        "repository": {
+            "full_name": "{}/{}".format(USERNAME, REPOSITORY),
+            "name": REPOSITORY,
+        }
+    }
+    data.update(tagger)
+    return json.dumps(data)
+
+
+# EXECUTION COMMANDS
+def performUpdate(start_sha, end_sha, ref):
+    result = False
+
+    if "tag" in ref and not re.match("^0+$", end_sha):
+        # THIS IS TAG!
+        if "refs/tags/" in ref:
+            ref = ref[len("refs/tags/"):]
+
+        last_sha = _get_last_commit_sha(ref)
+        if last_sha != end_sha:
+            data = wrap_tag_event(ref, end_sha)
+            status_code, content = request(EVENT_PUSH, data)
+            if status_code in [200, 201]:
+                _set_last_commit_sha(ref, end_sha)
+                result = True
+
+    if "remotes" in ref and not re.match("^0+$", end_sha):
+        if "refs/remotes/origin/" in ref:
+            ref = ref[len("refs/remotes/origin/"):]
+        elif "remotes/origin/" in ref:
+            ref = ref[len("remotes/origin/"):]
+
+        last_sha = _get_last_commit_sha(ref)
+
+        if last_sha != start_sha:
+            start_sha = last_sha
+
+        sha_list = get_sha_list(start_sha, end_sha)
+
+        for chunk in _chunked_list(sha_list, COMMIT_COUNT):
+            commit_chunk = get_commit_list(chunk)
+            data = wrap_push_event(ref, commit_chunk)
+            status_code, content = request(EVENT_PUSH, data)
+            if status_code in [200, 201]:
+                _set_last_commit_sha(ref, chunk[-1])
+                result = True
+            else:
+                break
+
+    if "heads" in ref and not re.match("^0+$", end_sha):
+
+        if "refs/heads/" in ref:
+            ref = ref[len("refs/heads/"):]
+        elif "heads/" in ref:
+            ref = ref[len("heads/"):]
+
+        last_sha = _get_last_commit_sha(ref)
+
+        if last_sha != start_sha:
+            start_sha = last_sha
+
+        sha_list = get_sha_list(start_sha, end_sha)
+
+        for chunk in _chunked_list(sha_list, COMMIT_COUNT):
+            commit_chunk = get_commit_list(chunk)
+            data = wrap_push_event(ref, commit_chunk)
+            status_code, content = request(EVENT_PUSH, data)
+            if status_code in [200, 201]:
+                _set_last_commit_sha(ref, chunk[-1])
+                result = True
+            else:
+                break
+
+    return result
+
+
+def performSync(remotes=False, force=False, blame=False):
+    import time
+    start_time = time.time()
+
+    if remotes:
+        branches = get_remotes_list()
+    else:
+        branches = get_branch_list()
+
+    for (end_sha, branch) in branches:
+        start_sha = EMPTY_TREE_SHA
+        try:
+            last_sha = _get_last_commit_sha(branch)
+
+            if last_sha == end_sha and force is False:
+                continue
+
+            if last_sha != start_sha and force is False:
+                start_sha = last_sha
+
+            sha_list = get_sha_list(start_sha, end_sha)
+            logging.debug("{} {}".format(branch, len(sha_list)))
+
+            sha_list = list(set(sha_list) - set(cache.for_ref(branch)))
+
+            logging.debug("{} {} new".format(branch, len(sha_list)))
+            for chunk in _chunked_list(sha_list, COMMIT_COUNT):
+
+                commit_chunk = get_commit_list(chunk, remotes=remotes, blame=blame)
+                data = wrap_push_event(branch, commit_chunk)
+                status_code, content = request(EVENT_PUSH, data)
+                logging.debug(
+                    "Branch '{}' commit '{}' status '{}' response '{}'".format(branch, chunk[-1], status_code, content))
+                if status_code in [200, 201]:
+                    _set_last_commit_sha(branch, chunk[-1])
+                    cache.update(branch, chunk)
+                    time.sleep(5)
+                else:
+                    logging.error(
+                        "Error send chunk to server. Branch '{}' commit '{}' status '{}' response '{}'".format(
+                            branch, chunk[-1], status_code, content))
+                    time.sleep(15)
+                    break
+
+        except Exception as e:
+            logging.error("Error some operation with branch. Branch '{}' commit '{}' msg '{}'".format(
+                branch, end_sha, e), exc_info=DEBUG)
+            time.sleep(15)
+
+    time.sleep(15)
+    try:
+        tags = get_tag_list()
+
+        for (tag_sha, tag) in tags:
+            end_sha = tag_sha
+
+            commit_list = get_tag_sha_list('tags/' + tag)
+
+            if len(commit_list) > 0:
+                end_sha = commit_list[-1]
+
+            last_sha = _get_last_commit_sha(tag)
+
+            if last_sha == end_sha and force is False:
+                continue
+
+            data = wrap_tag_event(tag, end_sha)
+            logging.debug("Tag '{}' send wrapped data '{}'".format(tag, data))
+
+            status_code, content = request(EVENT_CREATE, data)
+            logging.debug(
+                "Tag '{}' commit '{}' status '{}' response '{}'".format(tag, end_sha, status_code, content))
+            if status_code in [200, 201]:
+                _set_last_commit_sha(tag, end_sha)
+
+            time.sleep(15)
+
+    except Exception as e:
+        pass
+
+    end_time = time.time()
+    logging.debug("Total {} seconds".format(end_time - start_time))
+    return None
+
+
+def performSyncOnce(sha, remotes=False, blame=False):
+    import time
+    start_time = time.time()
+    branch = 'master'
+
+    try:
+
+        if cache.find(branch, sha):
+            logging.info("Commit '{}' already synced".format(sha))
+            return None
+
+        commit = get_commit_list([sha], remotes=remotes, blame=blame, once=True)
+        file_tree = get_file_tree(sha)
+        data = wrap_push_event(branch, commit, file_tree=file_tree)
+        status_code, content = request(EVENT_PUSH, data)
+        if status_code in [200, 201]:
+            _set_last_commit_sha(branch, commit[-1])
+            cache.add(branch, sha)
+            time.sleep(5)
+
+    except Exception as e:
+        logging.error("Commit '{}' raise exception '{}'".format(sha, e), exc_info=DEBUG)
+        time.sleep(5)
+
+    end_time = time.time()
+    logging.debug("Total {} seconds".format(end_time - start_time))
+    return None
+
+
+def performInstall(path):
+    sys.stdout.write("INFO: GIT path: {}".format(path))
+
+    hook_filename = "testbrain-hook.py"
+    hook_wrapper_filename = "post-receive"
+
+    if not os.path.exists(path):
+        sys.stdout.write("INFO: GIT path does not exist")
+        return False
+
+    hook_path = os.path.join(path, "hooks")
+    if not os.path.exists(hook_path):
+        print("INFO: GIT hook path does not exist.")
+        print("INFO: Maybe need init git: 'cd {}; git --bare init'".format(path))
+        return False
+
+    sys.stdout.write("INFO: GIT hook copy to: {}".format(os.path.join(hook_path, hook_filename)))
+
+    if os.path.exists(os.path.join(hook_path, hook_filename)):
+        print("ERROR: GIT Hook file already exist. Please remove old file manually.")
+        return False
+
+    hook_src_filename = os.path.abspath(__file__)
+    try:
+        shutil.copyfile(hook_src_filename, os.path.join(hook_path, hook_filename))
+        sys.stdout.write("INFO: GIT hook copied")
+    except Exception:
+        sys.stderr.write("ERROR: GIT hook not copied")
+        return False
+
+    if os.path.exists(os.path.join(hook_path, hook_wrapper_filename)):
+        sys.stderr.write("ERROR: 'post-receive' hook wrapper already exist. If need add cmd into file manually:")
+        sys.stderr.write("ERROR: 'python {}'".format(os.path.join(".", "hooks", hook_filename)))
+        return False
+
+    hook_wrapper_body = "#!/usr/bin/env bash\npython {} server".format(os.path.join(".", "hooks", hook_filename))
+
+    hook_file = open(os.path.join(hook_path, hook_wrapper_filename), "w+")
+    hook_file.write(hook_wrapper_body)
+    hook_file.flush()
+    hook_file.close()
+
+    mode = os.stat(os.path.join(hook_path, hook_wrapper_filename)).st_mode
+    mode |= (mode & 0o444) >> 2
+    os.chmod(os.path.join(hook_path, hook_wrapper_filename), mode)
+
+    sys.stdout.write("INFO: GIT hook wrapper generated")
+
+    repo_path = path
+    if repo_path.endswith('.git'):
+        repo_path = repo_path[:-len('.git')]
+
+    data = wrap_install_event()
+    status_code, content = request(EVENT_INSTALL, data=data)
+
+    if status_code in [200, 201]:
+        sys.stdout.write("INFO: Install successfully")
+        sys.stdout.write("INFO: RUN 'cd {}; python {}/hooks/testbrain-hook.py sync -r'".format(repo_path, path))
+    else:
+        sys.stderr.write("ERROR: Request status {} and content {}".format(status_code, content))
+
+    return True
+
+
+if __name__ == "__main__":
+
+    current_script_name = os.path.basename(__file__)
+
+    if "install" in sys.argv:
+        git_path = input('Enter Full GIT path [{}]: '.format(os.path.join(os.getcwd(), '.git')))
+        if not git_path:
+            git_path = os.path.join(os.getcwd(), '.git')
+        result = performInstall(git_path)
+        if result:
+            sys.exit(0)
+        sys.exit(1)
+
+    if "sync" in sys.argv:
+        remotes = force = False
+        blame = False
+
+        if '-r' in sys.argv:
+            remotes = True
+        if '-f' in sys.argv:
+            force = True
+        if '--no-blame' in sys.argv:
+            blame = False
+        if '--blame' in sys.argv:
+            blame = True
+        lock = FileLock(DB_FILE)
+        try:
+            lock.acquire()
+            result = performSync(remotes=remotes, force=force, blame=blame)
+            if result:
+                sys.exit(0)
+            sys.exit(1)
+        except MemoryError:
+            lock.release()
+        except Exception as e:
+            traceback.print_exc()
+        finally:
+            lock.release()
+
+    if "sync-once" in sys.argv:
+        remotes = False
+        blame = False
+        try:
+            sha = RE_SHA.match(sys.argv[2])
+            if sha:
+                sha = sha.group()
+        except IndexError:
+            sha = None
+
+        if '-r' in sys.argv:
+            remotes = True
+        if '--no-blame' in sys.argv:
+            blame = False
+        if '--blame' in sys.argv:
+            blame = True
+
+        lock = FileLock(DB_FILE)
+        try:
+            lock.acquire()
+            if sha:
+                result = performSyncOnce(sha, remotes=remotes, blame=blame)
+            else:
+                result = performSync(remotes=remotes, blame=blame)
+            if result:
+                sys.exit(0)
+            sys.exit(1)
+        except MemoryError:
+            lock.release()
+        except Exception as e:
+            traceback.print_exc()
+        finally:
+            lock.release()
+
+    if current_script_name != 'testbrain-hook.py':
+        sys.stderr.write("Please exec {} with [install|sync]".format(current_script_name))
+        sys.exit(1)
+
+    if "webhook" in sys.argv:
+        refOld, refNew, ref = sys.argv[2:]
+        result = performUpdate(refOld, refNew, ref)
+        if result:
+            sys.exit(0)
+        sys.exit(1)
+
+    if "server" in sys.argv:
+        for line in sys.stdin:
+            refOld, refNew, ref = line.strip().split(" ")
+            result = performUpdate(refOld, refNew, ref)
+            if result:
+                sys.stdout.write("OK\t{} {} {}".format(refOld, refNew, ref))
+            else:
+                sys.stderr.write("FAIL\t{} {} {}".format(refOld, refNew, ref))

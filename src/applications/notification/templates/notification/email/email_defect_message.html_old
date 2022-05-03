@@ -1,0 +1,14 @@
+{% if period %}
+{% if period == 'immediately' %}<h1>Appsurify TestBrain Defect Alert</h1>
+    <p>The following test has failed:</p>
+{% else %}<h1>Appsurify TestBrain {{ period }} Defect Summary</h1>
+    <p>You have requested {{ period }} notifications for all failed tests.</br>The following is a list of all failed tests during the period:</p>>{% endif %}
+{% endif %}
+<p>
+{% for defect in defects %}
+    <div>Defect Name: {{ defect.name }}</div>
+    <div>Project Name: {{ defect.project.name }}</div>
+    <div>Test Name: {{ defect.created_by_test.name }}</div>
+    <br>
+{% endfor %}
+</p>

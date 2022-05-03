@@ -1,0 +1,6 @@
+#!/bin/bash
+
+set -o errexit
+set -o nounset
+
+/usr/local/bin/celery -A system worker -E --hostname=%h --loglevel=INFO

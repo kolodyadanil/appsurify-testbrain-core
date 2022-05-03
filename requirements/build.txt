@@ -1,0 +1,3 @@
+-r base.txt
+../packages/flower
+../packages/drf-yasg

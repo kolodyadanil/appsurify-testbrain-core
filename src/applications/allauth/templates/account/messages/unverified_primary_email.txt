@@ -1,0 +1,2 @@
+{% load i18n %}
+Your primary e-mail address must be verified.

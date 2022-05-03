@@ -1,0 +1,154 @@
+version: '3.7'
+
+volumes:
+  data_storage: {}
+  data_postgres: {}
+  data_postgres_backups: {}
+  data_rabbitmq: {}
+  data_redis: {}
+
+x-testbrain-docker: &testbrian
+  build:
+    context: .
+    dockerfile: ./compose/testbrain/core/Dockerfile
+  image: appsurifyinc/testbrain-core:latest
+  depends_on:
+    - postgres
+    - rabbitmq
+    - redis
+  env_file:
+    - ./docker-compose.env
+  volumes:
+    - ./src:/opt/app/python
+    - ./var/storage:/opt/app/storage
+    - ./var/logs:/opt/app/logs
+
+services:
+  webapp:
+    image: appsurifyinc/testbrain-webapp:latest
+    container_name: testbrain-webapp
+    restart: always
+    env_file:
+      - ./docker-compose.env
+    ports:
+      - 80:80
+    depends_on:
+      - api
+
+  api:
+    <<: *testbrian
+    container_name: testbrain-api
+    restart: always
+#    command: python manage.py runserver 0.0.0.0:9000
+    command: /start-api
+    ports:
+      - 9000:9000
+
+  worker-immediate:
+    <<: *testbrian
+    container_name: testbrain-worker-immediate
+    command: celery -A system worker -E --hostname=immediate@%h --pool prefork --concurrency 2 --queues immediate
+    depends_on:
+      - api
+      - postgres
+      - rabbitmq
+      - redis
+
+  worker:
+    <<: *testbrian
+    restart: always
+    command: celery -A system worker -E --hostname=common@%h --pool prefork --concurrency 2
+    deploy:
+      replicas: 2
+    depends_on:
+      - api
+      - postgres
+      - rabbitmq
+      - redis
+
+  beat:
+    <<: *testbrian
+    container_name: testbrain-beat
+    restart: always
+    command: /start-beat
+    depends_on:
+      - api
+      - postgres
+      - rabbitmq
+      - redis
+
+  cron:
+    <<: *testbrian
+    container_name: testbrain-notify
+    restart: always
+    command: /start-notify
+    depends_on:
+      - api
+      - postgres
+      - rabbitmq
+      - redis
+
+  ml:
+    <<: *testbrian
+    container_name: testbrain-ml
+    restart: always
+    command: /start-ml
+    depends_on:
+      - api
+      - postgres
+      - rabbitmq
+      - redis
+
+  flower:
+    <<: *testbrian
+    container_name: testbrain-flower
+    restart: always
+    command: /start-flower
+    ports:
+      - 5555:5555
+    depends_on:
+      - api
+      - postgres
+      - rabbitmq
+      - redis
+
+  postgres:
+    build:
+      context: .
+      dockerfile: ./compose/postgres/Dockerfile
+    image: appsurifyinc/testbrain-postgres:latest
+    container_name: testbrain-postgres
+    restart: always
+    volumes:
+      - data_postgres:/var/lib/postgresql/data:Z
+      - data_postgres_backups:/backups:z
+    ports:
+      - 5432:5432
+    env_file:
+      - ./docker-compose.env
+
+  rabbitmq:
+    build:
+      context: .
+      dockerfile: ./compose/rabbitmq/Dockerfile
+    image: appsurifyinc/testbrain-rabbitmq:latest
+    container_name: testbrain-rabbitmq
+    restart: always
+    volumes:
+      - data_rabbitmq:/var/lib/rabbitmq:Z
+    ports:
+      - 5672:5672
+      - 15672:15672
+    env_file:
+      - ./docker-compose.env
+
+  redis:
+    image: redis:6.2.5-alpine
+    container_name: testbrain-redis
+    restart: always
+    volumes:
+      - data_redis:/data:Z
+    ports:
+      - 6379:6379
+    env_file:
+      - ./docker-compose.env

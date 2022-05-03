@@ -1,0 +1,3 @@
+{% if period %}
+{% if period == 'immediately' %}TestBrain Monitor{% else %}TestBrain {{ period }} Monitor Notification{% endif %}
+{% endif %}

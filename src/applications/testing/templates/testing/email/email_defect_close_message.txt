@@ -1,0 +1,6 @@
+Hi, {{ user.username }}!
+
+Congratulations! In your project {{ project.name }} a we’ve closed defect {{ defect_url }}
+
+Cheers,
+Your friends at Appsurify.
