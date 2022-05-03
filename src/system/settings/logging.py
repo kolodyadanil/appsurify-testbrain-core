@@ -75,14 +75,22 @@ LOGGING = {
     },
     "root": {
         "level": "INFO",
-        "handlers": ["console", ]
+        "handlers": ["console", "common.file", ]
     },
     "loggers": {
         "py.warnings": {
             "handlers": ["null", ],
         },
         "django": {
-            "handlers": ["console", ],
+            "handlers": ["console", "common.file", ],
+            "propagate": True,
+        },
+        "django.server": {
+            "handlers": ["console", "common.file", ],
+            "propagate": True,
+        },
+        "django.request": {
+            "handlers": ["console", "common.file", ],
             "propagate": True,
         },
         "applications": {
@@ -100,6 +108,16 @@ LOGGING = {
             "level": "DEBUG",
             "propagate": False
         },
+        # "gunicorn.access": {
+        #     "handlers": ["console", "common.file", ],
+        #     "level": "DEBUG",
+        #     "propagate": True
+        # },
+        # "gunicorn.error": {
+        #     "handlers": ["console", "common.file", ],
+        #     "level": "DEBUG",
+        #     "propagate": True
+        # },
         "": {
             "handlers": ["console", "common.file", ],
             "level": "DEBUG",
