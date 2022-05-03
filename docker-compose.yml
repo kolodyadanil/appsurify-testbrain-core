@@ -11,7 +11,7 @@ x-testbrain-docker: &testbrian
   build:
     context: .
     dockerfile: ./compose/testbrain/core/Dockerfile
-  image: appsurifyinc/testbrain-core:2022.5.3
+  image: appsurifyinc/testbrain-core:development
   depends_on:
     - postgres
     - rabbitmq
@@ -25,7 +25,7 @@ x-testbrain-docker: &testbrian
 
 services:
   webapp:
-    image: appsurifyinc/testbrain-webapp:2022.5.3
+    image: appsurifyinc/testbrain-webapp:development
     container_name: testbrain-webapp
     restart: always
     env_file:
