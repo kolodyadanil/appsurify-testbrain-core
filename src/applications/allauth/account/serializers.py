@@ -118,7 +118,7 @@ class BaseRelatedSerializer(serializers.RelatedField):
             data = self.pk_field.to_internal_value(data)
 
         try:
-            if isinstance(data, dict) and data.has_key(self.pk_name):
+            if isinstance(data, dict) and self.pk_name in data:
                 data = self.get_queryset().get(pk=data[self.pk_name])
             else:
                 data = self.get_queryset().get(pk=data)
@@ -476,7 +476,7 @@ class SignupSerializer(serializers.Serializer):
                 raise serializers.ValidationError({'email': e})
 
         if allauth_settings.SIGNUP_EMAIL_ENTER_TWICE:
-            if not attrs.has_key('email2'):
+            if 'email2' not in attrs:
                 raise serializers.ValidationError({'email': 'The email fields didn\'t match.'})
 
             email2 = self._validate_email(attrs.get('email2'))
@@ -490,7 +490,7 @@ class SignupSerializer(serializers.Serializer):
             except ValidationError as e:
                 raise serializers.ValidationError({'password': e})
             if allauth_settings.SIGNUP_PASSWORD_ENTER_TWICE:
-                if not attrs.has_key('password2'):
+                if 'password2' not in attrs:
                     raise serializers.ValidationError({'password': 'The password fields didn\'t match.'})
 
                 password2 = attrs.get('password2')

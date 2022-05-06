@@ -60,11 +60,14 @@ def prioritized_test_list(*, params=None):
     test_run_count = TestRun.objects.filter(test_suite=test_suite).count()
 
     queryset = Test.objects.filter(
-        project=params["project"],
-        test_suites=test_suite
+        project=params["project"]
     )
+    if test_suite:
+        queryset = queryset.filter(test_suites=test_suite)
 
-    ml_predictor = MLModel.open_model(test_suite_id=test_suite.id)
+    ml_predictor = None
+    if test_suite:
+        ml_predictor = MLModel.open_model(test_suite_id=test_suite.id)
     ml_model_existing_flag = ml_predictor is not None
 
     if ml_model_existing_flag is False or test_run_count < MINIMAL_NUMBER_OF_TESTRUNS_FOR_ML_MODEL_USING:

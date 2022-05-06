@@ -21,10 +21,11 @@ x-testbrain-docker: &testbrian
   volumes:
     - ./src:/opt/app/python
     - ./var/storage:/opt/app/storage
+    - ./var/logs:/opt/app/logs
 
 services:
   webapp:
-    image: appsurifyinc/testbrain-frontend:1.5.4
+    image: appsurifyinc/testbrain-webapp:latest
     container_name: testbrain-webapp
     restart: always
     env_file:
@@ -38,14 +39,15 @@ services:
     <<: *testbrian
     container_name: testbrain-api
     restart: always
-    command: python manage.py runserver 0.0.0.0:9000
+#    command: python manage.py runserver 0.0.0.0:9000
+    command: /start-api
     ports:
       - 9000:9000
 
   worker-immediate:
     <<: *testbrian
     container_name: testbrain-worker-immediate
-    command: celery -A system worker -E --hostname=immediate@%h --loglevel=INFO --pool prefork --concurrency 2 --queues immediate
+    command: celery -A system worker -E --hostname=immediate@%h --pool prefork --concurrency 2 --queues immediate
     depends_on:
       - api
       - postgres
@@ -55,7 +57,7 @@ services:
   worker:
     <<: *testbrian
     restart: always
-    command: celery -A system worker -E --hostname=common@%h --loglevel=INFO --pool prefork --concurrency 2
+    command: celery -A system worker -E --hostname=common@%h --pool prefork --concurrency 2
     deploy:
       replicas: 2
     depends_on:
