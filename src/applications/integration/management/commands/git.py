@@ -8,6 +8,7 @@ import json
 import re
 import logging
 import os
+import threading
 
 
 try:
@@ -38,9 +39,11 @@ is_windows = (os.name == 'nt')
 #: OS MacOS or Linux
 is_posix = (os.name == 'posix')
 
-COMMAND_GET_ALL_COMMITS_SHA = "git log --reflog --pretty=format:%H"
+COMMAND_GET_ALL_COMMITS_SHA = "git log {} --pretty=format:%H"
 COMMAND_COMMIT = "git show --reverse --first-parent --raw --numstat --abbrev=40 --full-index -p -M --pretty=format:'Commit:\t%H%nDate:\t%ai%nTree:\t%T%nParents:\t%P%nAuthor:\t%an\t%ae\t%ai%nCommitter:\t%cn\t%ce\t%ci%nMessage:\t%s%n' {}"
 COMMAND_COMMIT_BRANCH = "git branch --contains {}"
+COMMAND_COMMIT_FILE_BLAME = u"git blame {}^ -L {},{} -- {}"
+COMMAND_COMMIT_FILE_BLAME_FIX = u"git log --pretty=%H -1 {}^ -- {}"
 
 DEBUG = True
 COMMIT_COUNT = 10
@@ -54,6 +57,20 @@ RE_COMMIT_DIFF = re.compile(
     r"""^diff[ ]--git[ ](?P<a_path_fallback>"?a/.+?"?)[ ](?P<b_path_fallback>"?b/.+?"?)\n(?:^old[ ]mode[ ](?P<old_mode>\d+)\n^new[ ]mode[ ](?P<new_mode>\d+)(?:\n|$))?(?:^similarity[ ]index[ ]\d+%\n^rename[ ]from[ ](?P<rename_from>.*)\n^rename[ ]to[ ](?P<rename_to>.*)(?:\n|$))?(?:^new[ ]file[ ]mode[ ](?P<new_file_mode>.+)(?:\n|$))?(?:^deleted[ ]file[ ]mode[ ](?P<deleted_file_mode>.+)(?:\n|$))?(?:^index[ ](?P<a_blob_id>[0-9A-Fa-f]+)\.\.(?P<b_blob_id>[0-9A-Fa-f]+)[ ]?(?P<b_mode>.+)?(?:\n|$))?(?:^---[ ](?P<a_path>[^\t\n\r\f\v]*)[\t\r\f\v]*(?:\n|$))?(?:^\+\+\+[ ](?P<b_path>[^\t\n\r\f\v]*)[\t\r\f\v]*(?:\n|$))?""",
     re.VERBOSE | re.MULTILINE)
 
+
+class ThreadWithReturnValue(threading.Thread):
+    def __init__(self, group=None, target=None, name=None, args=(), kwargs={}, Verbose=None):
+        threading.Thread.__init__(self, group, target, name, args, kwargs, Verbose)
+        self._return = None
+
+    def run(self):
+        if self._Thread__target is not None:
+            self._return = self._Thread__target(*self._Thread__args, **self._Thread__kwargs)
+
+    def join(self):
+        threading.Thread.join(self, timeout=2)
+        return self._return
+    
 
 def _octal_repl(match_obj):
     value = match_obj.group(1)
@@ -282,8 +299,9 @@ def execute(commandLine):
     return out
 
 
-def get_commits_sha(start, number):
-    all_commits_sha = execute(COMMAND_GET_ALL_COMMITS_SHA)
+def get_commits_sha(start, number, branch):
+    get_all_commits_sha_cmd = COMMAND_GET_ALL_COMMITS_SHA.format(branch)
+    all_commits_sha = execute(get_all_commits_sha_cmd)
     all_commits_sha = all_commits_sha.split('\n')
     index = all_commits_sha.index(start)
     commits_sha = all_commits_sha[index:index+number]
@@ -358,7 +376,110 @@ def get_commit_branch(sha):
     return list(set(branch_list))
 
 
-def get_commit(sha):
+DirectoryPath = '.'
+
+exclude = set(['.git', '$tf'])
+def get_file_tree(basePath=""):
+    allFileNames = []
+    directories = []
+    directories.append({
+        "directory": DirectoryPath.strip('"'),
+        "basePath": ""
+    })
+
+    def getAllFileNames(path, basePath=""):
+        for dirname, dirnames, filenames in os.walk(path):
+            dirnames[:] = [d for d in dirnames if d not in exclude]
+            for filename in filenames:
+                try:
+                    allFileNames.append(basePath + filename)
+                except MemoryError:
+                    break
+
+            for subdirname in dirnames:
+                directories.append({
+                    "directory": os.path.join(dirname, subdirname),
+                    "basePath": os.path.join(basePath, subdirname) + "/"
+                })
+
+    for row in directories:
+        try:
+            getAllFileNames(row['directory'], row['basePath'])
+        except MemoryError:
+            break
+
+    return allFileNames
+
+
+def get_commit_file_blame(filename, sha, patch, ignore=True):
+    if ignore:
+        return ""
+
+    blame = list()
+    patch_strings = patch.split("\n")
+    current_string_number = 0
+    previous_number = 0
+    group = []
+    groups = []
+    for stat_string in patch_strings:
+        if "@@" in stat_string:
+            try:
+                current_string_number = abs(
+                    int(stat_string.split(" @@ ")[0].split("@@ ")[-1].split(" ")[0].split(",")[0]))
+            except Exception:
+                continue
+        else:
+            if stat_string.startswith("-"):
+                if current_string_number - previous_number == 1:
+                    group.append(current_string_number)
+                else:
+                    groups.append(group)
+                    group = [current_string_number]
+                previous_number = current_string_number
+            current_string_number += 1
+    groups.append(group)
+
+    threads = list()
+
+    def _get_blame(sha, start_string, end_string, filename):
+        result = ""
+        try:
+            result = execute(COMMAND_COMMIT_FILE_BLAME.format(sha, start_string, end_string, filename))
+
+        except Exception as e:
+            if str(e).startswith("fatal: file "):
+                result = ""
+            elif str(e).startswith("fatal: no such"):
+                try:
+                    corrective_sha = execute(COMMAND_COMMIT_FILE_BLAME_FIX.format(sha, filename))
+                    result = execute(
+                        COMMAND_COMMIT_FILE_BLAME.format(corrective_sha, start_string, end_string, filename))
+                except Exception as e:
+                    result = ""
+            else:
+                result = ""
+
+        return result
+
+    for string_group in groups:
+        if not string_group:
+            continue
+
+        x = ThreadWithReturnValue(target=_get_blame, args=(sha, string_group[0], string_group[-1], filename,))
+        threads.append(x)
+        x.start()
+
+    for index, thread in enumerate(threads):
+        result = thread.join()
+        if result or result != "":
+            blame.append(result)
+
+    if len(blame) > 0:
+        return "\n\n".join(blame)
+    return ""
+
+
+def get_commit(sha, blame=False):
     
     commit_cmd = COMMAND_COMMIT.format(sha)
     if is_windows:
@@ -444,13 +565,13 @@ def get_commit(sha):
             traceback.print_exc()
             continue
 
-        # if blame:
-        #     try:
-        #         blame = get_commit_file_blame(filename=filename, sha=sha, patch=diff["patch"])
-        #     except Exception as e:
-        #         blame = ""
-        # else:
-        #     blame = ""
+        if blame:
+            try:
+                blame = get_commit_file_blame(filename=filename, sha=sha, patch=diff["patch"])
+            except Exception as e:
+                blame = ""
+        else:
+            blame = ""
 
         file_object = dict(
             filename=filename,
@@ -461,7 +582,7 @@ def get_commit(sha):
             status=stat["status"],
             previous_filename=stat["previous_filename"],
             patch=diff["patch"],
-            # blame=blame or ""
+            blame=blame or ""
         )
 
         if stat["status"] == "added":
@@ -483,7 +604,7 @@ def get_commit(sha):
     return commit
 
 
-def wrap_push_event(ref, commit):
+def wrap_push_event(ref, commit, file_tree):
     try:
         commits = list()
         commits.append(commit)
@@ -494,6 +615,7 @@ def wrap_push_event(ref, commit):
             "base_ref": "",
             "ref_type": "commit",
             "commits": commits,
+            "file_tree": file_tree,
         }
         return json.dumps(data)
     except Exception as e:
@@ -514,6 +636,10 @@ parser.add_argument('--start', type=str,
                     help='Enter the commit that would be the starter')
 parser.add_argument('--number', type=int,
                     help='Enter the number of commits that would be returned')
+parser.add_argument('--branch', type=str,
+                    help='Enter the explicity branch to process commit')
+parser.add_argument('--blame', action='store_true',
+                    help='Choose to commit revision of each line or not')
 
 
 args = parser.parse_args()
@@ -523,20 +649,23 @@ project = args.project
 token = args.token
 start = args.start
 number = args.number if args.number else 100
+branch = args.branch
+blame = args.blame
 
 
 project_id = json.loads(get_project_id(base_url=base_url, project_name=project, token=token))["project_id"]
 url = base_url + '/api/ssh_v2/hook/{}/'.format(project_id)
 
 
-def performPush(url, token, start, number):
-    sha_list = get_commits_sha(start, number)
+def performPush(url, token, start, number, branch, blame):
+    sha_list = get_commits_sha(start, number, branch)
     for sha in sha_list:
-        commit = get_commit(sha)
+        commit = get_commit(sha, blame)
         ref = get_commit_branch(sha)[0]
-        data = wrap_push_event(ref, commit)
+        file_tree = get_file_tree()
+        data = wrap_push_event(ref, commit, file_tree)
         print(data)
 
         status_code, content = request(url, token, data, event='push')
 
-performPush(url=url, token=token, start=start, number=number)
+performPush(url=url, token=token, start=start, number=number, branch=branch, blame=blame)
