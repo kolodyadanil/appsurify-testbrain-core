@@ -57,7 +57,7 @@ class AreaFilterSet(FilterSet):
     def filter_auto_areas(self, qs, name, value):
         if value == True:
             qs = qs.filter(~models.Q(type=1)).distinct()
-        return
+        return qs
 
 
 class CommitFilterSet(FilterSet):
