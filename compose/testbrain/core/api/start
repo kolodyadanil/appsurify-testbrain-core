@@ -15,8 +15,8 @@ gunicorn system.wsgi:application \
 --max-requests 512 \
 --timeout 1200 \
 --reload \
---access-logfile - \
---error-logfile -
-#-pid=/opt/app/pids/gunicorn.pid \
-#--access-logfile=/opt/app/logs/gunicorn-access.log \
-#--error-logfile=/opt/app/logs/gunicorn-error.log
+--capture-output \
+--access-logfile=/opt/app/logs/gunicorn-access.log \
+--error-logfile=/opt/app/logs/gunicorn-error.log
+#--access-logfile - \
+#--error-logfile -

@@ -2,6 +2,7 @@
 from __future__ import unicode_literals
 
 import copy
+import datetime
 import inspect
 import traceback
 
@@ -25,7 +26,6 @@ from applications.allauth.account.serializers import UserRelatedSerializer
 from applications.project.models import Project
 from applications.testing.models import *
 from applications.vcs.models import *
-
 from applications.api.project.serializers import ProjectRelatedSerializer
 from applications.api.testing.serializers import TestSuiteRelatedSerializer
 from applications.api.vcs.serializers import CommitRelatedSerializer
@@ -291,6 +291,11 @@ class TestRunReportSerializer(serializers.Serializer):
     number_of_flaky_failure_results = serializers.IntegerField(source='founded_defects__flaky_failure__count',
                                                                default=0, read_only=True)
 
+    execution_time = serializers.FloatField(default=0, read_only=True)
+    status = serializers.SerializerMethodField(method_name="get_status")
+
+    # number_of_skipped_results = serializers.IntegerField(source='skipped_tests__count', default=0, read_only=True)
+    number_of_skipped_results = serializers.SerializerMethodField(method_name="get_skipped_tests_count")
     number_of_pass_results = serializers.IntegerField(source='passed_tests__count', default=0, read_only=True)
     number_of_fail_results = serializers.IntegerField(source='failed_tests__count', default=0, read_only=True)
     number_of_broken_results = serializers.IntegerField(source='broken_tests__count', default=0, read_only=True)
@@ -298,6 +303,48 @@ class TestRunReportSerializer(serializers.Serializer):
 
     percentage_of_pass_results = serializers.IntegerField(default=0, read_only=True)
     percentage_of_flaky_failure_results = serializers.IntegerField(default=0, read_only=True)
+
+    previous_execution_time = serializers.SerializerMethodField(method_name="get_previous_execution_time")
+    std_num = 0
+
+    def get_skipped_tests_count(self, instance):
+        test_runs = TestRun.objects.filter(test_suite=instance['test_suite_id']).values()
+        current_date = test_runs[len(test_runs)-1]['start_date']
+        minus60days = current_date - datetime.timedelta(days=60)
+        for test_run in test_runs:
+            if test_run['start_date'] >= minus60days and test_run['start_date'] <= current_date:
+                test_result = TestRunResult.objects.filter(test_suite=instance['test_suite_id'], test_run_id=test_run['id']).values()
+                tests_num = len(test_result)
+                if tests_num > self.std_num:
+                    self.std_num = tests_num
+
+        skipped_results = self.std_num - instance['passed_tests__count'] - \
+                          instance['failed_tests__count'] - instance['broken_tests__count']
+        self.std_num = 0
+        return skipped_results
+
+
+    @staticmethod
+    def get_previous_execution_time(instance):
+        current_testrun = TestRun.objects.filter(id=instance['id'])
+        previous_test_run_id = current_testrun.values('previous_test_run_id')[0]['previous_test_run_id']
+        if previous_test_run_id:
+            previous_execution_time = 0
+            test_run_results = TestRunResult.objects.filter(test_run_id=previous_test_run_id)
+            for test_run_result in test_run_results:
+                previous_execution_time += test_run_result.execution_time
+            return previous_execution_time
+        return None
+
+
+
+    @staticmethod
+    def get_status(instance):
+        """
+        It's assumed that the failed state is when we have some broken or failed tests
+        """
+        invalid_tests = instance.get('failed_tests__count', 0) + instance.get('broken_tests__count', 0)
+        return "Failed" if invalid_tests > 0 else "Passed"
 
     def get_project(self, instance):
         if isinstance(instance, TestRunResult):
@@ -314,6 +361,32 @@ class TestRunReportSerializer(serializers.Serializer):
             return dict(id=instance['test_suite_id'], name=instance['test_suite_name'])
         else:
             return dict()
+
+
+class TestRunReportByDaySerializer(serializers.Serializer):
+    test_runs = serializers.IntegerField(source='test_runs__count', default=0, read_only=True)
+    day = serializers.CharField()
+    number_of_tests = serializers.IntegerField(source='tests__count', default=0, read_only=True)
+    execution_time = serializers.FloatField(default=0, read_only=True)
+    standard_execution_time = serializers.SerializerMethodField(method_name="get_standard_execution_time")
+    standard_test_number = serializers.SerializerMethodField(method_name="get_standard_test_number")
+    number_of_pass_results = serializers.IntegerField(source='passed_tests__count', default=0, read_only=True)
+    number_of_fail_results = serializers.IntegerField(source='failed_tests__count', default=0, read_only=True)
+    number_of_broken_results = serializers.IntegerField(source='broken_tests__count', default=0, read_only=True)
+    number_of_not_run_results = serializers.IntegerField(source='not_run_tests__count', default=0, read_only=True)
+
+    def get_standard_test_number(selfself, instance):
+        return instance['standard_test_runs']
+
+    def get_standard_execution_time(self, instance):
+        """
+        Tbh, Idk the calculation of the standard time
+        """
+        max_execution_time = instance.get("max_execution_time", 0)
+        if not max_execution_time:
+            max_execution_time = 0
+        return max_execution_time * instance.get("test_runs__count", 0) * instance.get(
+            "tests__count", 0)
 
 
 class TestRunDetailReportSerializer(DynamicFieldsModelSerializer):

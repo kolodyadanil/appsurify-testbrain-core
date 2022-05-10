@@ -45,28 +45,17 @@ class DatasetError(RuntimeError):
 class TestPriorityMLModel(object):
 
     def __init__(self):
-        self.test_areas_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.test_associated_areas_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.test_associated_files_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.test_dependent_areas_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.test_similarnamed_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.test_area_similarnamed_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.test_classes_names_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.test_names_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.commit_areas_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.commit_files_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.defect_closed_by_caused_by_commits_files_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.defect_closed_by_caused_by_commits_areas_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.defect_closed_by_caused_by_commits_dependent_areas_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.defect_closed_by_caused_by_intersection_files_binarizer = MultiLabelBinarizer(sparse_output=True)
-        self.defect_closed_by_caused_by_intersection_areas_binarizer = MultiLabelBinarizer(sparse_output=True)
+        self.areas_binarizer = MultiLabelBinarizer(sparse_output=True)
+        self.files_binarizer = MultiLabelBinarizer(sparse_output=True)
+        self.failedFiles_binarizer = MultiLabelBinarizer(sparse_output=True)
+        #not sure what to do with error and reason as they are large text blocks, any thoughts
 
         self.classifier = None
 
 
 class MLHolder(object):
 
-    sql_template = open(settings.BASE_DIR / "applications" / "ml" / "sql" / "predict.sql", "r", encoding="utf-8").read()
+    sql_template = open(settings.BASE_DIR / "applications" / "ml" / "sql" / "predict_flaky.sql", "r", encoding="utf-8").read()
 
     encode_columns = []
     decode_columns = []
@@ -74,12 +63,13 @@ class MLHolder(object):
     def __init__(self, test_suite_id, auto_save=True, auto_load=True, **kwargs):
         self.auto_save = auto_save
         self.auto_load = auto_load
+        #needs to be changed to defect
 
         self.test_suite_id = test_suite_id
-        self.test_suite = TestSuite.objects.get(id=test_suite_id)
+        self.test_suite = TestSuite.objects.get(id=test_suite_id) 
 
         try:
-            self.test_suite_model = self.test_suite.model
+            self.test_suite_model = self.test_suite.model 
             # self.model_path, self.model_filename = self.test_suite_model.model_path
             # self.model_path.mkdir(parents=True, exist_ok=True)
         except ObjectDoesNotExist:
@@ -89,21 +79,22 @@ class MLHolder(object):
 class MLTrainer(MLHolder):
 
     encode_columns = [
-        ('test_areas', 'test_areas'),
-        ('test_associated_areas', 'test_associated_area'),
-        ('test_associated_files', 'test_associated_file'),
-        ('test_dependent_areas', 'test_dependent_area'),
-        ('test_similarnamed', 'test_similarnamed_file'),
-        ('test_area_similarnamed', 'test_area_similarnamed_file'),
-        ('test_classes_names', 'test_classes_name'),
-        ('test_names', 'test_name'),
-        ('commit_areas', 'commit_area'),
-        ('commit_files', 'commit_file'),
-        ('defect_closed_by_caused_by_commits_files', 'defect_closed_by_caused_by_commits_file'),
-        ('defect_closed_by_caused_by_commits_areas', 'defect_closed_by_caused_by_commits_area'),
-        ('defect_closed_by_caused_by_commits_dependent_areas', 'defect_closed_by_caused_by_commits_dependent_area'),
-        ('defect_closed_by_caused_by_intersection_files', 'defect_closed_by_caused_by_intersection_file'),
-        ('defect_closed_by_caused_by_intersection_areas', 'defect_closed_by_caused_by_intersection_area'),
+        ('areas', 'areas'),
+        ('files', 'files'),
+        ('error', 'error'),
+        ('reason', 'reason'),
+        ('failedFiles', 'failedFiles'),
+        ('averageRuntimeWhenPass', 'averageRuntimeWhenPass'),
+        ('runTime', 'runTime'),
+        ('numberOfTests', 'numberOfTests'),
+        ('numberOfFoundTestRuns', 'numberOfFoundTestRuns'),
+        ('numberOfFoundCommits', 'numberOfFoundCommits'),
+        ('numberOfReopenCommits', 'numberOfReopenCommits'),
+        ('numberOfReopenTestRuns', 'numberOfReopenTestRuns'),
+        ('numberOfCreatedByTests', 'numberOfCreatedByTests'),
+        ('numberOfReopenedByTests', 'numberOfReopenedByTests'),
+        ('reopenedTestRunsByReopenedTests', 'reopenedTestRunsByReopenedTests'),
+        ('createdTestRunsByCreatedTests', 'createdTestRunsByCreatedTests'),
     ]
 
     def __init__(self, test_suite_id, **kwargs):
@@ -117,9 +108,11 @@ class MLTrainer(MLHolder):
             pickle.dump(self.model, outfile)
         else:
             print(f"TestSuite model not exists! (TestSuite: {self.test_suite_id})")
+            #needs to be changed, should only run if there are more than 10 flaky failures
 
 
     def train(self):
+        #needs to be changed for defects
         if not self.test_suite_model:
             raise DatasetError('ML model not exist for TestSuite id: "{}"'.format(self.test_suite_id))
 
@@ -146,7 +139,7 @@ class MLTrainer(MLHolder):
             else:
                 x = hstack([x, x_chunk])
 
-        y = df['test_changed'].compute()
+        y = df['defectType'].compute()
 
         clf = CatBoostClassifier(auto_class_weights='Balanced', random_state=0, verbose=False)
         clf.fit(x, y)
@@ -176,30 +169,33 @@ class MLPredictor(MLHolder):
     }
 
     decode_columns = [
-        ('test_names', 'test_names'),
-        ('test_classes_names', 'test_classes_names'),
-        ('test_areas', 'test_areas'),
-        ('test_associated_areas', 'test_associated_areas'),
-        ('test_associated_files', 'test_associated_files'),
-        ('test_dependent_areas', 'test_dependent_areas'),
-        ('test_similarnamed', 'test_similarnamed'),
-        ('test_area_similarnamed', 'test_area_similarnamed'),
-        ('commit_areas', 'commit_areas'),
-        ('commit_files', 'commit_files'),
-        ('defect_closed_by_caused_by_commits_files', 'defect_closed_by_caused_by_commits_files'),
-        ('defect_closed_by_caused_by_commits_areas', 'defect_closed_by_caused_by_commits_areas'),
-        ('defect_closed_by_caused_by_commits_dependent_areas', 'defect_closed_by_caused_by_commits_dependent_areas'),
-        ('defect_closed_by_caused_by_intersection_files', 'defect_closed_by_caused_by_intersection_files'),
-        ('defect_closed_by_caused_by_intersection_areas', 'defect_closed_by_caused_by_intersection_areas'),
+        ('areas', 'areas'),
+        ('files', 'files'),
+        ('error', 'error'),
+        ('reason', 'reason'),
+        ('failedFiles', 'failedFiles'),
+        ('averageRuntimeWhenPass', 'averageRuntimeWhenPass'),
+        ('runTime', 'runTime'),
+        ('numberOfTests', 'numberOfTests'),
+        ('numberOfFoundTestRuns', 'numberOfFoundTestRuns'),
+        ('numberOfFoundCommits', 'numberOfFoundCommits'),
+        ('numberOfReopenCommits', 'numberOfReopenCommits'),
+        ('numberOfReopenTestRuns', 'numberOfReopenTestRuns'),
+        ('numberOfCreatedByTests', 'numberOfCreatedByTests'),
+        ('numberOfReopenedByTests', 'numberOfReopenedByTests'),
+        ('reopenedTestRunsByReopenedTests', 'reopenedTestRunsByReopenedTests'),
+        ('createdTestRunsByCreatedTests', 'createdTestRunsByCreatedTests'),
     ]
 
     def __init__(self, test_suite_id, **kwargs):
         super(MLPredictor, self).__init__(test_suite_id=test_suite_id, **kwargs)
+        #needs to be changed to defects
         self.model = None
         if self.auto_load:
             self.load()
 
     def load(self):
+        #changed to defects
         self.model = None
         if self.test_suite_model:
             model_path, model_filename = self.test_suite_model.model_path
@@ -242,7 +238,10 @@ class MLPredictor(MLHolder):
 
     def _predict(self, row, probability=False):
         iterables_for_concatenate = list()
-        iterables_for_concatenate.append([[row.pop('commit_rework'), row.pop('commit_riskiness')]])
+
+
+        iterables_for_concatenate.append([[row.pop('averageRuntimeWhenPass'), row.pop('runTime'), row.pop('numberOfTests'), row.pop('numberOfFoundTestRuns'), row.pop('numberOfFoundCommits'), row.pop('numberOfReopenCommits')
+            , row.pop('numberOfReopenTestRuns'), row.pop('numberOfCreatedByTests'), row.pop('reopenedTestRunsByReopenedTests'), row.pop('createdTestRunsByCreatedTests')]])
 
         for column_name, column_name_ml_prefix in self.decode_columns:
 
@@ -301,6 +300,7 @@ class MLPredictor(MLHolder):
         return result
 
     def _predict_tests_priority_top_by_percent(self, test_queryset, commit_queryset):
+        # will be a single defect and will be only defects
         tests_ids_by_priorities = list()
 
         tests_ids = '({})'.format(', '.join(map(str, test_queryset.values_list('id', flat=True))))
@@ -362,3 +362,7 @@ class MLPredictor(MLHolder):
         result = Test.objects.filter(id__in=test_ids)
 
         return result.distinct('name')
+
+    @staticmethod
+    def _predict_defect_flakiness(defect):
+        return 0.0

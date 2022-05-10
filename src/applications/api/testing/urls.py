@@ -14,6 +14,7 @@ router.register(r'test-runs', TestRunModelViewSet)
 router.register(r'tests', TestModelViewSet)
 router.register(r'steps', StepModelViewSet)
 router.register(r'test-run-results', TestRunResultModelViewSet)
+router.register(r'defects', DefectModelViewSet)
 router.register(r'show-number-test-runs', NumberTestRunModelViewSet)
 
 urlpatterns = router.urls

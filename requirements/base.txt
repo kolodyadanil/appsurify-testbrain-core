@@ -45,9 +45,14 @@ rest-framework-generic-relations
 djangorestframework-filters==1.0.0.dev2
 django-utils-six
 lxml
+defusedxml # for security problems
 user_agents
 jira
 catboost
 psutil
-pid
+python-pidfile
 dask
+pqdm
+imblearn
+stripe
+django-csp

@@ -1894,7 +1894,7 @@ class TimeStampedM2M(models.Model):
 
     updated = models.DateTimeField(
         verbose_name="updated",
-        auto_now=True,
+        auto_now_add=True,
         help_text="Auto-generated and auto-updated field"
     )
 

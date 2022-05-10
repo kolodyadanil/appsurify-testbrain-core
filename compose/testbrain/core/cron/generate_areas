@@ -1,0 +1,2 @@
+# Run every day
+0 0 * * * root cd /opt/app/python; python manage.py generate_areas

@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
+import time
 from django.core.exceptions import ValidationError
 
 from django.db.transaction import atomic
+from drf_yasg.utils import swagger_serializer_method
 
+from applications.organization.models import Organization, OrganizationUser
 from applications.api.external.utils import ConfirmationHMAC
 
 try:
@@ -61,6 +64,8 @@ from django.contrib.sites.models import Site
 from django.template.defaultfilters import slugify
 from applications.allauth.socialaccount.models import SocialApp
 
+from django.utils.translation import gettext_lazy as _
+
 
 class DynamicFieldsModelSerializer(serializers.ModelSerializer):
     """
@@ -113,7 +118,7 @@ class BaseRelatedSerializer(serializers.RelatedField):
             data = self.pk_field.to_internal_value(data)
 
         try:
-            if isinstance(data, dict) and data.has_key(self.pk_name):
+            if isinstance(data, dict) and self.pk_name in data:
                 data = self.get_queryset().get(pk=data[self.pk_name])
             else:
                 data = self.get_queryset().get(pk=data)
@@ -253,7 +258,9 @@ class LoginSerializer(serializers.Serializer):
 
 
 class OrganizationSignupSerializer(serializers.Serializer):
-    username = serializers.CharField(max_length=get_username_max_length(), min_length=allauth_settings.USERNAME_MIN_LENGTH, required=allauth_settings.USERNAME_REQUIRED)
+    username = serializers.CharField(max_length=get_username_max_length(),
+                                     min_length=allauth_settings.USERNAME_MIN_LENGTH,
+                                     required=allauth_settings.USERNAME_REQUIRED)
     first_name = serializers.CharField(min_length=2, max_length=26, required=True)
     last_name = serializers.CharField(min_length=2, max_length=26, required=True)
 
@@ -364,14 +371,14 @@ class OrganizationSignupSerializer(serializers.Serializer):
         # token = self.validated_data['token']
 
         with atomic():
-
             user = adapter.new_user(request)
             adapter.save_user(request, user, self.validated_data, commit=True)
             # Temporarily allow for optional email verification
             setup_user_email(request, user, [], email_verified=True)
 
             site = Site.objects.create(domain=company_domain, name=company_domain)
-            organization = create_organization(user, company_name, slug=slugify(company_name), is_active=True, org_defaults={'site': site}, org_user_defaults={'is_admin': True})
+            organization = create_organization(user, company_name, slug=slugify(company_name), is_active=True,
+                                               org_defaults={'site': site}, org_user_defaults={'is_admin': True})
 
             self.custom_signup(request, organization, user)
 
@@ -469,7 +476,7 @@ class SignupSerializer(serializers.Serializer):
                 raise serializers.ValidationError({'email': e})
 
         if allauth_settings.SIGNUP_EMAIL_ENTER_TWICE:
-            if not attrs.has_key('email2'):
+            if 'email2' not in attrs:
                 raise serializers.ValidationError({'email': 'The email fields didn\'t match.'})
 
             email2 = self._validate_email(attrs.get('email2'))
@@ -483,7 +490,7 @@ class SignupSerializer(serializers.Serializer):
             except ValidationError as e:
                 raise serializers.ValidationError({'password': e})
             if allauth_settings.SIGNUP_PASSWORD_ENTER_TWICE:
-                if not attrs.has_key('password2'):
+                if 'password2' not in attrs:
                     raise serializers.ValidationError({'password': 'The password fields didn\'t match.'})
 
                 password2 = attrs.get('password2')
@@ -528,7 +535,8 @@ class SignupSerializer(serializers.Serializer):
             site_domain = '{}.{}'.format(slug, base_domain)
 
             site = Site.objects.create(domain=site_domain, name=site_domain)
-            organization = create_organization(user, company_name, slug=slug, is_active=True, org_defaults={'site': site}, org_user_defaults={'is_admin': True})
+            organization = create_organization(user, company_name, slug=slug, is_active=True,
+                                               org_defaults={'site': site}, org_user_defaults={'is_admin': True})
 
             if organization:
                 for social_app in SocialApp.objects.all():
@@ -615,7 +623,6 @@ class PasswordSetSerializer(serializers.Serializer):
 
 
 class PasswordResetSerializer(serializers.Serializer):
-
     email = serializers.EmailField(required=True)
 
     def _validate_email(self, email):
@@ -644,7 +651,8 @@ class PasswordResetSerializer(serializers.Serializer):
             # password_reset.save()
 
             # send the password reset email
-            path = reverse("account_reset_password_from_key", kwargs=dict(uidb36=user_pk_to_url_str(user), key=temp_key))
+            path = reverse("account_reset_password_from_key",
+                           kwargs=dict(uidb36=user_pk_to_url_str(user), key=temp_key))
             url = build_absolute_uri(request, path)
 
             context = {"current_site": current_site,
@@ -662,7 +670,6 @@ class PasswordResetSerializer(serializers.Serializer):
 
 
 class PasswordResetConfirmSerializer(serializers.Serializer):
-
     uidb36 = serializers.CharField()
     key = serializers.CharField()
 
@@ -703,7 +710,12 @@ class UserDetailsSerializer(serializers.ModelSerializer):
     class Meta(object):
         model = get_user_model()
         fields = ('pk', 'username', 'email', 'first_name', 'last_name')
-        read_only_fields = ('email', )
+        read_only_fields = ('email',)
+
+
+class SubscriptionSerializer(serializers.Serializer):
+    paid_until = serializers.IntegerField()
+    active = serializers.BooleanField()
 
 
 class UserSerializer(DynamicFieldsModelSerializer, UserDetailsSerializer):
@@ -714,12 +726,26 @@ class UserSerializer(DynamicFieldsModelSerializer, UserDetailsSerializer):
     api_key = serializers.SerializerMethodField(source='get_api_key')
 
     interface_type = serializers.SerializerMethodField(source='get_interface_type')
+    subscription = serializers.SerializerMethodField()
 
     class Meta(object):
         model = get_user_model()
         fields = ('id', 'username', 'email', 'first_name', 'last_name',
-                  'social_accounts', 'is_org_owner', 'is_org_admin', 'api_key', 'interface_type', )
+                  'social_accounts', 'is_org_owner', 'is_org_admin', 'api_key', 'interface_type', "subscription",)
         read_only_fields = ('email',)
+
+    @swagger_serializer_method(serializer_or_field=SubscriptionSerializer)
+    def get_subscription(self, user):
+        organizations = Organization.objects.all()
+        paid_until = 0
+        for organization in organizations:
+            if organization.users.filter(email=user.email):
+                paid_until = organization.subscription_paid_until if organization.subscription_paid_until else 0
+                break
+
+        active = True if paid_until > int(time.time()) else False
+        subscription = dict({"paid_until": paid_until, "active": active})
+        return subscription
 
     def get_interface_type(self, user):
         request = self.context['request']
@@ -790,3 +816,8 @@ class UserRelatedSerializer(BaseRelatedSerializer):
     class Meta(object):
         model_class = get_user_model()
         model_serializer_class = UserSerializer
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField()
+    new_password = serializers.CharField()

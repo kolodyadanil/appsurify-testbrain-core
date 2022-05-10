@@ -72,7 +72,6 @@ from ..utils import (
     set_form_field_order,
 )
 
-
 from rest_framework.authtoken.models import Token
 
 from .serializers import (
@@ -86,6 +85,7 @@ from .serializers import (
     OrganizationSignupSerializer,
     PasswordResetSerializer,
     OrganizationSignupV2Serializer,
+    ChangePasswordSerializer
 )
 
 from applications.allauth.socialaccount.models import SocialAccount, SocialApp
@@ -109,7 +109,6 @@ from django.contrib.auth.models import User
 INTERNAL_RESET_URL_KEY = "set-password"
 INTERNAL_RESET_SESSION_KEY = "_password_reset_key"
 
-
 sensitive_post_parameters_m = method_decorator(
     sensitive_post_parameters("password", "password1", "password2")
 )
@@ -118,7 +117,7 @@ sensitive_post_parameters_m = method_decorator(
 def _ajax_response(request, response, form=None, data=None):
     if request.is_ajax():
         if isinstance(response, HttpResponseRedirect) or isinstance(
-            response, HttpResponsePermanentRedirect
+                response, HttpResponsePermanentRedirect
         ):
             redirect_to = response["Location"]
         else:
@@ -132,8 +131,8 @@ def _ajax_response(request, response, form=None, data=None):
 class RedirectAuthenticatedUserMixin(object):
     def dispatch(self, request, *args, **kwargs):
         if (
-            is_authenticated(request.user)
-            and app_settings.AUTHENTICATED_LOGIN_REDIRECTS
+                is_authenticated(request.user)
+                and app_settings.AUTHENTICATED_LOGIN_REDIRECTS
         ):
             redirect_to = self.get_authenticated_redirect_url()
             response = HttpResponseRedirect(redirect_to)
@@ -190,7 +189,7 @@ class AjaxCapableProcessFormViewMixin(object):
 
 class CloseableSignupMixin(object):
     template_name_signup_closed = (
-        "account/signup_closed." + app_settings.TEMPLATE_EXTENSION
+            "account/signup_closed." + app_settings.TEMPLATE_EXTENSION
     )
 
     def dispatch(self, request, *args, **kwargs):
@@ -306,7 +305,6 @@ class OrganizationSignupAPIView(CreateAPIView):
         return super(OrganizationSignupAPIView, self).dispatch(*args, **kwargs)
 
     def create(self, request, *args, **kwargs):
-
         serializer: OrganizationSignupSerializer = self.get_serializer(
             data=request.data, context={"request": request}
         )
@@ -646,10 +644,10 @@ class EmailView(AjaxCapableProcessFormViewMixin, FormView):
             # address. Ignore constraint if previous primary email
             # address is not verified.
             if (
-                not email_address.verified
-                and EmailAddress.objects.filter(
-                    user=request.user, verified=True
-                ).exists()
+                    not email_address.verified
+                    and EmailAddress.objects.filter(
+                user=request.user, verified=True
+            ).exists()
             ):
                 get_adapter(request).add_message(
                     request,
@@ -1158,3 +1156,35 @@ class CheckUserPassword(APIView):
 
 
 check_user_password = CheckUserPassword.as_view()
+
+
+class ChangeUserPassword(UpdateAPIView):
+    model = User
+    permission_classes = (IsAuthenticated,)
+    serializer_class = ChangePasswordSerializer
+
+    def get_object(self):
+        return self.request.user
+
+    def update(self, request, *args, **kwargs):
+        self.obj = self.get_object()
+        serializer = self.serializer_class(data=request.data,
+                                           context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        if not self.obj.check_password(data.get('old_password')):
+            responce_data = {'old_password': 'wrong password'}
+            return Response(data=responce_data, status=status.HTTP_400_BAD_REQUEST)
+
+        if self.obj.check_password(data.get('new_password')):
+            responce_data = {'response': 'new_password is old_password'}
+            return Response(data=responce_data, status=status.HTTP_400_BAD_REQUEST)
+
+        self.obj.set_password(data.get("new_password"))
+        self.obj.save()
+
+        return Response(status=status.HTTP_200_OK, data={'responce': "change password is successfully"})
+
+
+change_user_password = ChangeUserPassword.as_view()
