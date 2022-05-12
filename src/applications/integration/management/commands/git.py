@@ -376,39 +376,139 @@ def get_commit_branch(sha):
     return list(set(branch_list))
 
 
-DirectoryPath = '.'
-
 exclude = set(['.git', '$tf'])
-def get_file_tree(basePath=""):
-    allFileNames = []
-    directories = []
-    directories.append({
-        "directory": DirectoryPath.strip('"'),
-        "basePath": ""
-    })
-
-    def getAllFileNames(path, basePath=""):
-        for dirname, dirnames, filenames in os.walk(path):
-            dirnames[:] = [d for d in dirnames if d not in exclude]
-            for filename in filenames:
-                try:
-                    allFileNames.append(basePath + filename)
-                except MemoryError:
-                    break
-
-            for subdirname in dirnames:
-                directories.append({
-                    "directory": os.path.join(dirname, subdirname),
-                    "basePath": os.path.join(basePath, subdirname) + "/"
-                })
-
-    for row in directories:
-        try:
-            getAllFileNames(row['directory'], row['basePath'])
-        except MemoryError:
-            break
-
+allFileNames = []
+DirectoryPath = '.'
+def get_file_tree():
+    for path, subdirs, files in os.walk(DirectoryPath):
+        subdirs[:] = [sub for sub in subdirs if sub not in exclude]
+        for name in files:
+            allFileNames.append(os.path.join(path, name).lstrip('.').lstrip('/'))
     return allFileNames
+
+
+def get_parent_commit(sha_parent, blame=False):
+
+    commit_cmd = COMMAND_COMMIT.format(sha_parent)
+    if is_windows:
+        commit_cmd = commit_cmd.replace('\'', '')
+
+    output = execute(commit_cmd)
+
+    commit_header = RE_COMMIT_HEADER.findall(output)[0]
+    commit_numstats = {"additions": 0, "deletions": 0, "changes": 0, "total": 0, "files": 0}
+
+    sha, \
+    date, \
+    tree, \
+    parents, \
+    author, \
+    committer, \
+    message, \
+    file_stats, \
+    file_numstats, \
+    patch = commit_header
+
+    date = date.split(" ")
+    date = "{}T{}{}".format(date[0], date[1], date[2])
+
+    author = _parse_person(author)
+    committer = _parse_person(committer)
+
+    commit = dict(
+        sha=sha,
+        tree=tree,
+        parents=parents,
+        date=date,
+        message=message,
+        author=author,
+        committer=committer,
+        stats=commit_numstats,
+        files=[],
+        added=[],
+        removed=[],
+        modified=[]
+    )
+
+    if file_numstats:
+        commit_numstats, file_numstats = _parse_numstats(file_numstats)
+    else:
+        file_numstats = {}
+
+    if file_stats:
+        file_stats = _parse_stats(file_stats)
+    else:
+        file_stats = {}
+
+    if patch:
+        patch = _parse_patch(patch)
+    else:
+        patch = {}
+
+    filename_list_1 = []
+    filename_list_2 = []
+    filename_list_3 = []
+
+    for filename, data in file_numstats.items():
+        filename_list_1.append(filename)
+
+    for filename, data in file_stats.items():
+        filename_list_2.append(filename)
+
+    for filename, data in patch.items():
+        filename_list_3.append(filename)
+
+    for filename in set(filename_list_1 + filename_list_2 + filename_list_3):
+
+        if isinstance(filename, bytes):
+            filename = filename.decode('utf-8', errors='ignore')
+
+        try:
+            numstat = file_numstats[filename]
+            stat = file_stats[filename]
+            diff = patch[filename]
+        except Exception as e:
+            traceback.print_exc()
+            continue
+
+        if blame:
+            try:
+                blame = get_commit_file_blame(filename=filename, sha=sha, patch=diff["patch"])
+            except Exception as e:
+                blame = ""
+        else:
+            blame = ""
+
+        file_object = dict(
+            filename=filename,
+            additions=numstat["additions"],
+            deletions=numstat["deletions"],
+            changes=numstat["changes"],
+            sha=stat["sha"],
+            status=stat["status"],
+            previous_filename=stat["previous_filename"],
+            patch=diff["patch"],
+            blame=blame or ""
+        )
+
+        if stat["status"] == "added":
+            commit["added"].append(filename)
+        elif stat["status"] == "added":
+            commit["added"].append(filename)
+        elif stat["status"] == "deleted":
+            commit["removed"].append(filename)
+        elif stat["status"] == "modified":
+            commit["modified"].append(filename)
+        elif stat["status"] == "renamed":
+            commit["removed"].append(stat["previous_filename"])
+            commit["added"].append(filename)
+        elif stat["status"] == "unknown":
+            commit["modified"].append(filename)
+
+        commit["files"].append(file_object)
+
+
+    return commit
 
 
 def get_commit_file_blame(filename, sha, patch, ignore=True):
@@ -502,8 +602,11 @@ def get_commit(sha, blame=False):
     file_numstats, \
     patch = commit_header
 
-
-    # parents = get_parent_list([parent_sha for parent_sha in parents.split(" ") if parent_sha])
+    sha_parent_list = [parent_sha for parent_sha in parents.split(" ") if parent_sha]
+    parent_commits = list()
+    for sha_parent in sha_parent_list:
+        parent_commit = get_parent_commit(sha_parent=sha_parent, blame=blame)
+        parent_commits.append(parent_commit)
 
     date = date.split(" ")
     date = "{}T{}{}".format(date[0], date[1], date[2])
@@ -514,8 +617,7 @@ def get_commit(sha, blame=False):
     commit = dict(
         sha=sha,
         tree=tree,
-        # branches=branches,
-        parents=parents,
+        parents=parent_commits,
         date=date,
         message=message,
         author=author,
@@ -604,39 +706,39 @@ def get_commit(sha, blame=False):
     return commit
 
 
-def wrap_push_event(ref, commit, file_tree):
+def wrap_push_event(ref, commits, file_tree):
     try:
-        commits = list()
-        commits.append(commit)
         data = {
-            "before": commit["sha"],
-            "after": commit["sha"],
+            "before": commits[0]["sha"],
+            "after": commits[-1]["sha"],
             "ref": ref,
             "base_ref": "",
             "ref_type": "commit",
             "commits": commits,
+            "size": len(commits),
+            "head_commit": commits[-1],
             "file_tree": file_tree,
         }
         return json.dumps(data)
     except Exception as e:
-        logging.debug("Incorrect chunk: '{}'. {}".format(commit, e), exc_info=DEBUG)
+        logging.debug("Incorrect chunk: '{}'. {}".format(commits, e), exc_info=DEBUG)
         return json.dumps({})
 
 
 parser = argparse.ArgumentParser(description='Sync a number of commits before a specific commit')
 
 
-parser.add_argument('--url', type=str, 
+parser.add_argument('--url', type=str, required=True,
                     help='Enter your organization url')
-parser.add_argument('--project', type=str,
+parser.add_argument('--project', type=str, required=True,
                     help='Enter project name')
-parser.add_argument('--token', type=str,
+parser.add_argument('--token', type=str, required=True,
                     help='The API key to communicate with API')
-parser.add_argument('--start', type=str,
+parser.add_argument('--start', type=str, required=True,
                     help='Enter the commit that would be the starter')
 parser.add_argument('--number', type=int,
                     help='Enter the number of commits that would be returned')
-parser.add_argument('--branch', type=str,
+parser.add_argument('--branch', type=str, required=True,
                     help='Enter the explicity branch to process commit')
 parser.add_argument('--blame', action='store_true',
                     help='Choose to commit revision of each line or not')
@@ -658,14 +760,15 @@ url = base_url + '/api/ssh_v2/hook/{}/'.format(project_id)
 
 
 def performPush(url, token, start, number, branch, blame):
-    sha_list = get_commits_sha(start, number, branch)
+    sha_list = get_commits_sha(start=start, number=number, branch=branch)
+    commits = list()
     for sha in sha_list:
-        commit = get_commit(sha, blame)
-        ref = get_commit_branch(sha)[0]
-        file_tree = get_file_tree()
-        data = wrap_push_event(ref, commit, file_tree)
-        print(data)
-
-        status_code, content = request(url, token, data, event='push')
+        commit = get_commit(sha=sha, blame=blame)
+        commits.append(commit)
+    file_tree = get_file_tree()
+    data = wrap_push_event(ref=branch, commits=commits, file_tree=file_tree)
+    # with open('./data.txt', 'w') as f:
+    #     f.write(data)
+    status_code, content = request(url, token, data, event='push')
 
 performPush(url=url, token=token, start=start, number=number, branch=branch, blame=blame)
