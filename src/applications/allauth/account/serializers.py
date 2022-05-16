@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 import time
+from enum import Enum
 from django.core.exceptions import ValidationError
 
 from django.db.transaction import atomic
@@ -713,9 +714,20 @@ class UserDetailsSerializer(serializers.ModelSerializer):
         read_only_fields = ('email',)
 
 
+class SubcriptionPlan(str, Enum):
+    FREE_TRIAL = "FREE_TRIAL"
+    FREE = "FREE"
+    PLUS = "PLUS"
+    PROFESSIONAL = "PROFESSIONAL"
+
+org_subcription_plan = [e.value for e in SubcriptionPlan]
+
+
 class SubscriptionSerializer(serializers.Serializer):
     paid_until = serializers.IntegerField()
     active = serializers.BooleanField()
+    current_plan = serializers.ChoiceField(choices=org_subcription_plan)
+    time_saving_left = serializers.IntegerField()
 
 
 class UserSerializer(DynamicFieldsModelSerializer, UserDetailsSerializer):
@@ -741,10 +753,15 @@ class UserSerializer(DynamicFieldsModelSerializer, UserDetailsSerializer):
         for organization in organizations:
             if organization.users.filter(email=user.email):
                 paid_until = organization.subscription_paid_until if organization.subscription_paid_until else 0
+                current_plan = organization.plan
+                time_saving_left = organization.time_saving_left
                 break
 
         active = True if paid_until > int(time.time()) else False
-        subscription = dict({"paid_until": paid_until, "active": active})
+        subscription = dict({"paid_until": paid_until, 
+                             "active": active, 
+                             "current_plan": current_plan,
+                             "time_saving_left": time_saving_left,})
         return subscription
 
     def get_interface_type(self, user):
