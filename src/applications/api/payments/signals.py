@@ -11,7 +11,8 @@ from applications.testing.models import TestRunResult, TestRun
 @receiver(post_save, sender=TestRunResult)
 def update_time_saving_left_everytime_testrunresult_created(sender, instance, created, **kwargs):
     test_run_result = instance
-    organization = test_run_result.project.organization
+    project = test_run_result.project
+    organization = project.organization
     if organization.plan != organization.PLAN_FREE:
         return
     
@@ -19,7 +20,9 @@ def update_time_saving_left_everytime_testrunresult_created(sender, instance, cr
     
     exec_times_last_60days = list()
     test_runs_last_60days = TestRun.objects.all().filter(
-        updated__gte=datetime.now() - timedelta(days=60))
+        updated__gte=datetime.now() - timedelta(days=60),
+        project=project
+        )
     if not test_runs_last_60days:
         return
     for test_run in test_runs_last_60days:
@@ -31,7 +34,8 @@ def update_time_saving_left_everytime_testrunresult_created(sender, instance, cr
     
     exec_times_this_paid_month = list()
     test_runs_this_paid_month = TestRun.objects.all().filter(
-        updated__gte=datetime.fromtimestamp(org_paid_until) - timedelta(days=30))
+        updated__gte=datetime.fromtimestamp(org_paid_until) - timedelta(days=30),
+        project=project)
     if not test_runs_this_paid_month:
         return
     for test_run in test_runs_this_paid_month:
@@ -44,7 +48,12 @@ def update_time_saving_left_everytime_testrunresult_created(sender, instance, cr
     
     time_saving = longest_exec_time_last_60days * num_test_runs_this_paid_month - total_exec_times_this_paid_month # x * y - z
     
-    organization.time_saving_left = round(10 * 60 - time_saving)
+    project.time_saving = time_saving
+    project.save(update_fields=['time_saving'])
+    
+    total_time_saving = organization.projects.aggregate(
+                Sum('time_saving'))['time_saving__sum']
+    organization.time_saving_left = round(1000 * 60 - total_time_saving)
     if organization.time_saving_left < 0:
         organization.is_active = False
         organization.time_saving_left = 0
