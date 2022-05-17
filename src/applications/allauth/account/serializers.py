@@ -750,6 +750,8 @@ class UserSerializer(DynamicFieldsModelSerializer, UserDetailsSerializer):
     def get_subscription(self, user):
         organizations = Organization.objects.all()
         paid_until = 0
+        current_plan = 'free'
+        time_saving_left = 1000 * 60 # 1000 min
         for organization in organizations:
             if organization.users.filter(email=user.email):
                 paid_until = organization.subscription_paid_until if organization.subscription_paid_until else 0

@@ -131,7 +131,9 @@ class StripeWebhookReceivedView(APIView):
                         organization.subscription_paid_until = int(
                             time.mktime((datetime.datetime.today() + relativedelta(days=30)).timetuple()))
                         organization.plan = organization.PLAN_PLUS
-                        organization.time_saving_left = -1
+                        # 1000 min, but since the plan is paid this time_saving_left will never be deducted
+                        organization.time_saving_left = 1000 * 60
+                        organization.is_active = True
                         organization.save()
         elif event['type'] == 'customer.subscription.created':
             subscription = event['data']['object']

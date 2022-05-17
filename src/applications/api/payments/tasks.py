@@ -19,6 +19,8 @@ def update_organization_plan_task():
             org.plan = org.PLAN_FREE
             org.subscription_paid_until = int(
                 time.mktime((datetime.datetime.today() + relativedelta(days=30)).timetuple()))
-            org.time_saving_left = 1000
+            org.time_saving_left = 1000 * 60 # 1000 min
+            org.is_active = True
+            org.save()
             updated.append(org_info)
     return f'Updated plan for {updated}'
