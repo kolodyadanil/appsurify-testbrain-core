@@ -82,6 +82,7 @@ CELERY_TASK_ROUTES = {
     # default
     'applications.testing.tasks.periodic_add_association': {'queue': 'default', 'priority': 50},
     'applications.vcs.tasks.create_area_from_folders_task': {'queue': 'default', 'priority': 50},
+    'applications.api.payments.tasks.update_organization_plan_task': {'queue': 'default', 'priority': 50},
 
 }
 
@@ -122,6 +123,10 @@ CELERY_BEAT_SCHEDULE = {
     "create_area_from_folders_every_day": {
         "task": "applications.vcs.tasks.create_area_from_folders_task",
         "schedule": crontab(minute=0, hour=0),
+    },
+    "update_org_plan_every_6_hours": {
+        "task": "applications.vcs.tasks.create_area_from_folders_task",
+        "schedule": crontab(minute=0, hour='*/6'),
     },
 }
 

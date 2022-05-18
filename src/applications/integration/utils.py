@@ -10,8 +10,7 @@ from django.conf import settings
 from django.db import models
 from git import GitCommandError
 
-from applications.vcs.models import Commit, Branch, File, FileChange, Area
-
+from applications.vcs.models import Commit, Branch, File, FileChange, Area, ParentCommit
 
 mtime = time.time
 sleep = time.sleep
@@ -298,6 +297,11 @@ def create_or_update_commit(project=None, repository=None, branch=None, refspec=
             sha=parent.hexsha,
             defaults=parent_defaults
         )
+
+        # parent_commit_info, parent_commit_info_created = ParentCommit.objects.get_or_create(
+        #     from_commit=parent_commit,
+        #     to_commit=new_commit,
+        #     index_number=index_number)
 
         area_through_model = Commit.areas.through
         area_through_model.objects.update_or_create(commit_id=parent_commit.id, area_id=area_default.id)

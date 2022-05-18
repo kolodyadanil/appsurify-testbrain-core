@@ -25,9 +25,8 @@ def fetch_commits_task_v2(self, project_id=None, repository_id=None, model_name=
 
     new_commits_sha = sync_full_commits(project=repository.project, repository=repository, data=data)
 
-    if len(new_commits_sha) > 0:
-        processing_commit_file_task_v2.delay(project_id=project_id, repository_id=repository_id, model_name=model_name,
-                                             data=data, commits_sha=new_commits_sha)
+    processing_commit_file_task_v2.delay(project_id=project_id, repository_id=repository_id, model_name=model_name,
+                                            data=data, commits_sha=new_commits_sha)
 
     return {'project_id': project_id, 'repository_id': repository_id, 'model_name': model_name}
 
@@ -43,8 +42,7 @@ def processing_commit_file_task_v2(self, project_id=None, repository_id=None, mo
 
     file_list = []
 
-    if len(commits_sha) > 0:
-        file_list = processing_commit_file_v2(project=repository.project, repository=repository, data=data)
+    file_list = processing_commit_file_v2(project=repository.project, repository=repository, data=data)
 
     if len(file_list) > 0:
         calculate_rework_task_v2.delay(project_id=project_id, repository_id=repository_id, model_name=model_name,

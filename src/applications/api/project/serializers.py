@@ -262,9 +262,20 @@ class ProjectSetupStatusSerializer(serializers.Serializer):
     building_model = serializers.ChoiceField(choices=project_status_choices)
 
 
+class SubcriptionPlan(str, Enum):
+    FREE_TRIAL = "FREE_TRIAL"
+    FREE = "FREE"
+    PLUS = "PLUS"
+    PROFESSIONAL = "PROFESSIONAL"
+
+org_subcription_plan = [e.value for e in SubcriptionPlan]
+
+
 class SubscriptionSerializer(serializers.Serializer):
     paid_until = serializers.IntegerField()
     active = serializers.BooleanField()
+    current_plan = serializers.ChoiceField(choices=org_subcription_plan)
+    time_saving_left = serializers.IntegerField()
 
 
 class ProjectTestRunStats(serializers.Serializer):
@@ -399,7 +410,12 @@ class ProjectSummarySerializer(BaseProjectSerializer):
     def get_subscription(self, project):
         paid_until = project.organization.subscription_paid_until if project.organization.subscription_paid_until else 0
         active = True if paid_until > int(time.time()) else False
-        subscription = dict({"paid_until": paid_until, "active": active})
+        current_plan = project.organization.plan
+        time_saving_left = project.organization.time_saving_left
+        subscription = dict({"paid_until": paid_until,
+                             "active": active,
+                             "current_plan": current_plan,
+                             "time_saving_left": time_saving_left,})
         return subscription
 
     setup_status = serializers.SerializerMethodField()

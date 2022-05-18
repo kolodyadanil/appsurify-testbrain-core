@@ -2966,8 +2966,8 @@ WHERE
             queryset = queryset.order_by('-priority')
             id_set = set()
             for test in queryset:
-                testrunresult_set = TestRunResult.objects.filter(test=test).filter(status='pass').order_by('execution_started')
-                last_pass = testrunresult_set.first()
+                testrunresult_set = TestRunResult.objects.filter(test=test).filter(status='pass')
+                last_pass = testrunresult_set.latest('execution_started')
                 if last_pass is not None:
                     if last_pass.execution_time < time*60:
                         id_set.add(last_pass.id)

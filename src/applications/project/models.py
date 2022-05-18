@@ -17,6 +17,8 @@ class Project(AbstractProject):
                                      on_delete=models.CASCADE)
 
     auto_area_on_commit = models.BooleanField(default=False)
+    
+    time_saving = models.IntegerField(default=0, blank=True,null=True)
 
     class Meta(AbstractProject.Meta):
         abstract = False
