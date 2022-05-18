@@ -1,0 +1,6 @@
+# Test Juriba Priorirization tests endpoint
+
+GET /api/external/prioritized-tests/?name_type=junit&commit=3ed50b99b35d8dbbbd0facc8b67e682f67dafe0e&project_name=Dashworks&test_suite_name=DashworksTestSuite&priority=9&classname=false&testsuitename=false&testsuitename_separator=%23&classname_separator=%23&commit_type=Single&target_branch=master&percent=20 HTTP/1.1
+Host: juriba.appsurify.com:8000
+Token: NzA6U3ZCRUliSmJ6akhFMnFoalEtd0JfWGUtaFpV
+###

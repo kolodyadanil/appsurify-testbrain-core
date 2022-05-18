@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-
+import time
 from django.db import models
 from django.db.models import Q, F, Count, Value, CharField, Subquery, OuterRef
 from django.db.models.functions import Concat, Coalesce
@@ -309,7 +309,8 @@ def get_default_high_queryset(queryset, commits_ids, params=None):
     high_priority_query = Q(id__in=file_query_set.values_list('id', flat=True))
     high_priority_query |= Q(id__in=queryset.values_list('id', flat=True))
     qs = Test.objects.filter(high_priority_query)
-    return qs.distinct('name')
+    qs = qs.distinct('name')
+    return qs
 
 
 def get_default_medium_queryset(queryset, commits_ids, params=None):
@@ -360,7 +361,8 @@ def get_default_medium_queryset(queryset, commits_ids, params=None):
     high_queryset = get_default_high_queryset(queryset, commits_ids, params=params)
     exclude_test_ids = set(list(high_queryset.values_list('id', flat=True)))
     qs = Test.objects.exclude(id__in=exclude_test_ids).filter(medium_query)
-    return qs.distinct('name')
+    qs = qs.distinct('name')
+    return qs
 
 
 def get_default_unassigned_queryset(queryset, params=None):
@@ -383,20 +385,20 @@ def get_default_unassigned_queryset(queryset, params=None):
     ).values_list('id', flat=True)
     qs = qs.exclude(id__in=exclude_test_ids)
     qs = qs.exclude(Q(associated_files__isnull=False) | Q(associated_areas__isnull=False))
-    return qs.distinct('name')
+    qs = qs.distinct('name')
+    return qs
 
 
 def get_default_low_queryset(queryset, commits_ids, params=None):
     qs = queryset
-    # exclude_test_ids = set(list(get_default_high_queryset(queryset, commits_ids).values_list('id', flat=True)))
-    # qs = qs.exclude(id__in=exclude_test_ids)
 
     exclude_test_ids = set(list(get_default_medium_queryset(queryset, commits_ids, params=params).values_list('id', flat=True)))
     qs = qs.exclude(id__in=exclude_test_ids)
 
     exclude_test_ids = set(list(get_default_unassigned_queryset(queryset, params=params).values_list('id', flat=True)))
     qs = qs.exclude(id__in=exclude_test_ids)
-    return qs.distinct('name')
+    qs = qs.distinct('name')
+    return qs
 
 
 def get_default_ready_defect_queryset(queryset, params=None):
@@ -495,8 +497,14 @@ def get_default_by_percent_queryset(queryset, commits_ids, percent, params=None)
     # default_queryset.extend(list(get_default_high_queryset(queryset, commits_ids).values_list('id', flat=True)))
     # default_queryset.extend(list(get_default_medium_queryset(queryset, commits_ids).values_list('id', flat=True)))
     # default_queryset.extend(list(get_default_unassigned_queryset(queryset).values_list('id', flat=True)))
-    default_queryset.extend(set(list(get_default_low_queryset(queryset, commits_ids, params=params).values_list('id', flat=True))))
 
+    # print("--- BEGIN DEFAULT PERCENT")
+    # start_time = time.time()
+    # print("--- %s seconds ---" % (time.time() - start_time))
+    low_queryset = get_default_low_queryset(queryset, commits_ids, params=params).values_list('id', flat=True)
+    # print("--- LOW: %s seconds ---" % (time.time() - start_time))
+    default_queryset.extend(set(list(low_queryset)))
+    # print("--- Default: %s seconds ---" % (time.time() - start_time))
     if len(test_ids) > 0:
         default_queryset.extend(list(test_ids))
 
