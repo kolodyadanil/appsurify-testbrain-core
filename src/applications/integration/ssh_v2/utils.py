@@ -259,6 +259,9 @@ def processing_commit_file_v2(project=None, repository=None, data=None):
             new_commit.areas.add(*code_areas)
             # Default areas included in results
 
+        new_commit.is_processed = True
+        new_commit.save()
+
     file_list = list(set(file_list))
     return file_list
 
@@ -346,6 +349,9 @@ def processing_commits_fast(project=None, repository=None, data=None):
             sha=sha,
             defaults=defaults
         )
+        new_commit.is_processed = False
+        new_commit.save()
+
         area_default = Area.get_default(project=project)
         area_through_model = Commit.areas.through
         area_through_model.objects.update_or_create(commit_id=new_commit.id, area_id=area_default.id)

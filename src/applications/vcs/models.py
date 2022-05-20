@@ -428,6 +428,7 @@ class Commit(models.Model):
 
     files = models.ManyToManyField('File', through='FileChange', blank=True)
     parents = models.ManyToManyField('self', through='ParentCommit', symmetrical=False, blank=True)
+    is_processed = models.BooleanField(default=False)
 
     timestamp = models.DateTimeField(default=timezone.now, blank=False, null=False)
 
