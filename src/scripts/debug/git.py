@@ -379,13 +379,13 @@ def get_commit_branch(sha):
 
 
 exclude = set(['.git', '$tf'])
-allFileNames = []
 DirectoryPath = '.'
 def get_file_tree():
+    allFileNames = []
     for path, subdirs, files in os.walk(DirectoryPath):
         subdirs[:] = [sub for sub in subdirs if sub not in exclude]
         for name in files:
-            allFileNames.append(os.path.join(path, name).lstrip('.').lstrip('/'))
+            allFileNames.append(os.path.join(path, name).lstrip('.').lstrip('/').lstrip('\\'))
     return allFileNames
 
 
