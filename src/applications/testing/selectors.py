@@ -56,6 +56,14 @@ def prioritized_test_list(*, params=None):
 
     commit_list = get_commit_list(params=params)
     commit_queryset = Commit.objects.filter(id__in=set(commit_list))
+    while True:
+        fully_processed = True
+        for commit in commit_queryset.iterator():
+            if not commit.is_processed:
+                fully_processed = False
+                break
+        if fully_processed:
+            break
 
     test_run_count = TestRun.objects.filter(test_suite=test_suite).count()
 
