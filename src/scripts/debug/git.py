@@ -9,6 +9,7 @@ import re
 import logging
 import os
 import threading
+import urllib3
 
 
 try:
@@ -21,6 +22,7 @@ except ImportError:
                   "Then run the command again.")
     sys.exit(1)
 
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # Syntax sugar.
 _ver = sys.version_info
 
@@ -391,7 +393,7 @@ def get_parent_commit(sha_parent, blame=False):
 
     commit_cmd = COMMAND_COMMIT.format(sha_parent)
     if is_windows:
-        commit_cmd = commit_cmd.replace('\'', '')
+        commit_cmd = commit_cmd.replace('\'', '\"')
 
     output = execute(commit_cmd)
 
@@ -583,7 +585,7 @@ def get_commit(sha, blame=False):
     
     commit_cmd = COMMAND_COMMIT.format(sha)
     if is_windows:
-        commit_cmd = commit_cmd.replace('\'', '')
+        commit_cmd = commit_cmd.replace('\'', '\"')
         commit_cmd = commit_cmd.replace('\t', '%x09')
 
     output = execute(commit_cmd)
@@ -771,4 +773,8 @@ def performPush(url, token, start, number, branch, blame):
     #     f.write(data)
     status_code, content = request(url, token, data, event='push')
 
-performPush(url=url, token=token, start=start, number=number, branch=branch, blame=blame)
+def gittoappsurify():
+    performPush(url=url, token=token, start=start, number=number, branch=branch, blame=blame)
+
+if __name__ == '__main__':
+    gittoappsurify()
