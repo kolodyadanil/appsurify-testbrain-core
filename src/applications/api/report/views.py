@@ -30,7 +30,7 @@ from rest_framework.permissions import IsAuthenticated
 from applications.api.external.permissions import IsAuthenticatedToken
 
 # from applications.ml.network import MLPredictor
-from applications.testing.selectors import Priority, prioritized_test_list
+from applications.testing.selectors import Priority, prioritized_test_list, test_run_report_list
 
 
 def get_object_or_404(queryset, *filter_args, **filter_kwargs):
@@ -1665,130 +1665,148 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
         queryset = queryset.filter(project__organization=get_current_organization(self.request))
         return queryset
 
+    class ParamsTestRunListSerializer(serializers.Serializer):
+        organization = serializers.ReadOnlyField()
+        project = serializers.IntegerField()
+        test_suite = serializers.IntegerField(required=False, allow_null=True)
+        test_run_type = serializers.IntegerField(required=False, allow_null=True)
+        status = serializers.IntegerField(required=False, allow_null=True)
+        is_local = serializers.BooleanField(required=False, default=False)
+
+
+        def _get_request(self):
+            request = self.context.get('request')
+            if not isinstance(request, HttpRequest):
+                request = request._request
+            return request
+
     def list(self, request, *args, **kwargs):
+
+        queryset = test_run_report_list(params={})
         # import time
         # start_time = time.time()
-        queryset = self.filter_queryset(self.get_queryset())
-        # print '#1: {}'.format(time.time()-start_time)
-        sub_queryset = (
-            queryset
-                .filter(test_id=models.OuterRef('test_id'), test_run_id=models.OuterRef('test_run_id'))
-                .values('status')[:1]
-        )
-        # print '#2: {}'.format(time.time() - start_time)
-        qs = queryset.annotate(
-            last_test_run_result=models.Subquery(sub_queryset)
-        ).values(
-            'test_run_id'
-        ).annotate(
-            tests__count=models.Count(
-                models.Case(
-                    models.When(test_run_id=models.F('test_run_id'), then=models.F('test_id')),
-                ), distinct=True
-            ),
-            created_defects__count=models.Count(
-                models.Case(
-                    models.When(test_run_id=models.F('test_run_id'), then=models.F('created_defects__id'))
-                ), distinct=True
-            ),
-            founded_defects__flaky_failure__count=models.Count(
-                models.Case(
-                    models.When(
-                        models.Q(
-                            test_run_id=models.F('test_run_id'),
-                            founded_defects__type__in=[Defect.TYPE_FLAKY, Defect.TYPE_INVALID_TEST,
-                                                       Defect.TYPE_ENVIRONMENTAL]
-                        ), then=models.F('founded_defects__id')
-                    )
-                ), distinct=True
-            ),
-            passed_tests__count=models.Count(
-                models.Case(
-                    models.When(
-                        models.Q(
-                            # test_run_id=models.F('test_run_id'),
-                            last_test_run_result=TestRunResult.STATUS_PASS
-                        ), then=models.F('test_id')
-                    )
-                ), distinct=True
-            ),
-            skipped_tests__count=models.Count(
-                models.Case(
-                    models.When(
-                        models.Q(
-                            # test_run_id=models.F('test_run_id'),
-                            last_test_run_result=TestRunResult.STATUS_SKIPPED
-                        ), then=models.F('test_id')
-                    )
-                ), distinct=True
-            ),
-            failed_tests__count=models.Count(
-                models.Case(
-                    models.When(
-                        models.Q(
-                            # test_run_id=models.F('test_run_id'),
-                            last_test_run_result=TestRunResult.STATUS_FAIL
-                        ), then=models.F('test_id')
-                    )
-                ), distinct=True
-            ),
-            broken_tests__count=models.Count(
-                models.Case(
-                    models.When(
-                        models.Q(
-                            # test_run_id=models.F('test_run_id'),
-                            last_test_run_result=TestRunResult.STATUS_BROKEN
-                        ), then=models.F('test_id')
-                    )
-                ), distinct=True
-            ),
-            not_run_tests__count=models.Count(
-                models.Case(
-                    models.When(
-                        models.Q(
-                            # test_run_id=models.F('test_run_id'),
-                            last_test_run_result__in=[TestRunResult.STATUS_PENDING, TestRunResult.STATUS_SKIPPED,
-                                                      TestRunResult.STATUS_NOT_RUN]
-                        ), then=models.F('test_id')
-                    )
-                ), distinct=True
-            ),
-            execution_time=models.Sum('execution_time'),
-            id=models.F('test_run_id'),
-            name=models.F('test_run_name'),
-            type=models.F('test_run_type'),
-            start_date=TruncSecond(models.F('test_run_start_date')),
-            end_date=models.Case(
-                models.When(
-                    ~models.Q(test_run_end_date=None),
-                    then=TruncSecond(models.F('test_run_end_date'))
-                )
-            ),
-        ).values(
-            'project_id',
-            'project_name',
-
-            'test_suite_id',
-            'test_suite_name',
-
-            'id',
-            'name',
-
-            'start_date',
-            'end_date',
-
-            'tests__count',
-            'created_defects__count',
-            'founded_defects__flaky_failure__count',
-            'passed_tests__count',
-            'skipped_tests__count',
-            'failed_tests__count',
-            'broken_tests__count',
-            'not_run_tests__count',
-            'execution_time',
-        )
-        # print '#3: {}'.format(time.time() - start_time)
-        queryset = qs
+        # queryset = self.filter_queryset(self.get_queryset())
+        # print('#1: {}'.format(time.time()-start_time))
+        # sub_queryset = (
+        #     queryset
+        #         .filter(test_id=models.OuterRef('test_id'), test_run_id=models.OuterRef('test_run_id'))
+        #         .values('status')[:1]
+        # )
+        # print('#2: {}'.format(time.time() - start_time))
+        # qs = queryset.annotate(
+        #     last_test_run_result=models.Subquery(sub_queryset)
+        # ).values(
+        #     'test_run_id'
+        # ).annotate(
+        #     tests__count=models.Count(
+        #         models.Case(
+        #             models.When(test_run_id=models.F('test_run_id'), then=models.F('test_id')),
+        #         ), distinct=True
+        #     ),
+        #     created_defects__count=models.Count(
+        #         models.Case(
+        #             models.When(test_run_id=models.F('test_run_id'), then=models.F('created_defects__id'))
+        #         ), distinct=True
+        #     ),
+        #     founded_defects__flaky_failure__count=models.Count(
+        #         models.Case(
+        #             models.When(
+        #                 models.Q(
+        #                     test_run_id=models.F('test_run_id'),
+        #                     founded_defects__type__in=[Defect.TYPE_FLAKY, Defect.TYPE_INVALID_TEST,
+        #                                                Defect.TYPE_ENVIRONMENTAL]
+        #                 ), then=models.F('founded_defects__id')
+        #             )
+        #         ), distinct=True
+        #     ),
+        #     passed_tests__count=models.Count(
+        #         models.Case(
+        #             models.When(
+        #                 models.Q(
+        #                     # test_run_id=models.F('test_run_id'),
+        #                     last_test_run_result=TestRunResult.STATUS_PASS
+        #                 ), then=models.F('test_id')
+        #             )
+        #         ), distinct=True
+        #     ),
+        #     skipped_tests__count=models.Count(
+        #         models.Case(
+        #             models.When(
+        #                 models.Q(
+        #                     # test_run_id=models.F('test_run_id'),
+        #                     last_test_run_result=TestRunResult.STATUS_SKIPPED
+        #                 ), then=models.F('test_id')
+        #             )
+        #         ), distinct=True
+        #     ),
+        #     failed_tests__count=models.Count(
+        #         models.Case(
+        #             models.When(
+        #                 models.Q(
+        #                     # test_run_id=models.F('test_run_id'),
+        #                     last_test_run_result=TestRunResult.STATUS_FAIL
+        #                 ), then=models.F('test_id')
+        #             )
+        #         ), distinct=True
+        #     ),
+        #     broken_tests__count=models.Count(
+        #         models.Case(
+        #             models.When(
+        #                 models.Q(
+        #                     # test_run_id=models.F('test_run_id'),
+        #                     last_test_run_result=TestRunResult.STATUS_BROKEN
+        #                 ), then=models.F('test_id')
+        #             )
+        #         ), distinct=True
+        #     ),
+        #     not_run_tests__count=models.Count(
+        #         models.Case(
+        #             models.When(
+        #                 models.Q(
+        #                     # test_run_id=models.F('test_run_id'),
+        #                     last_test_run_result__in=[TestRunResult.STATUS_PENDING, TestRunResult.STATUS_SKIPPED,
+        #                                               TestRunResult.STATUS_NOT_RUN]
+        #                 ), then=models.F('test_id')
+        #             )
+        #         ), distinct=True
+        #     ),
+        #     execution_time=models.Sum('execution_time'),
+        #     id=models.F('test_run_id'),
+        #     name=models.F('test_run_name'),
+        #     type=models.F('test_run_type'),
+        #     start_date=TruncSecond(models.F('test_run_start_date')),
+        #     end_date=models.Case(
+        #         models.When(
+        #             ~models.Q(test_run_end_date=None),
+        #             then=TruncSecond(models.F('test_run_end_date'))
+        #         )
+        #     ),
+        # ).values(
+        #     'project_id',
+        #     'project_name',
+        #
+        #     'test_suite_id',
+        #     'test_suite_name',
+        #
+        #     'id',
+        #     'name',
+        #
+        #     'start_date',
+        #     'end_date',
+        #
+        #     'tests__count',
+        #     'created_defects__count',
+        #     'founded_defects__flaky_failure__count',
+        #     'passed_tests__count',
+        #     'skipped_tests__count',
+        #     'failed_tests__count',
+        #     'broken_tests__count',
+        #     'not_run_tests__count',
+        #     'execution_time',
+        # )
+        # print('#3: {}'.format(time.time() - start_time))
+        # queryset = qs
+        # print(queryset.query)
         # print '#4: {}'.format(time.time() - start_time)
         page = self.paginate_queryset(queryset)
         # print '#5: {}'.format(time.time() - start_time)

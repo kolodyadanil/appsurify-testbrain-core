@@ -563,3 +563,146 @@ def get_default_highest_tests_under_time(queryset, params=None):
         return qs.distinct('name')
     else:
         raise Exception('Time is required in minute(s).')
+
+
+def test_run_report_list(*, params=None):
+    """
+    'project', 'test_suite', 'test_run_type', 'status', 'is_local'
+
+    params = {
+        'organization': Organization(),
+        'project': Project(),
+        'test_suite': TestSuite() | None,
+        'test_run_type': 1 | 2 | 3 | None,
+        'status': 1 | 2 | 3 | None,
+        'is_local': True | False,
+        'ordering': '-start_date' | None
+    }
+
+    """
+    params = params or {}
+
+    sql_template = """
+SELECT "testing_testrunresult"."project_id",
+   "testing_testrunresult"."project_name",
+   "testing_testrunresult"."test_suite_id",
+   "testing_testrunresult"."test_suite_name",
+   DATE_TRUNC('second', "testing_testrunresult"."test_run_start_date" AT TIME ZONE 'UTC') AS "start_date",
+   COUNT(DISTINCT CASE
+                      WHEN "testing_testrunresult"."test_run_id" = "testing_testrunresult"."test_run_id" THEN "testing_testrunresult"."test_id"
+                      ELSE NULL
+                  END) AS "tests__count",
+   COUNT(DISTINCT CASE
+                      WHEN "testing_testrunresult"."test_run_id" = "testing_testrunresult"."test_run_id" THEN "testing_defect"."id"
+                      ELSE NULL
+                  END) AS "created_defects__count",
+   COUNT(DISTINCT CASE
+                      WHEN (T8."type" IN (2, 4, 1)
+                            AND "testing_testrunresult"."test_run_id" = "testing_testrunresult"."test_run_id") THEN "testing_defect_found_test_run_results"."defect_id"
+                      ELSE NULL
+                  END) AS "founded_defects__flaky_failure__count",
+   COUNT(DISTINCT CASE
+                      WHEN
+                             (SELECT U0."status"
+                              FROM "testing_testrunresult" U0
+                              INNER JOIN "project_project" U1 ON (U0."project_id" = U1."id")
+                              WHERE (U1."organization_id" = %(organization_id)s
+                                     AND U0."project_id" = %(project_id)s
+                                     AND NOT U0."test_run_is_local"
+                                     AND U0."test_id" = "testing_testrunresult"."test_id"
+                                     AND U0."test_run_id" = "testing_testrunresult"."test_run_id")
+                              ORDER BY DATE_TRUNC('second', U0."test_run_start_date" AT TIME ZONE 'UTC') DESC
+                              LIMIT 1) = 'pass' THEN "testing_testrunresult"."test_id"
+                      ELSE NULL
+                  END) AS "passed_tests__count",
+   COUNT(DISTINCT CASE
+                      WHEN
+                             (SELECT U0."status"
+                              FROM "testing_testrunresult" U0
+                              INNER JOIN "project_project" U1 ON (U0."project_id" = U1."id")
+                              WHERE (U1."organization_id" = %(organization_id)s
+                                     AND U0."project_id" = %(project_id)s
+                                     AND NOT U0."test_run_is_local"
+                                     AND U0."test_id" = "testing_testrunresult"."test_id"
+                                     AND U0."test_run_id" = "testing_testrunresult"."test_run_id")
+                              ORDER BY DATE_TRUNC('second', U0."test_run_start_date" AT TIME ZONE 'UTC') DESC
+                              LIMIT 1) = 'skipped' THEN "testing_testrunresult"."test_id"
+                      ELSE NULL
+                  END) AS "skipped_tests__count",
+   COUNT(DISTINCT CASE
+                      WHEN
+                             (SELECT U0."status"
+                              FROM "testing_testrunresult" U0
+                              INNER JOIN "project_project" U1 ON (U0."project_id" = U1."id")
+                              WHERE (U1."organization_id" = %(organization_id)s
+                                     AND U0."project_id" = %(project_id)s
+                                     AND NOT U0."test_run_is_local"
+                                     AND U0."test_id" = "testing_testrunresult"."test_id"
+                                     AND U0."test_run_id" = "testing_testrunresult"."test_run_id")
+                              ORDER BY DATE_TRUNC('second', U0."test_run_start_date" AT TIME ZONE 'UTC') DESC
+                              LIMIT 1) = 'fail' THEN "testing_testrunresult"."test_id"
+                      ELSE NULL
+                  END) AS "failed_tests__count",
+   COUNT(DISTINCT CASE
+                      WHEN
+                             (SELECT U0."status"
+                              FROM "testing_testrunresult" U0
+                              INNER JOIN "project_project" U1 ON (U0."project_id" = U1."id")
+                              WHERE (U1."organization_id" = %(organization_id)s
+                                     AND U0."project_id" = %(project_id)s
+                                     AND NOT U0."test_run_is_local"
+                                     AND U0."test_id" = "testing_testrunresult"."test_id"
+                                     AND U0."test_run_id" = "testing_testrunresult"."test_run_id")
+                              ORDER BY DATE_TRUNC('second', U0."test_run_start_date" AT TIME ZONE 'UTC') DESC
+                              LIMIT 1) = 'broken' THEN "testing_testrunresult"."test_id"
+                      ELSE NULL
+                  END) AS "broken_tests__count",
+   COUNT(DISTINCT CASE
+                      WHEN
+                             (SELECT U0."status"
+                              FROM "testing_testrunresult" U0
+                              INNER JOIN "project_project" U1 ON (U0."project_id" = U1."id")
+                              WHERE (U1."organization_id" = %(organization_id)s
+                                     AND U0."project_id" = %(project_id)s
+                                     AND NOT U0."test_run_is_local"
+                                     AND U0."test_id" = "testing_testrunresult"."test_id"
+                                     AND U0."test_run_id" = "testing_testrunresult"."test_run_id")
+                              ORDER BY DATE_TRUNC('second', U0."test_run_start_date" AT TIME ZONE 'UTC') DESC
+                              LIMIT 1) IN ('pending', 'skipped', 'not_run') THEN "testing_testrunresult"."test_id"
+                      ELSE NULL
+                  END) AS "not_run_tests__count",
+   SUM("testing_testrunresult"."execution_time") AS "execution_time",
+         (SELECT COALESCE(SUM("execution_time"), 0) FROM "testing_testrunresult" WHERE "test_run_id" = "testing_testrun"."previous_test_run_id") AS "previous_execution_time",
+   "testing_testrunresult"."test_run_id" AS "id",
+   "testing_testrunresult"."test_run_name" AS "name",
+   CASE
+       WHEN NOT ("testing_testrunresult"."test_run_end_date" IS NULL) THEN DATE_TRUNC('second', "testing_testrunresult"."test_run_end_date" AT TIME ZONE 'UTC')
+       ELSE NULL
+   END AS "end_date"
+FROM "testing_testrunresult"
+INNER JOIN "project_project" ON ("testing_testrunresult"."project_id" = "project_project"."id")
+INNER JOIN "testing_testrun" ON ("testing_testrunresult"."test_run_id" = "testing_testrun"."id")
+LEFT OUTER JOIN "testing_defect" ON ("testing_testrunresult"."id" = "testing_defect"."created_by_test_run_result_id")
+LEFT OUTER JOIN "testing_defect_found_test_run_results" ON ("testing_testrunresult"."id" = "testing_defect_found_test_run_results"."testrunresult_id")
+LEFT OUTER JOIN "testing_defect" T8 ON ("testing_defect_found_test_run_results"."defect_id" = T8."id")
+WHERE ("project_project"."organization_id" = %(organization_id)s
+       AND "testing_testrunresult"."project_id" = %(project_id)s
+       AND NOT "testing_testrunresult"."test_run_is_local")
+GROUP BY "testing_testrunresult"."test_run_id",
+         DATE_TRUNC('second', "testing_testrunresult"."test_run_start_date" AT TIME ZONE 'UTC'),
+         "testing_testrunresult"."test_run_name",
+         "testing_testrunresult"."test_run_type",
+         CASE
+             WHEN NOT ("testing_testrunresult"."test_run_end_date" IS NULL) THEN DATE_TRUNC('second', "testing_testrunresult"."test_run_end_date" AT TIME ZONE 'UTC')
+             ELSE NULL
+         END,
+         "testing_testrunresult"."project_id",
+         "testing_testrunresult"."project_name",
+         "testing_testrunresult"."test_suite_id",
+         "testing_testrunresult"."test_suite_name",
+         "testing_testrun"."previous_test_run_id"
+    """
+
+    queryset = TestRunResult.objects.raw(sql_template, params={'organization_id': 73, 'project_id': 469})
+    print(queryset.query)
+    return queryset

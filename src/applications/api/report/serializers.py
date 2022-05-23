@@ -323,7 +323,6 @@ class TestRunReportSerializer(serializers.Serializer):
         self.std_num = 0
         return skipped_results
 
-
     @staticmethod
     def get_previous_execution_time(instance):
         current_testrun = TestRun.objects.filter(id=instance['id'])
@@ -335,8 +334,6 @@ class TestRunReportSerializer(serializers.Serializer):
                 previous_execution_time += test_run_result.execution_time
             return previous_execution_time
         return None
-
-
 
     @staticmethod
     def get_status(instance):
