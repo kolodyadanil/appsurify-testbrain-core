@@ -579,3 +579,22 @@ class RepositoryHookViewSet(RepositoryGenericViewSet):
         response['Content-Disposition'] = 'attachment; filename="{}"'.format(data['filename'])
         response.write(data['content'])
         return response
+
+    # Temporary API for fetch project_id
+    # TODO: change when git refactoring done
+    @action(methods=['GET', ], detail=False, permission_classes=[permissions.AllowAny, ],
+            url_name='fetch', url_path=r'fetch')
+    def fetch(self, request, *args, **kwargs):
+        project_name = request.query_params.get('project_name')
+        projects = Project.objects.filter(name=project_name)
+        if projects:
+            project = projects[0]
+            project_id = project.id
+            data = {
+                "project_id": project_id
+            }
+        else:
+            data = {
+                "error": "Project didn't exist, check project name and try again!"
+            }
+        return response.Response(status=status.HTTP_200_OK, data=data)
