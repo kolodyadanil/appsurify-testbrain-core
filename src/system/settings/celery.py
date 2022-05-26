@@ -14,7 +14,7 @@ CELERY_CACHE_BACKEND = "django-cache"
 CELERY_TIMEZONE = "UTC"
 CELERY_BROKER_TRANSPORT_OPTIONS = {
     "visibility_timeout": 1800,
-    "priority_steps": list(range(11)),
+    "priority_steps": list(range(101)),
     "queue_order_strategy": "priority",
     "max_retries": 10,
 
