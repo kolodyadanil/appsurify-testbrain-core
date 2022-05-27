@@ -920,6 +920,24 @@ class TestRun(MPTTModel):
         )
 
 
+class TestRunMaterializedModel(models.Model):
+    # test_run_id = models.IntegerField()
+    test_run = models.OneToOneField('testing.TestRun', related_name='mv_test_count_by_type', on_delete=models.CASCADE, primary_key=True)
+    tests_count = models.IntegerField()
+    passed_tests_count = models.IntegerField()
+    skipped_tests_count = models.IntegerField()
+    failed_tests_count = models.IntegerField()
+    broken_tests_count = models.IntegerField()
+    not_run_tests_count = models.IntegerField()
+    execution_time = models.FloatField()
+
+    status = models.CharField(max_length=16)
+
+    class Meta(object):
+        managed = False
+        db_table = 'mv_test_count_by_type'
+
+
 class TestRunResult(models.Model):
     STATUS_UNKNOWN = u'unknown'
     STATUS_PASS = u'pass'
