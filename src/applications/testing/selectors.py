@@ -56,14 +56,14 @@ def prioritized_test_list(*, params=None):
 
     commit_list = get_commit_list(params=params)
     commit_queryset = Commit.objects.filter(id__in=set(commit_list))
-    while True:
-        fully_processed = True
-        for commit in commit_queryset.iterator():
-            if not commit.is_processed:
-                fully_processed = False
-                break
-        if fully_processed:
-            break
+    # while True:
+    #     fully_processed = True
+    #     for commit in commit_queryset:
+    #         if not commit.is_processed:
+    #             fully_processed = False
+    #             break
+    #     if fully_processed:
+    #         break
 
     test_run_count = TestRun.objects.filter(test_suite=test_suite).count()
 
@@ -337,38 +337,141 @@ def get_default_medium_queryset(queryset, commits_ids, params=None):
     :param commits_ids:
     :return:
     """
-    qs = queryset
-    area_query_set = qs.filter(Q(associated_areas__isnull=False))
-    commits_areas = list(Commit.objects.filter(id__in=commits_ids).values_list('areas', flat=True))
-    depended_areas_annotations = {
-        'depended_area_lvl%d' % i: F('associated_areas'+(LOOKUP_SEP+'dependencies')*i) for i in range(1, 6)}
-    area_query_set = area_query_set.annotate(**depended_areas_annotations)
-    area_query_filter = Q(associated_areas__in=commits_areas)
-    for depended_area_level in depended_areas_annotations.keys():
-        area_query_filter |= Q(**{LOOKUP_SEP.join([depended_area_level, 'in']): commits_areas})
-    area_query_set = area_query_set.filter(area_query_filter)
+    # qs = queryset
+    # area_query_set = qs.filter(Q(associated_areas__isnull=False))
+    # commits_areas = list(Commit.objects.filter(id__in=commits_ids).values_list('areas', flat=True))
+    # depended_areas_annotations = {
+    #     'depended_area_lvl%d' % i: F('associated_areas'+(LOOKUP_SEP+'dependencies')*i) for i in range(1, 6)}
+    # area_query_set = area_query_set.annotate(**depended_areas_annotations)
+    # area_query_filter = Q(associated_areas__in=commits_areas)
+    # for depended_area_level in depended_areas_annotations.keys():
+    #     area_query_filter |= Q(**{LOOKUP_SEP.join([depended_area_level, 'in']): commits_areas})
+    # area_query_set = area_query_set.filter(area_query_filter)
+    #
+    # qs = qs.filter(project__commits__id__in=commits_ids)
+    # qs = qs.filter(
+    #     associated_defects__type=Defect.TYPE_PROJECT,
+    #     associated_defects__status=Defect.STATUS_CLOSED,
+    #     associated_defects__close_type__in=[Defect.CLOSE_TYPE_FIXED, Defect.CLOSE_TYPE_WONT_FIX],
+    # )
+    #
+    # default_area_id = Area.get_default(project=params['project']).id
+    # qs = qs.annotate(
+    #     commit__areas=F('project__commits__areas'),
+    #     caused_by_commits__areas=F('associated_defects__caused_by_commits__areas')
+    # ).filter(
+    #     ~Q(commit__areas=default_area_id) &
+    #     Q(Q(commit__areas=F('caused_by_commits__areas')) | Q(commit__areas=F('area')))
+    # )
+    # medium_query = Q(id__in=area_query_set.values_list('id', flat=True))
+    # medium_query |= Q(id__in=qs.values_list('id', flat=True))
+    #
+    # high_queryset = get_default_high_queryset(queryset, commits_ids, params=params)
+    # exclude_test_ids = set(list(high_queryset.values_list('id', flat=True)))
+    # qs = Test.objects.exclude(id__in=exclude_test_ids).filter(medium_query)
+    # qs = qs.distinct('name')
+    project = params['project']
+    test_suite = params['test_suite']
 
-    qs = qs.filter(project__commits__id__in=commits_ids)
-    qs = qs.filter(
-        associated_defects__type=Defect.TYPE_PROJECT,
-        associated_defects__status=Defect.STATUS_CLOSED,
-        associated_defects__close_type__in=[Defect.CLOSE_TYPE_FIXED, Defect.CLOSE_TYPE_WONT_FIX],
+    default_area_id = Area.get_default(project=project).id
+    commits_areas_ids = list(Commit.objects.filter(id__in=commits_ids).values_list('areas__id', flat=True))
+
+    pre_qs = Test.objects.raw("""
+    SELECT
+  "testing_test"."id" as "id"
+FROM
+  "testing_test"
+WHERE
+  (
+    "testing_test"."id" IN (
+      with recursive vcs_area_dependency_graph as (
+        select
+          1 as level,
+          d.from_area_id,
+          d.to_area_id,
+          array[d.from_area_id] as all_parents
+        from
+          vcs_area_dependencies d
+        where
+          from_area_id = ANY(%(commits_areas_ids)s)
+        union all
+        select
+          t.level + 1 as level,
+          d.from_area_id,
+          d.to_area_id,
+          t.all_parents || d.from_area_id
+        from
+          vcs_area_dependency_graph t
+          inner join vcs_area_dependencies d on t.to_area_id = d.from_area_id
+          and d.to_area_id <> ALL (t.all_parents)
+        where
+          t.level <= 4
+      )
+      SELECT
+        U0."id"
+      FROM
+        "testing_test" U0
+        inner join "testing_testsuite_tests" U2 ON (U0."id" = U2."test_id")
+        inner join "testing_test_associated_areas" U4 ON (U0."id" = U4."test_id")
+        inner join "vcs_area" U5 ON (U4."area_id" = U5."id")
+        left outer join "testing_test_associated_areas" U16 ON (U0."id" = U16."test_id")
+      WHERE
+        (
+          U0."project_id" = %(project_id)s
+          AND U2."testsuite_id" = %(testsuite_id)s
+          AND U4."area_id" IS NOT NULL
+          AND (
+            U16."area_id" = ANY(%(commits_areas_ids)s)
+            OR U5.id IN (
+              SELECT
+                to_area_id
+              FROM
+                vcs_area_dependency_graph
+            )
+          )
+        )
+      group by
+        1
     )
-
-    default_area_id = Area.get_default(project=params['project']).id
-    qs = qs.annotate(
-        commit__areas=F('project__commits__areas'),
-        caused_by_commits__areas=F('associated_defects__caused_by_commits__areas')
-    ).filter(
-        ~Q(commit__areas=default_area_id) &
-        Q(Q(commit__areas=F('caused_by_commits__areas')) | Q(commit__areas=F('area')))
+    OR "testing_test"."id" IN (
+      SELECT
+        U0."id"
+      FROM
+        "testing_test" U0
+        inner join "project_project" U1 ON (U0."project_id" = U1."id")
+        inner join "testing_testsuite_tests" U2 ON (U0."id" = U2."test_id")
+        inner join "vcs_commit" U4 ON (U1."id" = U4."project_id")
+        inner join "testing_defect_associated_tests" U5 ON (U0."id" = U5."test_id")
+        inner join "testing_defect" U6 ON (U5."defect_id" = U6."id")
+        left outer join "vcs_commit_areas" U7 ON (U4."id" = U7."commit_id")
+        left outer join "testing_defect_caused_by_commits" U9 ON (U6."id" = U9."defect_id")
+        left outer join "vcs_commit" U10 ON (U9."commit_id" = U10."id")
+        left outer join "vcs_commit_areas" U11 ON (U10."id" = U11."commit_id")
+      WHERE
+        (
+          U0."project_id" = %(project_id)s
+          AND U2."testsuite_id" = %(testsuite_id)s
+          AND U4."id" = ANY(%(commits_ids)s)
+          AND U6."close_type" IN (1, 3)
+          AND U6."status" = 4
+          AND U6."type" = 3
+          AND NOT (U7."area_id" = %(default_area_id)s)
+          AND (
+            U7."area_id" = U11."area_id"
+            OR U7."area_id" = U0."area_id"
+          )
+        )
     )
-    medium_query = Q(id__in=area_query_set.values_list('id', flat=True))
-    medium_query |= Q(id__in=qs.values_list('id', flat=True))
+  )
 
-    high_queryset = get_default_high_queryset(queryset, commits_ids, params=params)
-    exclude_test_ids = set(list(high_queryset.values_list('id', flat=True)))
-    qs = Test.objects.exclude(id__in=exclude_test_ids).filter(medium_query)
+    """, params={
+        'project_id': project.id,
+        'testsuite_id': test_suite.id,
+        'default_area_id': default_area_id,
+        'commits_areas_ids': commits_areas_ids,
+        'commits_ids': commits_ids
+    })
+    qs = Test.objects.filter(id__in=[item.id for item in pre_qs])
     qs = qs.distinct('name')
     return qs
 
