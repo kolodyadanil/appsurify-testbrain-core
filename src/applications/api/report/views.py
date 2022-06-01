@@ -1652,11 +1652,11 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
         'retrieve': TestRunDetailReportSerializer
     }
 
-    filter_class = TestRunReportFilterSet
-    filter_action_classes = {
-        'list': TestRunReportFilterSet,
-        'retrieve': None
-    }
+    # filter_class = TestRunReportFilterSet
+    # filter_action_classes = {
+    #     'list': TestRunReportFilterSet,
+    #     'retrieve': None
+    # }
 
     search_fields = ()
     ordering_fields = ('id', 'start_date', 'end_date',)
@@ -1670,14 +1670,13 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
         queryset = queryset.filter(project__organization=get_current_organization(self.request))
         return queryset
 
-    class ParamsTestRunListSerializer(serializers.Serializer):
+    class TestRunListFilterSerializer(serializers.Serializer):
         organization = serializers.ReadOnlyField()
         project = serializers.IntegerField()
         test_suite = serializers.IntegerField(required=False, allow_null=True)
         test_run_type = serializers.IntegerField(required=False, allow_null=True)
         status = serializers.IntegerField(required=False, allow_null=True)
         is_local = serializers.BooleanField(required=False, default=False)
-
 
         def _get_request(self):
             request = self.context.get('request')
@@ -1691,7 +1690,12 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
 
         import time
         start_time = time.time()
-        queryset = self.filter_queryset(self.get_queryset())
+        # queryset = self.filter_queryset(self.get_queryset())
+
+        filters_serializer = self.TestRunListFilterSerializer(data=request.query_params)
+        filters_serializer.is_valid(raise_exception=True)
+
+        queryset = test_run_report_list(filters=filters_serializer.validated_data)
 
         print('#1: {}'.format(time.time()-start_time))
         print(queryset.query)
@@ -1758,81 +1762,6 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
         #     'not_run_tests__count',
         #     'execution_time',
         # )
-        queryset = queryset.extra(
-            select={
-                'created_defect_count': """
-                SELECT COUNT(*) AS created_defects_count 
-                FROM testing_defect 
-                WHERE
-                testing_defect.project_id = testing_testrun.project_id 
-                AND testing_defect.created_by_test_run_id = testing_testrun.id
-                """,
-                'founded_defect_count': """
-                SELECT COUNT(*) AS founded_defects_flaky_failure_count
-                FROM testing_defect
-                INNER JOIN testing_testrunresult ON testing_testrunresult.id = testing_defect.created_by_test_run_result_id
-                WHERE
-                testing_defect.project_id = testing_testrun.project_id  
-                AND testing_defect."type" IN (2, 4, 1)
-                AND testing_defect.created_by_test_run_id = testing_testrun.id
-                AND testing_testrunresult.test_run_id = testing_testrun.id
-                """,
-                'previous_test_run_execution_time': """
-                SELECT COALESCE(SUM("execution_time"), 0) as execution_time
-                FROM testing_testrunresult 
-                WHERE testing_testrunresult.test_run_id = testing_testrun.previous_test_run_id
-                """
-            }
-        )
-        queryset = queryset.annotate(
-            _project=JSONObject(id='project__id', name='project__name'),
-            _test_suite=JSONObject(id='test_suite__id', name='test_suite__name'),
-            _start_date=TruncSecond(models.F('start_date')),
-            _end_date=models.Case(
-                models.When(
-                    ~models.Q(end_date=None),
-                    then=TruncSecond(models.F('end_date'))
-                )
-            ),
-            tests__execution_time=models.Case(
-                models.When(models.Q(mv_test_count_by_type__isnull=False),
-                            then=models.F('mv_test_count_by_type__execution_time')),
-                default=Value(0.0)
-            ),
-            # _previous_execution_time=models.F('previous_test_run_execution_time'),
-            tests__count=models.Case(
-                models.When(models.Q(mv_test_count_by_type__isnull=False),
-                            then=models.F('mv_test_count_by_type__tests_count')),
-                default=Value(0)
-            ),
-            passed_tests__count=models.Case(
-                models.When(models.Q(mv_test_count_by_type__isnull=False),
-                            then=models.F('mv_test_count_by_type__passed_tests_count')),
-                default=Value(0)
-            ),
-            failed_tests__count=models.Case(
-                models.When(models.Q(mv_test_count_by_type__isnull=False),
-                            then=models.F('mv_test_count_by_type__failed_tests_count')),
-                default=Value(0)
-            ),
-            broken_tests__count=models.Case(
-                models.When(models.Q(mv_test_count_by_type__isnull=False),
-                            then=models.F('mv_test_count_by_type__broken_tests_count')),
-                default=Value(0)
-            ),
-            not_run_tests__count=models.Case(
-                models.When(models.Q(mv_test_count_by_type__isnull=False),
-                            then=models.F('mv_test_count_by_type__not_run_tests_count')),
-                default=Value(0)
-            ),
-            tests_failure_sum=models.F('failed_tests__count') + models.F('broken_tests__count'),
-            tests__status=models.Case(
-                models.When(
-                    tests_failure_sum__gt=0,
-                    then=Value('Failure')),
-                default=Value('Passed')
-            )
-        )
 
         print('#3: {}'.format(time.time() - start_time))
         print(queryset.query)

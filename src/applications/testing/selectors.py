@@ -1,9 +1,21 @@
 # -*- coding: utf-8 -*-
 import time
+from datetime import timedelta, date
+
 from django.db import models
 from django.db.models import Q, F, Count, Value, CharField, Subquery, OuterRef
 from django.db.models.functions import Concat, Coalesce
 from django.utils import timezone
+
+from django.contrib.postgres.fields.jsonb import KeyTextTransform
+from django.db.models import Count
+from django.db.models.expressions import *
+from django.db.models.lookups import GreaterThan
+from django.db.models.functions import *
+
+from rest_framework_filters import FilterSet
+
+
 from applications.testing.models import Test, TestRun, TestSuite, TestRunResult, Defect
 from applications.vcs.models import Commit, Area, Branch
 from applications.vcs.utils.analysis import calculate_user_analysis, calculate_user_analysis_by_range, \
@@ -370,6 +382,7 @@ def get_default_medium_queryset(queryset, commits_ids, params=None):
     exclude_test_ids = set(list(high_queryset.values_list('id', flat=True)))
     qs = Test.objects.exclude(id__in=exclude_test_ids).filter(medium_query)
     qs = qs.distinct('name')
+    # print(qs.query)
     return qs
 
 
@@ -573,7 +586,18 @@ def get_default_highest_tests_under_time(queryset, params=None):
         raise Exception('Time is required in minute(s).')
 
 
-def test_run_report_list(*, params=None):
+class TestRunReportFilterSet(FilterSet):
+
+    # test_run_type = NumberFilter(field_name='test_run_type')
+    # status = NumberFilter(field_name='test_run_status')
+    # is_local = BooleanFilter(field_name='is_local')
+
+    class Meta(object):
+        model = TestRun
+        fields = ('project', 'test_suite', 'type', 'status', 'is_local')
+
+
+def test_run_report_list(*, filters=None):
     """
     'project', 'test_suite', 'test_run_type', 'status', 'is_local'
 
@@ -584,82 +608,85 @@ def test_run_report_list(*, params=None):
         'test_run_type': 1 | 2 | 3 | None,
         'status': 1 | 2 | 3 | None,
         'is_local': True | False,
-        'ordering': '-start_date' | None
     }
 
     """
-    params = params or {}
-    """
-        WHERE (U1."organization_id" = %(organization_id)s
-        AND U0."project_id" = %(project_id)s
-    """
-    sql_template = """
-WITH created_defect_count AS (
-SELECT testing_testrun.id,
-COUNT(*) AS created_defects__count
-FROM testing_testrun
-INNER JOIN testing_defect ON testing_testrun.id = testing_defect.created_by_test_run_id
-WHERE "testing_testrun"."project_id" = %(project_id)s
-GROUP BY testing_testrun.id
-), founded_defect_count AS (
-SELECT testing_testrun.id,
-COUNT(*) AS founded_defects__flaky_failure__count
-FROM testing_defect
-INNER JOIN testing_testrunresult ON "testing_testrunresult"."id" = "testing_defect"."created_by_test_run_result_id"
-INNER JOIN testing_testrun ON testing_testrunresult.test_run_id = testing_testrun.id
-WHERE testing_defect."type" IN (2, 4, 1)
-AND "testing_testrun"."project_id" = %(project_id)s
-GROUP BY testing_testrun.id
-)
-SELECT "testing_testrun"."project_id",
-       "project_project"."name" as "project_name",
-       "testing_testrun"."test_suite_id",
-       "testing_testsuite"."name" as "test_suite_name",
-       DATE_TRUNC('second', "testing_testrun"."start_date" AT TIME ZONE 'UTC') AS "start_date",
-			 COALESCE(mv_test_count_by_type.tests__count, 0) AS tests__count,
-			 COALESCE(created_defect_count.created_defects__count, 0) AS created_defects__count,
-			 COALESCE(founded_defect_count.founded_defects__flaky_failure__count, 0) AS founded_defects__flaky_failure__count,
-			 COALESCE(mv_test_count_by_type.passed_tests__count, 0) AS passed_tests__count,
-			 COALESCE(mv_test_count_by_type.skipped_tests__count, 0) AS skipped_tests__count,
-			 COALESCE(mv_test_count_by_type.failed_tests__count, 0) AS failed_tests__count,
-			 COALESCE(mv_test_count_by_type.broken_tests__count, 0) AS broken_tests__count,
-			 COALESCE(mv_test_count_by_type.not_run_tests__count, 0) AS not_run_tests__count,
-       COALESCE(mv_test_count_by_type."execution_time", 0) AS execution_time,
-			 (SELECT COALESCE(SUM("execution_time"), 0) FROM "testing_testrunresult" WHERE "test_run_id" = "testing_testrun"."previous_test_run_id") AS "previous_execution_time",
-       "testing_testrun"."id",
-       "testing_testrun"."name",
-       DATE_TRUNC('second', "testing_testrun"."end_date" AT TIME ZONE 'UTC') AS "end_date"
-FROM testing_testrun
-INNER JOIN "project_project" ON ("testing_testrun"."project_id" = "project_project"."id")
-INNER JOIN "testing_testsuite" ON ("testing_testrun"."test_suite_id" = "testing_testsuite"."id")
-LEFT OUTER JOIN mv_test_count_by_type ON testing_testrun.id = mv_test_count_by_type.test_run_id
-LEFT OUTER JOIN created_defect_count ON testing_testrun.id = created_defect_count.id
-LEFT OUTER JOIN founded_defect_count ON testing_testrun.id = founded_defect_count.id
-WHERE "project_project"."organization_id" = %(organization_id)s
-       AND"testing_testrun"."project_id" = %(project_id)s
-       AND NOT "testing_testrun"."is_local"
-GROUP BY "testing_testrun"."id",
-         DATE_TRUNC('second', "testing_testrun"."start_date" AT TIME ZONE 'UTC'),
-         "testing_testrun"."name",
-         "testing_testrun"."type",
-         DATE_TRUNC('second', "testing_testrun"."end_date" AT TIME ZONE 'UTC'),
-         "testing_testrun"."project_id",
-         "project_project"."name",
-         "testing_testrun"."test_suite_id",
-         "testing_testsuite"."name",
-				 "testing_testrun"."previous_test_run_id",
-				 "mv_test_count_by_type"."tests__count",
-				 "created_defect_count"."created_defects__count",
-				 "founded_defect_count"."founded_defects__flaky_failure__count",
-				 "mv_test_count_by_type"."passed_tests__count",
-				 "mv_test_count_by_type"."skipped_tests__count",
-				 "mv_test_count_by_type"."failed_tests__count",
-				 "mv_test_count_by_type"."broken_tests__count",
-				 "mv_test_count_by_type"."not_run_tests__count",
-				 mv_test_count_by_type."execution_time"
-ORDER BY "start_date" DESC
-    """
+    filters = filters or {}
 
-    queryset = TestRunResult.objects.raw(sql_template, params={'organization_id': 73, 'project_id': 469})
+    queryset = TestRun.objects.extra(
+        select={
+            'created_defect_count': """
+                    SELECT COUNT(*) AS created_defects_count 
+                    FROM testing_defect 
+                    WHERE
+                    testing_defect.project_id = testing_testrun.project_id 
+                    AND testing_defect.created_by_test_run_id = testing_testrun.id
+                    """,
+            'founded_defect_count': """
+                    SELECT COUNT(*) AS founded_defects_flaky_failure_count
+                    FROM testing_defect
+                    INNER JOIN testing_testrunresult ON testing_testrunresult.id = testing_defect.created_by_test_run_result_id
+                    WHERE
+                    testing_defect.project_id = testing_testrun.project_id  
+                    AND testing_defect."type" IN (2, 4, 1)
+                    AND testing_defect.created_by_test_run_id = testing_testrun.id
+                    AND testing_testrunresult.test_run_id = testing_testrun.id
+                    """,
+            'previous_test_run_execution_time': """
+                    SELECT COALESCE(SUM("execution_time"), 0) as execution_time
+                    FROM testing_testrunresult 
+                    WHERE testing_testrunresult.test_run_id = testing_testrun.previous_test_run_id
+                    """
+        }
+    )
+    queryset = queryset.annotate(
+        _project=JSONObject(id='project__id', name='project__name'),
+        _test_suite=JSONObject(id='test_suite__id', name='test_suite__name'),
+        _start_date=TruncSecond(models.F('start_date')),
+        _end_date=models.Case(
+            models.When(
+                ~models.Q(end_date=None),
+                then=TruncSecond(models.F('end_date'))
+            )
+        ),
+        tests__execution_time=models.Case(
+            models.When(models.Q(mv_test_count_by_type__isnull=False),
+                        then=models.F('mv_test_count_by_type__execution_time')),
+            default=Value(0.0)
+        ),
+        # _previous_execution_time=models.F('previous_test_run_execution_time'),
+        tests__count=models.Case(
+            models.When(models.Q(mv_test_count_by_type__isnull=False),
+                        then=models.F('mv_test_count_by_type__tests_count')),
+            default=Value(0)
+        ),
+        passed_tests__count=models.Case(
+            models.When(models.Q(mv_test_count_by_type__isnull=False),
+                        then=models.F('mv_test_count_by_type__passed_tests_count')),
+            default=Value(0)
+        ),
+        failed_tests__count=models.Case(
+            models.When(models.Q(mv_test_count_by_type__isnull=False),
+                        then=models.F('mv_test_count_by_type__failed_tests_count')),
+            default=Value(0)
+        ),
+        broken_tests__count=models.Case(
+            models.When(models.Q(mv_test_count_by_type__isnull=False),
+                        then=models.F('mv_test_count_by_type__broken_tests_count')),
+            default=Value(0)
+        ),
+        not_run_tests__count=models.Case(
+            models.When(models.Q(mv_test_count_by_type__isnull=False),
+                        then=models.F('mv_test_count_by_type__not_run_tests_count')),
+            default=Value(0)
+        ),
+        tests_failure_sum=models.F('failed_tests__count') + models.F('broken_tests__count'),
+        tests__status=models.Case(
+            models.When(
+                tests_failure_sum__gt=0,
+                then=Value('Failure')),
+            default=Value('Passed')
+        )
+    )
     # print(queryset.query)
     return queryset
