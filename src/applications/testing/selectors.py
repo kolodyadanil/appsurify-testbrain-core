@@ -4,11 +4,13 @@ from django.db import models
 from django.db.models import Q, F, Count, Value, CharField, Subquery, OuterRef
 from django.db.models.functions import Concat, Coalesce
 from django.utils import timezone
+from applications.integration.ssh_v2.tasks import fetch_commits_task_v2
 from applications.testing.models import Test, TestRun, TestSuite, TestRunResult, Defect
 from applications.vcs.models import Commit, Area, Branch
 from applications.vcs.utils.analysis import calculate_user_analysis, calculate_user_analysis_by_range, \
     avg_per_range, calculate_similar_by_commit
 from applications.ml.models import MLModel
+from system.celery_app import app
 
 
 LOOKUP_SEP = '__'
@@ -56,6 +58,31 @@ def prioritized_test_list(*, params=None):
 
     commit_list = get_commit_list(params=params)
     commit_queryset = Commit.objects.filter(id__in=set(commit_list))
+
+    commit_queryset_sha = commit_queryset.values_list("sha", flat=True)
+
+    reserved_tasks = app.control.inspect().reserved().items()
+    for queue, tasks in reserved_tasks:
+        if queue.startswith("common"):
+            for task in tasks:
+                project_id = task.get("kwargs").get("project_id")
+                repository_id = task.get("kwargs").get("repository_id")
+                model_name = task.get("kwargs").get("model_name")
+                data = task.get("kwargs").get("data")
+                if task.get("name") == "applications.integration.ssh_v2.tasks.fetch_commits_task_v2":
+                    for commit in task.get("kwargs").get("data").get("commits"):
+                        if commit.get("sha") in commit_queryset_sha:
+                            fetch_commits_task_v2.apply_async(
+                                args=[],
+                                kwargs={
+                                    "project_id": project_id,
+                                    "repository_id": repository_id,
+                                    "model_name": model_name,
+                                    "data": data,
+                                },
+                                queue="commit_processing",
+                            )
+                            break
     # while True:
     #     fully_processed = True
     #     for commit in commit_queryset:

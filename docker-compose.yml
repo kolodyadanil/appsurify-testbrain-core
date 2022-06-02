@@ -47,7 +47,7 @@ services:
   worker-immediate:
     <<: *testbrian
     container_name: testbrain-worker-immediate
-    command: celery -A system worker -E --hostname=immediate@%h --pool prefork --concurrency 2 --queues immediate
+    command: celery -A system worker -E --hostname=immediate@%h --pool prefork --concurrency 2 --queues immediate,commit_processing
     depends_on:
       - api
       - postgres
