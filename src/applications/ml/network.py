@@ -166,16 +166,14 @@ class MLTrainer(MLHolder):
         dataset_files = self.ml_model.dataset_filepaths
 
         print("Processing all datasets for store classes...")
-        start_time = time.time()
 
+        start_time = time.time()
         _total = len(dataset_files)
         _index = 0
-        for dataset_file in dataset_files:
-            _index += 1
-            df = pd.read_csv(dataset_file, quoting=2)
-            print(f"P: ({_index}/{_total}) <TestSuite: {self.ml_model.test_suite_id}> - {dataset_file} : "
-                  f"** Memory usage of the file - {sum(df.memory_usage()) * 0.000001} MB for {len(df.index)} Rows")
 
+        for dataset_file in dataset_files:
+
+            df = pd.read_csv(dataset_file, quoting=2)
             for column_name, new_columns_prefix in self.encode_columns:
                 df[column_name] = df[column_name].apply(parse_list_entry)
                 binarizer = getattr(self._model, f"{column_name}_binarizer", MultiLabelBinarizer())
@@ -184,16 +182,18 @@ class MLTrainer(MLHolder):
                     model_classes[column_name] = set()
                 model_classes[column_name].update(binarizer.classes_)
 
-        # Read CSV files from List
-        # df = pd.concat(map(pd.read_csv, dataset_files))
+            _index += 1
+            print(f"P: ({_index}/{_total}) <TestSuite: {self.ml_model.test_suite_id}> - {dataset_file} : "
+                  f"** Memory usage of the file - {sum(df.memory_usage()) * 0.000001} MB for {len(df.index)} Rows")
 
         print("--- MAKE LIST OF CLASSES --- %s seconds ---" % (time.time() - start_time))
 
         print("Processing fits...")
-        start_time = time.time()
 
+        start_time = time.time()
         _total = len(dataset_files)
         _index = 0
+
         for dataset_file in dataset_files:
 
             df = pd.read_csv(dataset_file, quoting=2)
