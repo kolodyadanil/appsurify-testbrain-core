@@ -16,6 +16,7 @@ from django.utils.dateparse import parse_datetime
 from django.utils.encoding import force_bytes
 from hashlib import sha1, md5
 from django.db import models
+from applications.integration.utils import get_repository_model
 from applications.project.models import Project
 from applications.vcs.models import File, Commit, Branch, FileChange, Area
 
@@ -359,4 +360,24 @@ def processing_commits_fast(project=None, repository=None, data=None):
         branch_through_model = Commit.branches.through
         branch_through_model.objects.update_or_create(commit_id=new_commit.id, branch_id=branch.id)
 
+    return True
+
+
+def commits_processed(repository_id=None, data=None):
+
+    if data is None:
+        data = {}
+
+    RepositoryModel = get_repository_model('gitsshv2repository')
+    repository = RepositoryModel.objects.get(pk=repository_id)
+
+    commits = data.get('commits', [])
+    for commit in commits:
+        sha = commit['sha']
+        commit_record = Commit.objects.get(
+            project=repository.project,
+            sha=sha,
+        )
+        if not commit_record.is_processed:
+            return False
     return True
