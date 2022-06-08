@@ -80,13 +80,13 @@ class TestSuiteReportFilterSet(FilterSet):
 
 class TestRunReportFilterSet(FilterSet):
 
-    test_run_type = NumberFilter(field_name='test_run_type')
-    status = NumberFilter(field_name='test_run_status')
-    is_local = BooleanFilter(field_name='test_run_is_local')
+    # test_run_type = NumberFilter(field_name='test_run_type')
+    # status = NumberFilter(field_name='test_run_status')
+    # is_local = BooleanFilter(field_name='is_local')
 
     class Meta(object):
-        model = TestRunResult
-        fields = ('project', 'test_suite', 'test_run_type', 'status', 'is_local')
+        model = TestRun
+        fields = ('project', 'test_suite', 'type', 'status', 'is_local')
 
 
 class TestReportFilterSet(FilterSet):

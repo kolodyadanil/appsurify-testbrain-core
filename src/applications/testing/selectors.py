@@ -1,11 +1,23 @@
 # -*- coding: utf-8 -*-
 import time
+from datetime import timedelta, date
+
 from django.db import models
 from django.db.models import Q, F, Count, Value, CharField, Subquery, OuterRef
 from django.db.models.functions import Concat, Coalesce
 from django.utils import timezone
+
+from django.contrib.postgres.fields.jsonb import KeyTextTransform
+from django.db.models import Count
+from django.db.models.expressions import *
+from django.db.models.lookups import GreaterThan
+from django.db.models.functions import *
+
+from rest_framework_filters import FilterSet
+
 from applications.integration.ssh_v2.tasks import fetch_commits_task_v2
 from applications.integration.ssh_v2.utils import prioritize_task
+
 from applications.testing.models import Test, TestRun, TestSuite, TestRunResult, Defect
 from applications.vcs.models import Commit, Area, Branch
 from applications.vcs.utils.analysis import calculate_user_analysis, calculate_user_analysis_by_range, \
@@ -62,7 +74,7 @@ def prioritized_test_list(*, params=None):
 
     commit_queryset_sha = commit_queryset.values_list("sha", flat=True)
     prioritize_task(commits_sha=commit_queryset_sha)
-    
+
     # while True:
     #     fully_processed = True
     #     for commit in commit_queryset:
@@ -480,6 +492,7 @@ WHERE
     })
     qs = Test.objects.filter(id__in=[item.id for item in pre_qs])
     qs = qs.distinct('name')
+    # print(qs.query)
     return qs
 
 
@@ -681,3 +694,119 @@ def get_default_highest_tests_under_time(queryset, params=None):
         return qs.distinct('name')
     else:
         raise Exception('Time is required in minute(s).')
+
+
+class TestRunReportFilterSet(FilterSet):
+
+    # test_run_type = NumberFilter(field_name='test_run_type')
+    # status = NumberFilter(field_name='test_run_status')
+    # is_local = BooleanFilter(field_name='is_local')
+
+    class Meta(object):
+        model = TestRun
+        fields = ('project', 'test_suite', 'type', 'status', 'is_local')
+
+
+def test_run_report_list(*, filters=None):
+    """
+    'project', 'test_suite', 'test_run_type', 'status', 'is_local'
+
+    params = {
+        'organization': Organization(),
+        'project': Project(),
+        'test_suite': TestSuite() | None,
+        'test_run_type': 1 | 2 | 3 | None,
+        'status': 1 | 2 | 3 | None,
+        'is_local': True | False,
+    }
+
+    """
+    filters = filters or {}
+
+    class BaseTestRunFilter(FilterSet):
+        class Meta:
+            model = TestRun
+            fields = ('project', 'test_suite', 'type', 'status', 'is_local')
+
+    queryset = TestRun.objects.all()
+    queryset = BaseTestRunFilter(filters, queryset).qs
+
+    queryset = queryset.extra(
+        select={
+            'created_defect_count': """
+                    SELECT COUNT(*) AS created_defects_count 
+                    FROM testing_defect 
+                    WHERE
+                    testing_defect.project_id = testing_testrun.project_id 
+                    AND testing_defect.created_by_test_run_id = testing_testrun.id
+                    """,
+            'founded_defect_count': """
+                    SELECT COUNT(*) AS founded_defects_flaky_failure_count
+                    FROM testing_defect
+                    INNER JOIN testing_testrunresult ON testing_testrunresult.id = testing_defect.created_by_test_run_result_id
+                    WHERE
+                    testing_defect.project_id = testing_testrun.project_id  
+                    AND testing_defect."type" IN (2, 4, 1)
+                    AND testing_defect.created_by_test_run_id = testing_testrun.id
+                    AND testing_testrunresult.test_run_id = testing_testrun.id
+                    """,
+            'previous_test_run_execution_time': """
+                    SELECT COALESCE(SUM("execution_time"), 0) as execution_time
+                    FROM testing_testrunresult 
+                    WHERE testing_testrunresult.test_run_id = testing_testrun.previous_test_run_id
+                    """
+        }
+    )
+
+
+
+    queryset = queryset.annotate(
+        _project=JSONObject(id='project__id', name='project__name'),
+        _test_suite=JSONObject(id='test_suite__id', name='test_suite__name'),
+        _start_date=TruncSecond(models.F('start_date')),
+        _end_date=models.Case(
+            models.When(
+                ~models.Q(end_date=None),
+                then=TruncSecond(models.F('end_date'))
+            )
+        ),
+        tests__execution_time=models.Case(
+            models.When(models.Q(mv_test_count_by_type__isnull=False),
+                        then=models.F('mv_test_count_by_type__execution_time')),
+            default=Value(0.0)
+        ),
+        # _previous_execution_time=models.F('previous_test_run_execution_time'),
+        tests__count=models.Case(
+            models.When(models.Q(mv_test_count_by_type__isnull=False),
+                        then=models.F('mv_test_count_by_type__tests_count')),
+            default=Value(0)
+        ),
+        passed_tests__count=models.Case(
+            models.When(models.Q(mv_test_count_by_type__isnull=False),
+                        then=models.F('mv_test_count_by_type__passed_tests_count')),
+            default=Value(0)
+        ),
+        failed_tests__count=models.Case(
+            models.When(models.Q(mv_test_count_by_type__isnull=False),
+                        then=models.F('mv_test_count_by_type__failed_tests_count')),
+            default=Value(0)
+        ),
+        broken_tests__count=models.Case(
+            models.When(models.Q(mv_test_count_by_type__isnull=False),
+                        then=models.F('mv_test_count_by_type__broken_tests_count')),
+            default=Value(0)
+        ),
+        not_run_tests__count=models.Case(
+            models.When(models.Q(mv_test_count_by_type__isnull=False),
+                        then=models.F('mv_test_count_by_type__not_run_tests_count')),
+            default=Value(0)
+        ),
+        tests_failure_sum=models.F('failed_tests__count') + models.F('broken_tests__count'),
+        tests__status=models.Case(
+            models.When(
+                tests_failure_sum__gt=0,
+                then=Value('Failure')),
+            default=Value('Passed')
+        )
+    )
+    return queryset

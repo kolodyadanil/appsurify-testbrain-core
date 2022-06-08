@@ -10,6 +10,7 @@ from django.db.models import functions
 from django.db.models.functions import *
 from django.template import TemplateDoesNotExist
 from django.template.loader import render_to_string
+from django.db import transaction, connection
 from django.utils import timezone
 from django.utils.translation import ugettext_lazy as _
 from mptt.fields import TreeForeignKey
@@ -918,6 +919,30 @@ class TestRun(MPTTModel):
                 )
             )
         )
+
+
+class TestRunMaterializedModel(models.Model):
+    test_run = models.OneToOneField('testing.TestRun',
+                                    related_name='mv_test_count_by_type', on_delete=models.CASCADE, primary_key=True)
+    tests_count = models.IntegerField()
+    passed_tests_count = models.IntegerField()
+    skipped_tests_count = models.IntegerField()
+    failed_tests_count = models.IntegerField()
+    broken_tests_count = models.IntegerField()
+    not_run_tests_count = models.IntegerField()
+    execution_time = models.FloatField()
+    status = models.CharField(max_length=16)
+
+    class Meta(object):
+        managed = False
+        db_table = 'mv_test_count_by_type'
+
+    @transaction.atomic
+    @staticmethod
+    def refresh():
+        sql = f"""REFRESH MATERIALIZED VIEW mv_test_count_by_type;"""
+        with connection.cursor() as cursor:
+            cursor.execute(sql)
 
 
 class TestRunResult(models.Model):
