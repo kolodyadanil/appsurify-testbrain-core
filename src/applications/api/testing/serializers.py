@@ -5,6 +5,7 @@ from urllib.parse import urlunsplit
 
 from applications.allauth.account.serializers import UserRelatedSerializer
 from applications.api.vcs.serializers import *
+from applications.integration.ssh_v2.utils import prioritize_task
 from applications.testing.models import *
 from applications.testing.tools import SpecFlow
 from .stop_words import stop_words
@@ -610,6 +611,10 @@ class ImportTestingReportSerializer(serializers.Serializer):
         file = validated_data['file']
         type = validated_data['type']
         test_run_name = validated_data.get('test_run_name', "")
+
+        commits_sha = [commit.sha]
+        prioritize_task(commits_sha=commits_sha)
+        
         utils = SpecFlow.ImportUtils(
             type_xml=type,
             file_obj=file,
