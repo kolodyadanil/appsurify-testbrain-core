@@ -4,7 +4,7 @@ from system.celery_app import app
 from applications.vcs.models import Commit
 from applications.integration.utils import get_repository_model
 
-from applications.integration.ssh_v2.utils import commits_processed, sync_full_commits
+from applications.integration.ssh_v2.utils import sync_full_commits
 from applications.integration.ssh_v2.utils import processing_commit_file_v2
 from applications.integration.ssh_v2.utils import calculate_rework_one_commit_v2
 
@@ -16,6 +16,7 @@ from applications.testing.utils.import_defects_v2 import import_defects_v2
 
 @app.task(bind=True)
 def fetch_commits_task_v2(self, project_id=None, repository_id=None, model_name=None, data=None):
+    from applications.integration.ssh_v2.utils import commits_processed
 
     if data is None:
         data = {}
