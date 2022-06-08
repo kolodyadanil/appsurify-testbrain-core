@@ -1672,8 +1672,8 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
 
     class TestRunListFilterSerializer(serializers.Serializer):
         organization = serializers.ReadOnlyField()
-        project = serializers.IntegerField()
-        test_suite = serializers.IntegerField(required=False, allow_null=True)
+        project = serializers.CharField()
+        test_suite = serializers.CharField(required=False, allow_null=True)
         test_run_type = serializers.IntegerField(required=False, allow_null=True)
         status = serializers.IntegerField(required=False, allow_null=True)
         is_local = serializers.BooleanField(required=False, default=False)
@@ -1683,6 +1683,15 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
             if not isinstance(request, HttpRequest):
                 request = request._request
             return request
+
+        def validate_test_suite(self, test_suite):
+            if str(test_suite).isdigit():
+                test_suite = int(test_suite)
+            elif str(test_suite) == 'NaN':
+                test_suite = None
+            else:
+                raise serializers.ValidationError('TestSuite ID must be specified')
+            return test_suite
 
     def list(self, request, *args, **kwargs):
 
