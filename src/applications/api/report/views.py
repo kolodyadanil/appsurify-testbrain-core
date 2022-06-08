@@ -1686,98 +1686,18 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
 
     def list(self, request, *args, **kwargs):
 
-        # queryset = test_run_report_list(params={})
-
-        import time
-        start_time = time.time()
-        # queryset = self.filter_queryset(self.get_queryset())
-
         filters_serializer = self.TestRunListFilterSerializer(data=request.query_params)
         filters_serializer.is_valid(raise_exception=True)
 
         queryset = test_run_report_list(filters=filters_serializer.validated_data)
 
-        print('#1: {}'.format(time.time()-start_time))
-        print(queryset.query)
-        print('#2: {}'.format(time.time() - start_time))
-        # .annotate(start_date=TruncSecond(models.F('test_run_start_date')))
-        # sub_queryset = (
-        #     queryset
-        #         .filter(test_id=models.OuterRef('test_id'), test_run_id=models.OuterRef('test_run_id'))
-        #         .values('status')[:1]
-        # )
-        # # print '#2: {}'.format(time.time() - start_time)
-        # qs = queryset.annotate(
-        #     last_test_run_result=models.Subquery(sub_queryset)
-        # ).values(
-        #     'test_run_id'
-        # ).annotate(
-        #     created_defects__count=models.Count(
-        #         models.Case(
-        #             models.When(test_run_id=models.F('test_run_id'), then=models.F('created_defects__id'))
-        #         ), distinct=True
-        #     ),
-        #     founded_defects__flaky_failure__count=models.Count(
-        #         models.Case(
-        #             models.When(
-        #                 models.Q(
-        #                     test_run_id=models.F('test_run_id'),
-        #                     founded_defects__type__in=[Defect.TYPE_FLAKY, Defect.TYPE_INVALID_TEST,
-        #                                                Defect.TYPE_ENVIRONMENTAL]
-        #                 ), then=models.F('founded_defects__id')
-        #             )
-        #         ), distinct=True
-        #     ),
-        #     execution_time=models.Sum('execution_time'),
-        #     id=models.F('test_run_id'),
-        #     name=models.F('test_run_name'),
-        #     type=models.F('test_run_type'),
-        #     start_date=TruncSecond(models.F('test_run_start_date')),
-        #     end_date=models.Case(
-        #         models.When(
-        #             ~models.Q(test_run_end_date=None),
-        #             then=TruncSecond(models.F('test_run_end_date'))
-        #         )
-        #     ),
-        # ).values(
-        #     'project_id',
-        #     'project_name',
-        #
-        #     'test_suite_id',
-        #     'test_suite_name',
-        #
-        #     'id',
-        #     'name',
-        #
-        #     'start_date',
-        #     'end_date',
-        #
-        #     'tests__count',
-        #     'created_defects__count',
-        #     'founded_defects__flaky_failure__count',
-        #     'passed_tests__count',
-        #     'skipped_tests__count',
-        #     'failed_tests__count',
-        #     'broken_tests__count',
-        #     'not_run_tests__count',
-        #     'execution_time',
-        # )
-
-        print('#3: {}'.format(time.time() - start_time))
-        print(queryset.query)
-        print('#4: {}'.format(time.time() - start_time))
         page = self.paginate_queryset(queryset)
-        # print '#5: {}'.format(time.time() - start_time)
+
         if page is not None:
-            # print '#6.0: {}'.format(time.time() - start_time)
             serializer = self.get_serializer(page, many=True)
-            # print '#6.1: {}'.format(time.time() - start_time)
             return self.get_paginated_response(serializer.data)
 
         serializer = self.get_serializer(queryset, many=True)
-        # print '#6.2: {}'.format(time.time() - start_time)
-        # data =
-        # print '#7: {}'.format(time.time() - start_time)
         return Response(serializer.data)
 
     def retrieve(self, request, *args, **kwargs):

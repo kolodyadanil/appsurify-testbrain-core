@@ -613,7 +613,15 @@ def test_run_report_list(*, filters=None):
     """
     filters = filters or {}
 
-    queryset = TestRun.objects.extra(
+    class BaseTestRunFilter(FilterSet):
+        class Meta:
+            model = TestRun
+            fields = ('project', 'test_suite', 'type', 'status', 'is_local')
+
+    queryset = TestRun.objects.all()
+    queryset = BaseTestRunFilter(filters, queryset).qs
+
+    queryset = queryset.extra(
         select={
             'created_defect_count': """
                     SELECT COUNT(*) AS created_defects_count 
@@ -639,6 +647,9 @@ def test_run_report_list(*, filters=None):
                     """
         }
     )
+
+
+
     queryset = queryset.annotate(
         _project=JSONObject(id='project__id', name='project__name'),
         _test_suite=JSONObject(id='test_suite__id', name='test_suite__name'),
@@ -688,5 +699,4 @@ def test_run_report_list(*, filters=None):
             default=Value('Passed')
         )
     )
-    # print(queryset.query)
     return queryset
