@@ -39,26 +39,32 @@ def processing_dataset(ml_model, test):
     dataset_path = ml_model.dataset_path
     dataset_path.mkdir(parents=True, exist_ok=True)
     test_id = test.id
-    print(f"<TestSuiteID: {ml_model.test_suite_id}> / <TestID: {test_id}> processing...")
+
     sql = ml_model.dataset_sql(test)
     sql_query = f"\copy ({sql}) To '{dataset_path / dataset_filename}' With CSV DELIMITER ',' HEADER"
+
     try:
         output = execute_query(query=sql_query)
-        print(f"<TestSuiteID: {ml_model.test_suite_id}> / <TestID: {test_id}> success {output}")
         result = True
+        print(f"PREPARE DATASET <TestSuiteID: {ml_model.test_suite_id}> <TestID: {test_id}> (SUCCESS '{output}')")
     except Exception as e:
-        print(f"<TestSuiteID: {ml_model.test_suite_id}> / <TestID: {test_id}> {str(e)}")
+        print(f"PREPARE DATASET <TestSuiteID: {ml_model.test_suite_id}> <TestID: {test_id}> (FAIL {str(e)})")
+
     return result
 
 
 def prepare_dataset_to_csv(ml_model, max_workers=20):
-    _complete = 0
+    _total = 0
+    _success = 0
+    _fail = 0
+    _current = 0
 
     tests = ml_model.tests.all()
 
-    print(f"--- Total tests for dataset: {tests.count()} ---")
+    _total = tests.count()
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+
         futures = {}
         for test in tests:
             futures.update({executor.submit(processing_dataset, ml_model, test): ml_model})
@@ -66,8 +72,20 @@ def prepare_dataset_to_csv(ml_model, max_workers=20):
         for future in concurrent.futures.as_completed(futures):
             ml_model = futures[future]
             result = future.result()
-            if result:
-                _complete += 1
 
-    print(f"--- Success datasets: {_complete} ---")
-    return _complete
+            _current += 1
+
+            if result:
+                _success += 1
+            else:
+                _fail += 1
+
+            if (_current * 100 // _total) >= 10:
+                _current = 0
+                print(f"PREPARE DATASET <TestSuiteID: {ml_model.test_suite_id}> "
+                      f"(TOTAL: {_total} / SUCCESS: {_success} / FAIL: {_fail})")
+
+    print(f"PREPARE DATASET <TestSuiteID: {ml_model.test_suite_id}> "
+          f"(TOTAL: {_total} / SUCCESS: {_success} / FAIL: {_fail})")
+
+    return _success
