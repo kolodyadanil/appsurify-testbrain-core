@@ -16,8 +16,10 @@ from django.utils.dateparse import parse_datetime
 from django.utils.encoding import force_bytes
 from hashlib import sha1, md5
 from django.db import models
+from applications.integration.utils import get_repository_model
 from applications.project.models import Project
 from applications.vcs.models import File, Commit, Branch, FileChange, Area
+from system.celery_app import app
 
 
 patch_re = re.compile(
@@ -360,3 +362,50 @@ def processing_commits_fast(project=None, repository=None, data=None):
         branch_through_model.objects.update_or_create(commit_id=new_commit.id, branch_id=branch.id)
 
     return True
+
+
+def commits_processed(repository_id=None, data=None):
+
+    if data is None:
+        data = {}
+
+    RepositoryModel = get_repository_model('gitsshv2repository')
+    repository = RepositoryModel.objects.get(pk=repository_id)
+
+    commits = data.get('commits', [])
+    for commit in commits:
+        sha = commit['sha']
+        commit_record = Commit.objects.get(
+            project=repository.project,
+            sha=sha,
+        )
+        if not commit_record.is_processed:
+            return False
+    return True
+
+
+def prioritize_task(commits_sha):
+    from applications.integration.ssh_v2.tasks import fetch_commits_task_v2
+
+    reserved_tasks = app.control.inspect().reserved().items()
+    for queue, tasks in reserved_tasks:
+        if queue.startswith("common"):
+            for task in tasks:
+                project_id = task.get("kwargs").get("project_id")
+                repository_id = task.get("kwargs").get("repository_id")
+                model_name = task.get("kwargs").get("model_name")
+                data = task.get("kwargs").get("data")
+                if task.get("name") == "applications.integration.ssh_v2.tasks.fetch_commits_task_v2":
+                    for commit in task.get("kwargs").get("data").get("commits"):
+                        if commit.get("sha") in commits_sha:
+                            fetch_commits_task_v2.apply_async(
+                                args=[],
+                                kwargs={
+                                    "project_id": project_id,
+                                    "repository_id": repository_id,
+                                    "model_name": model_name,
+                                    "data": data,
+                                },
+                                queue="commit_processing",
+                            )
+                            break

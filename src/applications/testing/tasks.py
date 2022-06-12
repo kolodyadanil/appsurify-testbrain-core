@@ -74,3 +74,9 @@ def periodic_add_association(self, chunk_size=20):
         job = group([add_association_for_test.s(test_id) for test_id in chunk])
         result = job.apply_async()
         time.sleep(0.5)
+
+
+@app.task(bind=True)
+def update_materialized_view(self, *args, **kwargs):
+    from applications.testing.models import TestRunMaterializedModel
+    TestRunMaterializedModel.refresh()

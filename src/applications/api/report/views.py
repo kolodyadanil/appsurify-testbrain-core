@@ -6,6 +6,8 @@ import pytz
 from django.contrib.postgres.fields.jsonb import KeyTextTransform
 from django.db.models import Count
 from django.db.models.expressions import *
+from django.db.models.lookups import GreaterThan
+from django.db.models.functions import *
 from django.http import Http404
 from django.http import HttpRequest
 from django.shortcuts import get_object_or_404 as _get_object_or_404
@@ -21,6 +23,9 @@ from applications.project.permissions import IsOwnerOrReadOnly
 from applications.vcs.utils.analysis import calculate_user_analysis, calculate_user_analysis_by_range, avg_per_range, \
     calculate_similar_by_commit
 from applications.vcs.utils.bugspots import Bugspots
+
+from applications.testing.models import *
+
 from .filters import *
 from .serializers import *
 
@@ -30,7 +35,7 @@ from rest_framework.permissions import IsAuthenticated
 from applications.api.external.permissions import IsAuthenticatedToken
 
 # from applications.ml.network import MLPredictor
-from applications.testing.selectors import Priority, prioritized_test_list
+from applications.testing.selectors import Priority, prioritized_test_list, test_run_report_list
 
 
 def get_object_or_404(queryset, *filter_args, **filter_kwargs):
@@ -1637,7 +1642,7 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
     model = TestRunResult
     queryset = TestRunResult.objects.all()
     queryset_action = {
-        'list': TestRunResult.objects.all().annotate(start_date=TruncSecond(models.F('test_run_start_date'))),
+        'list': TestRun.objects.all(),
         'retrieve': TestRun.objects.all()
     }
 
@@ -1647,11 +1652,11 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
         'retrieve': TestRunDetailReportSerializer
     }
 
-    filter_class = TestRunReportFilterSet
-    filter_action_classes = {
-        'list': TestRunReportFilterSet,
-        'retrieve': None
-    }
+    # filter_class = TestRunReportFilterSet
+    # filter_action_classes = {
+    #     'list': TestRunReportFilterSet,
+    #     'retrieve': None
+    # }
 
     search_fields = ()
     ordering_fields = ('id', 'start_date', 'end_date',)
@@ -1665,143 +1670,43 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
         queryset = queryset.filter(project__organization=get_current_organization(self.request))
         return queryset
 
+    class TestRunListFilterSerializer(serializers.Serializer):
+        organization = serializers.ReadOnlyField()
+        project = serializers.CharField()
+        test_suite = serializers.CharField(required=False, allow_null=True)
+        test_run_type = serializers.IntegerField(required=False, allow_null=True)
+        status = serializers.IntegerField(required=False, allow_null=True)
+        is_local = serializers.BooleanField(required=False, default=False)
+
+        def _get_request(self):
+            request = self.context.get('request')
+            if not isinstance(request, HttpRequest):
+                request = request._request
+            return request
+
+        def validate_test_suite(self, test_suite):
+            if str(test_suite).isdigit():
+                test_suite = int(test_suite)
+            elif str(test_suite) == 'NaN':
+                test_suite = None
+            else:
+                raise serializers.ValidationError('TestSuite ID must be specified')
+            return test_suite
+
     def list(self, request, *args, **kwargs):
-        # import time
-        # start_time = time.time()
-        queryset = self.filter_queryset(self.get_queryset())
-        # print '#1: {}'.format(time.time()-start_time)
-        sub_queryset = (
-            queryset
-                .filter(test_id=models.OuterRef('test_id'), test_run_id=models.OuterRef('test_run_id'))
-                .values('status')[:1]
-        )
-        # print '#2: {}'.format(time.time() - start_time)
-        qs = queryset.annotate(
-            last_test_run_result=models.Subquery(sub_queryset)
-        ).values(
-            'test_run_id'
-        ).annotate(
-            tests__count=models.Count(
-                models.Case(
-                    models.When(test_run_id=models.F('test_run_id'), then=models.F('test_id')),
-                ), distinct=True
-            ),
-            created_defects__count=models.Count(
-                models.Case(
-                    models.When(test_run_id=models.F('test_run_id'), then=models.F('created_defects__id'))
-                ), distinct=True
-            ),
-            founded_defects__flaky_failure__count=models.Count(
-                models.Case(
-                    models.When(
-                        models.Q(
-                            test_run_id=models.F('test_run_id'),
-                            founded_defects__type__in=[Defect.TYPE_FLAKY, Defect.TYPE_INVALID_TEST,
-                                                       Defect.TYPE_ENVIRONMENTAL]
-                        ), then=models.F('founded_defects__id')
-                    )
-                ), distinct=True
-            ),
-            passed_tests__count=models.Count(
-                models.Case(
-                    models.When(
-                        models.Q(
-                            # test_run_id=models.F('test_run_id'),
-                            last_test_run_result=TestRunResult.STATUS_PASS
-                        ), then=models.F('test_id')
-                    )
-                ), distinct=True
-            ),
-            skipped_tests__count=models.Count(
-                models.Case(
-                    models.When(
-                        models.Q(
-                            # test_run_id=models.F('test_run_id'),
-                            last_test_run_result=TestRunResult.STATUS_SKIPPED
-                        ), then=models.F('test_id')
-                    )
-                ), distinct=True
-            ),
-            failed_tests__count=models.Count(
-                models.Case(
-                    models.When(
-                        models.Q(
-                            # test_run_id=models.F('test_run_id'),
-                            last_test_run_result=TestRunResult.STATUS_FAIL
-                        ), then=models.F('test_id')
-                    )
-                ), distinct=True
-            ),
-            broken_tests__count=models.Count(
-                models.Case(
-                    models.When(
-                        models.Q(
-                            # test_run_id=models.F('test_run_id'),
-                            last_test_run_result=TestRunResult.STATUS_BROKEN
-                        ), then=models.F('test_id')
-                    )
-                ), distinct=True
-            ),
-            not_run_tests__count=models.Count(
-                models.Case(
-                    models.When(
-                        models.Q(
-                            # test_run_id=models.F('test_run_id'),
-                            last_test_run_result__in=[TestRunResult.STATUS_PENDING, TestRunResult.STATUS_SKIPPED,
-                                                      TestRunResult.STATUS_NOT_RUN]
-                        ), then=models.F('test_id')
-                    )
-                ), distinct=True
-            ),
-            execution_time=models.Sum('execution_time'),
-            id=models.F('test_run_id'),
-            name=models.F('test_run_name'),
-            type=models.F('test_run_type'),
-            start_date=TruncSecond(models.F('test_run_start_date')),
-            end_date=models.Case(
-                models.When(
-                    ~models.Q(test_run_end_date=None),
-                    then=TruncSecond(models.F('test_run_end_date'))
-                )
-            ),
-        ).values(
-            'project_id',
-            'project_name',
 
-            'test_suite_id',
-            'test_suite_name',
+        filters_serializer = self.TestRunListFilterSerializer(data=request.query_params)
+        filters_serializer.is_valid(raise_exception=True)
 
-            'id',
-            'name',
+        queryset = test_run_report_list(filters=filters_serializer.validated_data)
 
-            'start_date',
-            'end_date',
-
-            'tests__count',
-            'created_defects__count',
-            'founded_defects__flaky_failure__count',
-            'passed_tests__count',
-            'skipped_tests__count',
-            'failed_tests__count',
-            'broken_tests__count',
-            'not_run_tests__count',
-            'execution_time',
-        )
-        # print '#3: {}'.format(time.time() - start_time)
-        queryset = qs
-        # print '#4: {}'.format(time.time() - start_time)
         page = self.paginate_queryset(queryset)
-        # print '#5: {}'.format(time.time() - start_time)
+
         if page is not None:
-            # print '#6.0: {}'.format(time.time() - start_time)
             serializer = self.get_serializer(page, many=True)
-            # print '#6.1: {}'.format(time.time() - start_time)
             return self.get_paginated_response(serializer.data)
 
         serializer = self.get_serializer(queryset, many=True)
-        # print '#6.2: {}'.format(time.time() - start_time)
-        # data =
-        # print '#7: {}'.format(time.time() - start_time)
         return Response(serializer.data)
 
     def retrieve(self, request, *args, **kwargs):

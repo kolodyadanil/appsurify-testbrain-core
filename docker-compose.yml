@@ -39,15 +39,15 @@ services:
     <<: *testbrian
     container_name: testbrain-api
     restart: always
-#    command: python manage.py runserver 0.0.0.0:9000
-    command: /start-api
+    command: python manage.py runserver 0.0.0.0:9000
+    # command: /start-api
     ports:
       - 9000:9000
 
   worker-immediate:
     <<: *testbrian
     container_name: testbrain-worker-immediate
-    command: celery -A system worker -E --hostname=immediate@%h --pool prefork --concurrency 2 --queues immediate
+    command: celery -A system worker -E --hostname=immediate@%h --pool prefork --concurrency 2 --queues immediate,commit_processing
     depends_on:
       - api
       - postgres

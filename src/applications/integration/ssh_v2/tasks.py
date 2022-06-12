@@ -16,17 +16,32 @@ from applications.testing.utils.import_defects_v2 import import_defects_v2
 
 @app.task(bind=True)
 def fetch_commits_task_v2(self, project_id=None, repository_id=None, model_name=None, data=None):
+    from applications.integration.ssh_v2.utils import commits_processed
 
     if data is None:
         data = {}
 
+    processed = commits_processed(repository_id=repository_id, data=data)
+    if processed:
+        return
+
     RepositoryModel = get_repository_model('gitsshv2repository')
     repository = RepositoryModel.objects.get(pk=repository_id)
+    queue = self.request.delivery_info["routing_key"]
 
     new_commits_sha = sync_full_commits(project=repository.project, repository=repository, data=data)
 
-    processing_commit_file_task_v2.delay(project_id=project_id, repository_id=repository_id, model_name=model_name,
-                                            data=data, commits_sha=new_commits_sha)
+    processing_commit_file_task_v2.apply_async(
+        args=[],
+        kwargs={
+            "project_id": project_id,
+            "repository_id": repository_id,
+            "model_name": model_name,
+            "data": data,
+            "commits_sha": new_commits_sha,
+        },
+        queue=queue,
+    )
 
     return {'project_id': project_id, 'repository_id': repository_id, 'model_name': model_name}
 
