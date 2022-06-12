@@ -46,9 +46,9 @@ def processing_dataset(ml_model, test):
     try:
         output = execute_query(query=sql_query)
         result = True
-        print(f"PREPARE DATASET <TestSuiteID: {ml_model.test_suite_id}> <TestID: {test_id}> (SUCCESS '{output}')")
+        print(f"PREPARE DATASET <TestSuiteID: {ml_model.test_suite_id}> [{ml_model.index}] <TestID: {test_id}> (SUCCESS '{output}')")
     except Exception as e:
-        print(f"PREPARE DATASET <TestSuiteID: {ml_model.test_suite_id}> <TestID: {test_id}> (FAIL {str(e)})")
+        print(f"PREPARE DATASET <TestSuiteID: {ml_model.test_suite_id}> [{ml_model.index}] <TestID: {test_id}> (FAIL {str(e)})")
 
     return result
 
@@ -62,6 +62,9 @@ def prepare_dataset_to_csv(ml_model, max_workers=20):
     tests = ml_model.tests.all()
 
     _total = tests.count()
+
+    print(f"PREPARING DATASET <TestSuiteID: {ml_model.test_suite_id}> [{ml_model.index}] "
+          f"(TOTAL: {_total} / SUCCESS: {_success} / FAIL: {_fail})")
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
 
@@ -82,10 +85,10 @@ def prepare_dataset_to_csv(ml_model, max_workers=20):
 
             if (_current * 100 // _total) >= 10:
                 _current = 0
-                print(f"PREPARE DATASET <TestSuiteID: {ml_model.test_suite_id}> "
+                print(f"PREPARING DATASET <TestSuiteID: {ml_model.test_suite_id}> [{ml_model.index}] "
                       f"(TOTAL: {_total} / SUCCESS: {_success} / FAIL: {_fail})")
 
-    print(f"PREPARE DATASET <TestSuiteID: {ml_model.test_suite_id}> "
+    print(f"PREPARED DATASET <TestSuiteID: {ml_model.test_suite_id}> [{ml_model.index}] "
           f"(TOTAL: {_total} / SUCCESS: {_success} / FAIL: {_fail})")
 
     return _success

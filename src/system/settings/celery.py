@@ -128,6 +128,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "applications.vcs.tasks.create_area_from_folders_task",
         "schedule": crontab(minute=0, hour='*/6'),
     },
+    "update_test_run_statistics": {
+        "task": "applications.testing.tasks.update_materialized_view",
+        "schedule": crontab(minute='*/5'),
+    },
 }
 
 CELERYD_POOL_RESTARTS = CELERY_WORKER_POOL_RESTARTS

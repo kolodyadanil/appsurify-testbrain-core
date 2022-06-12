@@ -35,6 +35,7 @@ GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17
 ),
 ttrr_grp AS (
     SELECT ttrr.test_run_id,
+        ttrr.td_id,
 				(CASE WHEN (tdc.defect_id IS NOT NULL) AND ttrr.td_type IN (3,4) AND ttrr.td_close_type IN (1,3) THEN 1 ELSE 0 END) AS test_changed,
         ttrr.project_id,
         ttrr.test_name,
@@ -634,21 +635,25 @@ LEFT OUTER JOIN defect_caused_by_commits_folders dccfld ON ttrr.project_id = dcc
 	and ttrr.rework = dccfld.rework
 	and ttrr.riskiness = dccfld.riskiness
 LEFT OUTER JOIN files_since_last_run file_slr ON ttrr.project_id = file_slr.project_id
+	and ttrr.td_id = file_slr.td_id
 	and ttrr.test_name = file_slr.test_name
 	and ttrr.sha = file_slr.sha
 	and ttrr.rework = file_slr.rework
 	and ttrr.riskiness = file_slr.riskiness
 LEFT OUTER JOIN folders_since_last_run fold_slr ON ttrr.project_id = fold_slr.project_id
+	and ttrr.td_id = fold_slr.td_id
 	and ttrr.test_name = fold_slr.test_name
 	and ttrr.sha = fold_slr.sha
 	and ttrr.rework = fold_slr.rework
 	and ttrr.riskiness = fold_slr.riskiness
 LEFT OUTER JOIN areas_since_last_run aslr ON ttrr.project_id = aslr.project_id
+	and ttrr.td_id = aslr.td_id
 	and ttrr.test_name = aslr.test_name
 	and ttrr.sha = aslr.sha
 	and ttrr.rework = aslr.rework
 	and ttrr.riskiness = aslr.riskiness
 LEFT OUTER JOIN dependent_areas_since_last_run daslr ON ttrr.project_id = daslr.project_id
+	and ttrr.td_id = daslr.td_id
 	and ttrr.test_name = daslr.test_name
 	and ttrr.sha = daslr.sha
 	and ttrr.rework = daslr.rework
