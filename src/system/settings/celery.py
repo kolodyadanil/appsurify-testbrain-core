@@ -5,6 +5,8 @@ from kombu import Queue, Exchange
 from celery.schedules import crontab
 
 
+CELERY_SINGLETON_BACKEND_URL = env.str("REDIS_URL", default="redis://localhost:6379/0")
+
 # CELERY
 # ------------------------------------------------------------------------------
 CELERY_BROKER_URL = env.str("BROKER_URL", default="amqp://guest:guest@localhost:5672//")

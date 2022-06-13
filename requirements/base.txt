@@ -56,3 +56,4 @@ pqdm
 imblearn
 stripe
 django-csp
+celery-singleton

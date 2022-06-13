@@ -1672,7 +1672,7 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
 
     class TestRunListFilterSerializer(serializers.Serializer):
         organization = serializers.ReadOnlyField()
-        project = serializers.CharField()
+        project = serializers.CharField(required=False, allow_null=True)
         test_suite = serializers.CharField(required=False, allow_null=True)
         test_run_type = serializers.IntegerField(required=False, allow_null=True)
         status = serializers.IntegerField(required=False, allow_null=True)

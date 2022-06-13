@@ -64,6 +64,14 @@ LOGGING = {
             "backupCount": 7,
             "formatter": "verbose"
         },
+        "ml.file": {
+            "level": "DEBUG",
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": LOGS_ROOT / Path("ml.log"),
+            "maxBytes": 1024 * 1024 * 100,
+            "backupCount": 7,
+            "formatter": "verbose"
+        },
         "mail": {
             "level": "ERROR",
             "class": "django.utils.log.AdminEmailHandler",
@@ -93,11 +101,6 @@ LOGGING = {
             "handlers": ["console", "common.file", ],
             "propagate": True,
         },
-        "applications": {
-            "handlers": ["console", "applications.file", ],
-            "level": "DEBUG",
-            "propagate": False
-        },
         "flower": {
             "handlers": ["console", "flower.file", ],
             "level": "DEBUG",
@@ -105,6 +108,16 @@ LOGGING = {
         },
         "celery": {
             "handlers": ["console", "celery.file", ],
+            "level": "DEBUG",
+            "propagate": False
+        },
+        "applications": {
+            "handlers": ["console", "applications.file", ],
+            "level": "DEBUG",
+            "propagate": True
+        },
+        "applications.ml": {
+            "handlers": ["console", "ml.file", ],
             "level": "DEBUG",
             "propagate": False
         },

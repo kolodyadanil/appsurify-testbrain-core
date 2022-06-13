@@ -1,42 +1,38 @@
 # -*- coding: utf-8 -*-
+import os
+import sys
+import pathlib
 import django
+from os import walk
 
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "system.settings")
 django.setup()
 
-from applications.vcs.models import Commit
-from applications.testing.models import TestSuite, TestRun, Test
-from applications.ml.network import *
-
-print("HELLO!")
-
-percent = 30
-project_id = 469
-test_suite_id = 448
-
-commit_ids = [703010, ]
-test_ids = [60304, 60305, 60562, 60564, 60299, 60304, 60305, 60306, 60309, 60310]
+from applications.ml.models import MLModel, States
+from applications.testing.models import TestSuite
+from applications.ml.network import train_model, load_model, MLHolder, MLTrainer
 
 
-commits_queryset = Commit.objects.filter(id__in=commit_ids)
-tests_queryset = Test.objects.filter(id__in=test_ids)
-test_suite = TestSuite.objects.get(id=test_suite_id)
+class MockMLModel: ...
 
-# mlmodel = test_suite.model
+ml_model = MockMLModel()
 
-# print("All valid datasets")
-# for item in mlmodel.dataset_files:
-#     print(item)
+ml_model.test_suite_id = 346
+ml_model.index = 0
 
-# Predict id ML trained
-# print("START PREDICT")
-# print(f"LEN: {len(test_ids)}")
-# ml_predictor = MLPredictor(test_suite_id=test_suite_id)
-# ml_model_existing_flag = ml_predictor.is_loaded
-# result = ml_predictor.get_test_prioritization(tests_queryset, commits_queryset)
-# print(result)
-# print("PREDICTED")
+ml_model.model_path = pathlib.PosixPath('/Users/whenessel/Development/PycharmProjects/appsurify-testbrain-core/var/storage/ml/models/73/469/346')
+ml_model.model_filename = '0.m'
 
-# Train ML
-print("DO Train!")
-mlt = MLTrainer(test_suite_id=test_suite_id)
-mlt.train()
+# ml_model.dataset_filepaths = [
+#     pathlib.PosixPath('/Users/whenessel/Development/PycharmProjects/appsurify-testbrain-core/var/storage/ml/datasets/70/426/299/1/49435.csv'),
+#     pathlib.PosixPath('/Users/whenessel/Development/PycharmProjects/appsurify-testbrain-core/var/storage/ml/datasets/70/426/299/1/51318.csv'),
+#     pathlib.PosixPath('/Users/whenessel/Development/PycharmProjects/appsurify-testbrain-core/var/storage/ml/datasets/70/426/299/1/48997.csv'),
+# ]
+ml_model.dataset_filepaths = []
+base_dir = pathlib.PosixPath('/Users/whenessel/Development/PycharmProjects/appsurify-testbrain-core/var/storage/ml/datasets/73/469/346/0/')
+filenames = next(walk(base_dir), (None, None, []))[2]  # [] if no file
+for fn in filenames:
+    ml_model.dataset_filepaths.append(base_dir / fn)
+
+ml_trainer = MLTrainer(ml_model=ml_model)
+ml_trainer.train()

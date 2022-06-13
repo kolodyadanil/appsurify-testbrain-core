@@ -18,6 +18,8 @@ from applications.testing.models import Test, TestSuite, TestRun, TestRunResult,
 from applications.testing.signals import model_test_run_tests_changed, model_test_run_result_complete_test_run, \
     model_test_run_result_perform_defect
 from applications.vcs.models import Area, ParentCommit
+from applications.testing.tasks import update_materialized_view
+
 
 TYPE_NUNIT3 = 'nunit3'
 TYPE_JUNIT = 'junit'
@@ -327,6 +329,7 @@ class ImportUtils(object):
 
         self.test_report.status = TestReport.Status.SUCCESS
         self.test_report.save(update_fields=["status", "updated"])
+        update_materialized_view.delay()
         return data
 
     def test_run_result_complete(self):

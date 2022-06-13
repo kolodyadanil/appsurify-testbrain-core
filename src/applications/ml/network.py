@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
+import logging
 import os
 import textdistance
 import pickle
 import hashlib
 import pandas as pd
 import numpy as np
+import time
 from imblearn.over_sampling import RandomOverSampler
 from catboost import CatBoostClassifier
 from sklearn.preprocessing import MultiLabelBinarizer
@@ -97,14 +99,8 @@ class MLHolder(object):
     def __init__(self, ml_model, **kwargs):
         self.ml_model = ml_model
         self.ml_model_filepath = self.ml_model.model_path / self.ml_model.model_filename
-        # file_candidates = [
-        #     f"{self.ml_model.model_path}.model",
-        #     f"{self.ml_model.model_path / self.ml_model.model_filename}"
-        # ]
-        # for ml_model_filepath in file_candidates:
-        #     if os.path.getsize(ml_model_filepath) > 0:
-        #         self.ml_model_filepath = ml_model_filepath
-        #         break
+        if not self.ml_model.model_path.exists():
+            self.ml_model.model_path.mkdir(parents=True, exist_ok=True)
         self.load()
 
     def load(self):
@@ -164,9 +160,18 @@ class MLTrainer(MLHolder):
 
         dataset_files = self.ml_model.dataset_filepaths
 
-        print("Processing all datasets for store classes...")
+        start_time = time.time()
+
         for dataset_file in dataset_files:
+
             df = pd.read_csv(dataset_file, quoting=2)
+
+            if len(df.index) < 10:
+                continue
+
+            if len(df.columns) < 5:
+                continue
+
             for column_name, new_columns_prefix in self.encode_columns:
                 df[column_name] = df[column_name].apply(parse_list_entry)
                 binarizer = getattr(self._model, f"{column_name}_binarizer", MultiLabelBinarizer())
@@ -175,18 +180,14 @@ class MLTrainer(MLHolder):
                     model_classes[column_name] = set()
                 model_classes[column_name].update(binarizer.classes_)
 
-        print("Processing fits...")
         for dataset_file in dataset_files:
-            print(f"<TestSuite: {self.ml_model.test_suite_id}> - {dataset_file}")
+
             df = pd.read_csv(dataset_file, quoting=2)
+
             if len(df.index) < 10:
-                print('Empty dataset for this TestSuite id: "{}" {}'.format(
-                    self.ml_model.test_suite_id, str(dataset_file)))
                 continue
 
             if len(df.columns) < 5:
-                print('Small dataset for this TestSuite id: "{}" {}'.format(
-                    self.ml_model.test_suite_id, str(dataset_file)))
                 continue
 
             # Keep only allowed columns
@@ -207,6 +208,9 @@ class MLTrainer(MLHolder):
 
             y = df['test_changed'].values
             x = df.drop('test_changed', axis=1).values
+
+            if np.unique(y).size <= 1:
+                continue
 
             # Add resampling
             sm = RandomOverSampler(random_state=0)
@@ -235,10 +239,6 @@ class MLTrainer(MLHolder):
         self._model.classifier = clf
         self.save()
 
-        # For global test only
-        # cv = 5
-        # print(cross_val_score(self._model.classifier, _x, _y, cv=cv, scoring='recall'))
-        # print(cross_val_score(self._model.classifier, _x, _y, cv=cv))
         return True
 
 
