@@ -17,11 +17,11 @@ class MockMLModel: ...
 
 ml_model = MockMLModel()
 
-ml_model.test_suite_id = 299
-ml_model.index = 1
+ml_model.test_suite_id = 346
+ml_model.index = 0
 
-ml_model.model_path = pathlib.PosixPath('/Users/whenessel/Development/PycharmProjects/appsurify-testbrain-core/var/storage/ml/models/70/426/299')
-ml_model.model_filename = '1.m'
+ml_model.model_path = pathlib.PosixPath('/Users/whenessel/Development/PycharmProjects/appsurify-testbrain-core/var/storage/ml/models/73/469/346')
+ml_model.model_filename = '0.m'
 
 # ml_model.dataset_filepaths = [
 #     pathlib.PosixPath('/Users/whenessel/Development/PycharmProjects/appsurify-testbrain-core/var/storage/ml/datasets/70/426/299/1/49435.csv'),
@@ -29,7 +29,7 @@ ml_model.model_filename = '1.m'
 #     pathlib.PosixPath('/Users/whenessel/Development/PycharmProjects/appsurify-testbrain-core/var/storage/ml/datasets/70/426/299/1/48997.csv'),
 # ]
 ml_model.dataset_filepaths = []
-base_dir = pathlib.PosixPath('/Users/whenessel/Development/PycharmProjects/appsurify-testbrain-core/var/storage/ml/datasets/70/426/299/1/')
+base_dir = pathlib.PosixPath('/Users/whenessel/Development/PycharmProjects/appsurify-testbrain-core/var/storage/ml/datasets/73/469/346/0/')
 filenames = next(walk(base_dir), (None, None, []))[2]  # [] if no file
 for fn in filenames:
     ml_model.dataset_filepaths.append(base_dir / fn)

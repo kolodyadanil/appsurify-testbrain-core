@@ -12,19 +12,17 @@ from applications.ml.utils import perform_train_models
 
 def main():
     perform_train_models()
-    return
 
 
 if __name__ == "__main__":
     try:
         with PIDFile("cron-helper-models.pid"):
-            print('Process started')
             main()
     except (IOError, BlockingIOError) as e:
         sys.exit(123)
     except AlreadyRunningError:
-        # print('Already running.')
         sys.exit(124)
-    except Exception as e:
-        print(e)
+    except Exception as exc:
         sys.exit(125)
+    else:
+        sys.exit(126)

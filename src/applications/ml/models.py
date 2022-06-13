@@ -118,7 +118,7 @@ class MLModel(models.Model):
         return f"{self.index}.m"
 
     @property
-    def model_path(self):
+    def model_path(self) -> pathlib.PosixPath:
         project = self.test_suite.project
         organization = project.organization
         directory = pathlib.PosixPath(settings.STORAGE_ROOT) / "ml" / "models" / \
@@ -167,8 +167,6 @@ class MLModel(models.Model):
             state=States.PREPARED
         ).order_by("test_suite", "index")
 
-        print(f"Total models for TestSuite: {test_suite_id} - {queryset.count()}")
-
         for ml_model in queryset:
             ml_model.save()
             try:
@@ -179,12 +177,9 @@ class MLModel(models.Model):
                     if prev_ml_model.state == States.TRAINED:
                         result = ml_model.train()
                     else:
-                        # print(f"<TestSuite: {ml_model.test_suite.id}> - SKIPPED")
                         raise Exception("SKIPPED")
-                # print(f"<TestSuite: {ml_model.test_suite.id}> - {result}")
-            except Exception as e:
-                # print(f"<TestSuite: {ml_model.test_suite.id}> - {e}")
-                raise e
+            except Exception as exc:
+                raise exc
 
     @classmethod
     def open_model(cls, test_suite_id):

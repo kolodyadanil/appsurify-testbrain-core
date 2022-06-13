@@ -937,8 +937,8 @@ class TestRunMaterializedModel(models.Model):
         managed = False
         db_table = 'mv_test_count_by_type'
 
-    @transaction.atomic
     @staticmethod
+    @transaction.atomic
     def refresh():
         sql = f"""REFRESH MATERIALIZED VIEW mv_test_count_by_type;"""
         with connection.cursor() as cursor:
