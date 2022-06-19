@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
 import pathlib
+import pytz
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.db import models, connection
 from django.utils import timezone
-from datetime import timedelta
+from datetime import timedelta, datetime
+from dateutil.relativedelta import relativedelta
 from django.conf import settings
-from applications.ml.database import prepare_dataset_to_csv
+from applications.ml.database import prepare_dataset_to_file
 from applications.ml.network import train_model, load_model
+from applications.ml.utils import logger
 
 
 class States(models.TextChoices):
@@ -72,7 +75,7 @@ class MLModel(models.Model):
         verbose_name_plural = "models"
 
     def __str__(self):
-        return f"<Model: {self.id} (TestSuite: {self.test_suite_id})> {self.state}"
+        return f"<MLModel: {self.id}> for <TestSuite: {self.test_suite_id}> [{self.index}] [{self.state}]"
 
     def dataset_sql(self, test):
         sql_template_filepath = settings.BASE_DIR / "applications" / "ml" / "sql" / "dataset.sql"
@@ -91,7 +94,7 @@ class MLModel(models.Model):
 
     @property
     def dataset_filename(self):
-        return "{test_id}.csv"
+        return "{test_id}.json"
 
     @property
     def dataset_path(self):
@@ -146,7 +149,7 @@ class MLModel(models.Model):
         self.state = States.PREPARING
         self.save()
         # TODO: RUN function with threads
-        result = prepare_dataset_to_csv(ml_model=self)
+        result = prepare_dataset_to_file(ml_model=self)
         self.state = States.PREPARED
         self.save()
         return result
@@ -155,10 +158,14 @@ class MLModel(models.Model):
         self.state = States.TRAINING
         self.save()
         # TODO: RUN function with threads
-        result = train_model(ml_model=self)
-        self.state = States.TRAINED
+        result = None
+        try:
+            result = train_model(ml_model=self)
+            self.state = States.TRAINED
+        except Exception as exc:
+            self.state = States.PREPARED
         self.save()
-        return
+        return result
 
     @classmethod
     def train_model(cls, test_suite_id):
@@ -177,7 +184,7 @@ class MLModel(models.Model):
                     if prev_ml_model.state == States.TRAINED:
                         result = ml_model.train()
                     else:
-                        raise Exception("SKIPPED")
+                        logger.error(f"Skipped this ml_model: previous model not trained")
             except Exception as exc:
                 raise exc
 
@@ -193,18 +200,22 @@ class MLModel(models.Model):
     @classmethod
     def create_sequence(cls, test_suite_id):
 
-        current_datetime = timezone.now()
+        default_months = 1
+
+        current_datetime = datetime.now() + relativedelta(day=1)
+        current_datetime = current_datetime.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=pytz.UTC)
 
         model = cls.objects.filter(test_suite_id=test_suite_id).last()
 
         if model is None:
-            fr_datetime = timezone.now() - timedelta(weeks=28)
-            to_datetime = fr_datetime + timedelta(weeks=4)
+            fr_datetime = datetime.now() + relativedelta(months=-12) + relativedelta(day=1)
+            to_datetime = fr_datetime + relativedelta(months=default_months) + relativedelta(day=31)
+
             model = MLModel.objects.create(
                 test_suite_id=test_suite_id,
                 index=0,
-                fr=fr_datetime,
-                to=to_datetime,
+                fr=fr_datetime.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=pytz.UTC),
+                to=to_datetime.replace(hour=23, minute=59, second=59, microsecond=0, tzinfo=pytz.UTC),
                 state=States.PENDING
             )
             tests = list(model.tests_for_train)
@@ -212,14 +223,14 @@ class MLModel(models.Model):
 
         while model is not None:
             next_fr = model.to
-            next_to = next_fr + timedelta(weeks=4)
+            next_to = next_fr + relativedelta(months=default_months) + relativedelta(day=31)
 
             if current_datetime >= next_to:
                 model = MLModel.objects.create(
                     test_suite_id=test_suite_id,
                     index=model.index + 1,
-                    fr=next_fr,
-                    to=next_to,
+                    fr=next_fr.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=pytz.UTC),
+                    to=next_to.replace(hour=23, minute=59, second=59, microsecond=0, tzinfo=pytz.UTC),
                     state=States.PENDING
                 )
                 tests = list(model.tests_for_train)
@@ -227,7 +238,7 @@ class MLModel(models.Model):
             else:
                 model = None
 
-        return cls.objects.filter(test_suite_id=test_suite_id).count()
+        return cls.objects.filter(test_suite_id=test_suite_id)
 
 
 
@@ -239,8 +250,9 @@ def create_directories(sender, instance, created, **kwargs):
 
         dataset_path = instance.dataset_path
         dataset_path.mkdir(parents=True, exist_ok=True)
-    except Exception as e:
-        print(e)
+    except Exception as exc:
+        logger.exception(f"Unknown error on create directories for "
+                         f"<MLModel: '{instance.id}' [{instance.test_suite_id}]>", exc_info=True)
 
 
 @receiver(post_delete, sender=MLModel)
@@ -251,5 +263,6 @@ def delete_directories(sender, instance, **kwargs):
 
         dataset_path = instance.dataset_path
         dataset_path.rmdir()
-    except Exception as e:
-        print(e)
+    except Exception as exc:
+        logger.exception(f"Unknown error on create directories for "
+                         f"<MLModel: '{instance.id}' [{instance.test_suite_id}]>", exc_info=True)

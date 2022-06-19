@@ -8,7 +8,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "system.settings")
 django.setup()
 
 from pidfile import PIDFile, AlreadyRunningError
-from applications.ml.utils import log, perform_prepare_models
+from applications.ml.commands import perform_prepare_models
 
 
 def main():
@@ -19,12 +19,10 @@ def main():
 if __name__ == "__main__":
     try:
         with PIDFile("cron-helper-datasets.pid"):
-            main()
+            sys.exit(main())
     except (IOError, BlockingIOError) as e:
         sys.exit(123)
     except AlreadyRunningError:
         sys.exit(124)
     except Exception as exc:
         sys.exit(125)
-    else:
-        sys.exit(126)

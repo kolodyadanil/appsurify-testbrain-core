@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-import logging
 import os
-import textdistance
+import io
 import pickle
-import hashlib
+import pathlib
+
 import pandas as pd
 import numpy as np
-import time
 from imblearn.over_sampling import RandomOverSampler
 from catboost import CatBoostClassifier
+from sklearn.metrics import classification_report
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.model_selection import cross_val_score
 
@@ -16,19 +16,11 @@ from django.conf import settings
 from django.db import connection
 
 from applications.testing.models import TestSuite, Test
+from applications.ml.utils import hash_value, similarity
 
 
 import warnings
 warnings.filterwarnings("ignore")
-
-
-def similarity(value1, value2):
-    value1 = value1.lower()
-    value2 = value2.lower()
-
-    return textdistance.damerau_levenshtein.normalized_similarity(value1, value2) +\
-        textdistance.sorensen_dice.normalized_similarity(value1, value2) +\
-        textdistance.lcsseq.normalized_similarity(value1, value2)
 
 
 def dictfetchall(cursor):
@@ -46,19 +38,14 @@ def load_data(sql):
     return data
 
 
-def parse_list_entry(data):
-    data = str(data)
-    data2 = data.replace("{", "").replace("}", "").split(",")
-    data2 = [hashlib.md5(i.encode('utf-8')).hexdigest() for i in data2]
-    return data2
+def read_json(filename: pathlib.PosixPath) -> pd.DataFrame:
+    data = open(filename, "r").read()
 
+    data = data.replace("\\\\", "\\")
+    data = io.StringIO(data)
 
-def hash_value(data):
-    if isinstance(data, (list, tuple)):
-        data2 = [hashlib.md5(i.encode('utf-8')).hexdigest() for i in data]
-    else:
-        data2 = hashlib.md5(str(data).encode('utf-8')).hexdigest()
-    return data2
+    df = pd.read_json(data, lines=True)
+    return df
 
 
 class DatasetError(RuntimeError):
@@ -68,21 +55,24 @@ class DatasetError(RuntimeError):
 class TestPriorityMLModel(object):
 
     def __init__(self):
+        self.commit_areas_binarizer = MultiLabelBinarizer()
+        self.commit_files_binarizer = MultiLabelBinarizer()
+        self.test_names_binarizer = MultiLabelBinarizer()
+        self.test_classes_names_binarizer = MultiLabelBinarizer()
         self.test_areas_binarizer = MultiLabelBinarizer()
         self.test_associated_areas_binarizer = MultiLabelBinarizer()
         self.test_associated_files_binarizer = MultiLabelBinarizer()
         self.test_dependent_areas_binarizer = MultiLabelBinarizer()
         self.test_similarnamed_binarizer = MultiLabelBinarizer()
         self.test_area_similarnamed_binarizer = MultiLabelBinarizer()
-        self.test_classes_names_binarizer = MultiLabelBinarizer()
-        self.test_names_binarizer = MultiLabelBinarizer()
-        self.commit_areas_binarizer = MultiLabelBinarizer()
-        self.commit_files_binarizer = MultiLabelBinarizer()
-        self.defect_closed_by_caused_by_commits_files_binarizer = MultiLabelBinarizer()
-        self.defect_closed_by_caused_by_commits_areas_binarizer = MultiLabelBinarizer()
-        self.defect_closed_by_caused_by_commits_dependent_areas_binarizer = MultiLabelBinarizer()
-        self.defect_closed_by_caused_by_intersection_files_binarizer = MultiLabelBinarizer()
+        self.defect_caused_by_commits_files_binarizer = MultiLabelBinarizer()
+        self.defect_caused_by_commits_areas_binarizer = MultiLabelBinarizer()
+        self.defect_caused_by_commits_dependent_areas_binarizer = MultiLabelBinarizer()
         self.defect_closed_by_caused_by_intersection_areas_binarizer = MultiLabelBinarizer()
+        self.defect_closed_by_caused_by_intersection_files_binarizer = MultiLabelBinarizer()
+        self.defect_closed_by_caused_by_intersection_folders_binarizer = MultiLabelBinarizer()
+        self.defect_closed_by_caused_by_intersection_dependent_areas_binarizer = MultiLabelBinarizer()
+        self.defect_caused_by_commits_folders_binarizer = MultiLabelBinarizer()
 
         self.classifier = None
 
@@ -99,8 +89,6 @@ class MLHolder(object):
     def __init__(self, ml_model, **kwargs):
         self.ml_model = ml_model
         self.ml_model_filepath = self.ml_model.model_path / self.ml_model.model_filename
-        if not self.ml_model.model_path.exists():
-            self.ml_model.model_path.mkdir(parents=True, exist_ok=True)
         self.load()
 
     def load(self):
@@ -113,7 +101,7 @@ class MLHolder(object):
                 self._model = None
         except IOError:
             self._model = None
-        except Exception as e:
+        except Exception as exc:
             self._model = None
 
     def save(self):
@@ -128,22 +116,24 @@ class MLHolder(object):
 class MLTrainer(MLHolder):
 
     encode_columns = [
+        ('commit_areas', 'commit_areas'),
+        ('commit_files', 'commit_files'),
+        ('test_names', 'test_names'),
+        ('test_classes_names', 'test_classes_names'),
         ('test_areas', 'test_areas'),
-        ('test_associated_areas', 'test_associated_area'),
-        ('test_associated_files', 'test_associated_file'),
-        ('test_dependent_areas', 'test_dependent_area'),
-        ('test_similarnamed', 'test_similarnamed_file'),
-        ('test_area_similarnamed', 'test_area_similarnamed_file'),
-        ('test_classes_names', 'test_classes_name'),
-        ('test_names', 'test_name'),
-        ('commit_areas', 'commit_area'),
-        ('commit_files', 'commit_file'),
-        ('defect_caused_by_commits_files', 'defect_caused_by_commits_file'),
-        ('defect_caused_by_commits_areas', 'defect_caused_by_commits_area'),
-        ('defect_caused_by_commits_dependent_areas', 'defect_caused_by_commits_dependent_area'),
-        ('defect_closed_by_caused_by_intersection_files', 'defect_closed_by_caused_by_intersection_file'),
-        ('defect_closed_by_caused_by_intersection_areas', 'defect_closed_by_caused_by_intersection_area'),
-        ('defect_caused_by_commits_folders', 'defect_caused_by_commits_folders'),
+        ('test_associated_areas', 'test_associated_areas'),
+        ('test_associated_files', 'test_associated_files'),
+        ('test_dependent_areas', 'test_dependent_areas'),
+        ('test_similarnamed', 'test_similarnamed'),
+        ('test_area_similarnamed', 'test_area_similarnamed'),
+        ('defect_caused_by_commits_files', 'defect_caused_by_commits_files'),
+        ('defect_caused_by_commits_areas', 'defect_caused_by_commits_areas'),
+        ('defect_caused_by_commits_dependent_areas', 'defect_caused_by_commits_dependent_areas'),
+        ('defect_closed_by_caused_by_intersection_areas', 'defect_closed_by_caused_by_intersection_areas'),
+        ('defect_closed_by_caused_by_intersection_files', 'defect_closed_by_caused_by_intersection_files'),
+        ('defect_closed_by_caused_by_intersection_folders', 'defect_closed_by_caused_by_intersection_folders'),
+        ('defect_closed_by_caused_by_intersection_dependent_areas', 'defect_closed_by_caused_by_intersection_dependent_areas'),
+        ('defect_caused_by_commits_folders', 'defect_caused_by_commits_folders')
     ]
 
     def train(self):
@@ -156,24 +146,23 @@ class MLTrainer(MLHolder):
             clf = self._model.classifier
         else:
             self._model = TestPriorityMLModel()
-            clf = CatBoostClassifier(auto_class_weights='Balanced', random_state=0, verbose=False)
+            clf = CatBoostClassifier(auto_class_weights='Balanced',
+                                     random_state=0, verbose=False,
+                                     train_dir=settings.STORAGE_ROOT / pathlib.PosixPath("catboos_train_tmp"))
 
         dataset_files = self.ml_model.dataset_filepaths
 
-        start_time = time.time()
-
         for dataset_file in dataset_files:
-
-            df = pd.read_csv(dataset_file, quoting=2)
-
-            if len(df.index) < 10:
-                continue
-
-            if len(df.columns) < 5:
-                continue
+            df = read_json(dataset_file)
 
             for column_name, new_columns_prefix in self.encode_columns:
-                df[column_name] = df[column_name].apply(parse_list_entry)
+                # Replace None to []
+                df[column_name] = df[column_name].apply(lambda x: x if x is not None else [])
+
+                # Hashing all string items in arrays
+                df[column_name] = df[column_name].apply(hash_value)
+
+
                 binarizer = getattr(self._model, f"{column_name}_binarizer", MultiLabelBinarizer())
                 binarizer.fit_transform(df[column_name])
                 if column_name not in model_classes:
@@ -182,7 +171,7 @@ class MLTrainer(MLHolder):
 
         for dataset_file in dataset_files:
 
-            df = pd.read_csv(dataset_file, quoting=2)
+            df = read_json(dataset_file)
 
             if len(df.index) < 10:
                 continue
@@ -195,7 +184,12 @@ class MLTrainer(MLHolder):
             df = df[allowed_columns]
 
             for column_name, new_columns_prefix in self.encode_columns:
-                df[column_name] = df[column_name].apply(parse_list_entry)
+                # Replace None to []
+                df[column_name] = df[column_name].apply(lambda x: x if x is not None else [])
+
+                # Hashing all string items in arrays
+                df[column_name] = df[column_name].apply(hash_value)
+
                 binarizer = getattr(self._model, f"{column_name}_binarizer", MultiLabelBinarizer())
                 binarizer.set_params(classes=list(model_classes[column_name]))
                 df = df.join(
@@ -209,36 +203,35 @@ class MLTrainer(MLHolder):
             y = df['test_changed'].values
             x = df.drop('test_changed', axis=1).values
 
-            if np.unique(y).size <= 1:
-                continue
-
             # Add resampling
             sm = RandomOverSampler(random_state=0)
             x_res, y_res = sm.fit_resample(x, y)
+            # x_res, y_res = x, y
+            try:
+                if is_init:
+                    clf.fit(x_res, y_res)
+                    is_init = False
+                else:
+                    # For local test only
+                    # validation_model = CatBoostClassifier(train_dir=settings.STORAGE_ROOT.join("catboos_train_tmp"))
+                    # validation_model.load_model(f"{self.ml_model_filepath}.init.cbm")
+                    # cv = 5
+                    # print('CV recall', cross_val_score(validation_model, x_res, y_res, cv=cv,
+                    #                                    scoring='recall', fit_params=dict(verbose=False),
+                    #                                    error_score="raise"))
+                    # print('CV accuracy', cross_val_score(validation_model, x_res, y_res, cv=cv,
+                    #                                      scoring='balanced_accuracy', fit_params=dict(verbose=False),
+                    #                                      error_score="raise"))
 
-            if is_init:
-                is_init = False
-                clf.fit(x_res, y_res)
-            else:
-                # For local test only
-                # validation_model = CatBoostClassifier()
-                # validation_model.load_model(f"{self.ml_model_filepath}.init.cbm")
-                # cv = 5
-                # print('CV recall', cross_val_score(validation_model, x_res, y_res, cv=cv,
-                #                                    scoring='recall', fit_params=dict(verbose=False),
-                #                                    error_score="raise"))
-                # print('CV accuracy', cross_val_score(validation_model, x_res, y_res, cv=cv,
-                #                                      scoring='balanced_accuracy', fit_params=dict(verbose=False),
-                #                                      error_score="raise"))
-
-                # Improve fit
-                clf.fit(x_res, y_res, init_model=f"{self.ml_model_filepath}.init.cbm")
+                    # Improve fit
+                    clf.fit(x_res, y_res, init_model=f"{self.ml_model_filepath}.init.cbm")
+            except Exception as exc:
+                continue
 
             clf.save_model(f"{self.ml_model_filepath}.init.cbm")
 
         self._model.classifier = clf
         self.save()
-
         return True
 
 
@@ -257,6 +250,8 @@ class MLPredictor(MLHolder):
     }
 
     decode_columns = [
+        ('commit_areas', 'commit_areas'),
+        ('commit_files', 'commit_files'),
         ('test_names', 'test_names'),
         ('test_classes_names', 'test_classes_names'),
         ('test_areas', 'test_areas'),
@@ -265,13 +260,14 @@ class MLPredictor(MLHolder):
         ('test_dependent_areas', 'test_dependent_areas'),
         ('test_similarnamed', 'test_similarnamed'),
         ('test_area_similarnamed', 'test_area_similarnamed'),
-        ('commit_areas', 'commit_areas'),
-        ('commit_files', 'commit_files'),
-        ('defect_closed_by_caused_by_commits_files', 'defect_closed_by_caused_by_commits_files'),
-        ('defect_closed_by_caused_by_commits_areas', 'defect_closed_by_caused_by_commits_areas'),
-        ('defect_closed_by_caused_by_commits_dependent_areas', 'defect_closed_by_caused_by_commits_dependent_areas'),
-        ('defect_closed_by_caused_by_intersection_files', 'defect_closed_by_caused_by_intersection_files'),
+        ('defect_caused_by_commits_files', 'defect_caused_by_commits_files'),
+        ('defect_caused_by_commits_areas', 'defect_caused_by_commits_areas'),
+        ('defect_caused_by_commits_dependent_areas', 'defect_caused_by_commits_dependent_areas'),
         ('defect_closed_by_caused_by_intersection_areas', 'defect_closed_by_caused_by_intersection_areas'),
+        ('defect_closed_by_caused_by_intersection_files', 'defect_closed_by_caused_by_intersection_files'),
+        ('defect_closed_by_caused_by_intersection_folders', 'defect_closed_by_caused_by_intersection_folders'),
+        ('defect_closed_by_caused_by_intersection_dependent_areas', 'defect_closed_by_caused_by_intersection_dependent_areas'),
+        ('defect_caused_by_commits_folders', 'defect_caused_by_commits_folders')
     ]
 
     def _get_flag_from_prediction_num(self, prediction):
@@ -342,22 +338,60 @@ class MLPredictor(MLHolder):
         data = load_data(sql)
         df = pd.DataFrame(data)
 
+        ndf = df['test_names']
+
         if df.empty is True:
             result['u'] = [test_id for test_id in list(test_queryset.values_list('id', flat=True))]
         else:
-            for test_id in df['test_id'].unique():
-                for _, row in df[df['test_id'] == test_id].iterrows():
-                    test_on_commit_prediction = 0
-                    names = row['test_names']
-                    if keyword:
-                        ratio = similarity(keyword, names[0])
-                        if ratio >= 0.5:
-                            test_on_commit_prediction = 1
+            allowed_columns = [column for (column, _) in self.decode_columns] + ['test_id']
+            df = df[allowed_columns]
 
-                    if test_on_commit_prediction != 1:
-                        test_on_commit_prediction = self._predict_row(row)
+            for column_name, new_columns_prefix in self.decode_columns:
+                # Replace None to []
+                df[column_name] = df[column_name].apply(lambda x: x if x is not None else [])
 
-                    result[self._get_flag_from_prediction_num(test_on_commit_prediction)].add(test_id)
+                # Hashing all string items in arrays
+                df[column_name] = df[column_name].apply(hash_value)
+
+                binarizer = getattr(self._model, f"{column_name}_binarizer", MultiLabelBinarizer())
+
+                df = df.join(
+                    pd.DataFrame(
+                        binarizer.fit_transform(df.pop(column_name)),
+                        columns=(f"{new_columns_prefix}_{i}" for i in binarizer.classes_),
+                        index=df.index
+                    )
+                )
+
+            X = df.drop('test_id', axis=1)
+            y = df['test_id']
+
+            pred = self._model.classifier.predict(X)
+
+            pred_df = pd.DataFrame({"test_id": y, "result": pred, "test_names": ndf})
+
+            for test_id in pred_df["test_id"]:
+                test_on_commit_prediction = 0
+                test_names = pred_df[pred_df["test_id"] == test_id]["test_names"]
+                if keyword:
+                    ratio = similarity(keyword, test_names[0])
+                    if ratio >= 0.5:
+                        test_on_commit_prediction = 1
+                if test_on_commit_prediction != 1:
+                    test_on_commit_prediction = pred_df[pred_df["test_id"] == test_id]["result"]
+                result[self._get_flag_from_prediction_num(test_on_commit_prediction)].add(test_id)
+                # for _, row in df[df['test_id'] == test_id].iterrows():
+                #     test_on_commit_prediction = 0
+                #     names = row['test_names']
+                #     if keyword:
+                #         ratio = similarity(keyword, names[0])
+                #         if ratio >= 0.5:
+                #             test_on_commit_prediction = 1
+                #
+                #     if test_on_commit_prediction != 1:
+                #         test_on_commit_prediction = self._predict_row(row)
+                #
+                #     result[self._get_flag_from_prediction_num(test_on_commit_prediction)].add(test_id)
 
         result = {flag: Test.objects.filter(id__in=set(tests_ids)) for flag, tests_ids in result.items()}
         return result
