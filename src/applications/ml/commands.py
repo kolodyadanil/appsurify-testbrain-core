@@ -8,7 +8,7 @@ from applications.ml.utils import logger, Statistic
 def create_and_check_models():
     stats = Statistic()
 
-    queryset = TestSuite.objects.filter(models__isnull=True, project_id=469).distinct().order_by("project_id")
+    queryset = TestSuite.objects.filter(models__isnull=True).distinct().order_by("project_id")
     stats.total = queryset.count()
     logger.info(f"{stats} selected TestSuites for which there are no models")
 
