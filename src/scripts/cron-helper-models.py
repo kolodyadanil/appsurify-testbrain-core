@@ -18,7 +18,6 @@ def main():
 if __name__ == "__main__":
     try:
         with PIDFile("cron-helper-models.pid"):
-            print('Process started')
             main()
     except (IOError, BlockingIOError) as e:
         sys.exit(123)

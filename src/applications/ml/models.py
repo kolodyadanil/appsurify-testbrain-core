@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 import pathlib
+import pytz
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.db import models, connection
 from django.utils import timezone
-from datetime import timedelta
+from datetime import timedelta, datetime
+from dateutil.relativedelta import relativedelta
 from django.conf import settings
-from applications.ml.database import prepare_dataset_to_csv
+from applications.ml.database import prepare_dataset_to_file
 from applications.ml.network import train_model, load_model
 
 
@@ -91,7 +93,7 @@ class MLModel(models.Model):
 
     @property
     def dataset_filename(self):
-        return "{test_id}.csv"
+        return "{test_id}.json"
 
     @property
     def dataset_path(self):
@@ -146,7 +148,7 @@ class MLModel(models.Model):
         self.state = States.PREPARING
         self.save()
         # TODO: RUN function with threads
-        result = prepare_dataset_to_csv(ml_model=self)
+        result = prepare_dataset_to_file(ml_model=self)
         self.state = States.PREPARED
         self.save()
         return result
@@ -198,18 +200,22 @@ class MLModel(models.Model):
     @classmethod
     def create_sequence(cls, test_suite_id):
 
-        current_datetime = timezone.now()
+        default_months = 1
+
+        current_datetime = datetime.now() + relativedelta(day=1)
+        current_datetime = current_datetime.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=pytz.UTC)
 
         model = cls.objects.filter(test_suite_id=test_suite_id).last()
 
         if model is None:
-            fr_datetime = timezone.now() - timedelta(weeks=28)
-            to_datetime = fr_datetime + timedelta(weeks=4)
+            fr_datetime = datetime.now() + relativedelta(months=-12) + relativedelta(day=1)
+            to_datetime = fr_datetime + relativedelta(months=default_months) + relativedelta(day=31)
+
             model = MLModel.objects.create(
                 test_suite_id=test_suite_id,
                 index=0,
-                fr=fr_datetime,
-                to=to_datetime,
+                fr=fr_datetime.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=pytz.UTC),
+                to=to_datetime.replace(hour=23, minute=59, second=59, microsecond=0, tzinfo=pytz.UTC),
                 state=States.PENDING
             )
             tests = list(model.tests_for_train)
@@ -217,14 +223,14 @@ class MLModel(models.Model):
 
         while model is not None:
             next_fr = model.to
-            next_to = next_fr + timedelta(weeks=4)
+            next_to = next_fr + relativedelta(months=default_months) + relativedelta(day=31)
 
             if current_datetime >= next_to:
                 model = MLModel.objects.create(
                     test_suite_id=test_suite_id,
                     index=model.index + 1,
-                    fr=next_fr,
-                    to=next_to,
+                    fr=next_fr.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=pytz.UTC),
+                    to=next_to.replace(hour=23, minute=59, second=59, microsecond=0, tzinfo=pytz.UTC),
                     state=States.PENDING
                 )
                 tests = list(model.tests_for_train)

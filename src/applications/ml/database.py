@@ -41,7 +41,10 @@ def processing_dataset(ml_model, test):
     test_id = test.id
     print(f"<TestSuiteID: {ml_model.test_suite_id}> / <TestID: {test_id}> processing...")
     sql = ml_model.dataset_sql(test)
-    sql_query = f"\copy ({sql}) To '{dataset_path / dataset_filename}' With CSV DELIMITER ',' HEADER"
+
+    sql_query = f"\copy (SELECT row_to_json(t) FROM ({sql}) t) " \
+                f"To '{dataset_path / dataset_filename}'"
+
     try:
         output = execute_query(query=sql_query)
         print(f"<TestSuiteID: {ml_model.test_suite_id}> / <TestID: {test_id}> success {output}")
@@ -51,7 +54,7 @@ def processing_dataset(ml_model, test):
     return result
 
 
-def prepare_dataset_to_csv(ml_model, max_workers=20):
+def prepare_dataset_to_file(ml_model, max_workers=20):
     _complete = 0
 
     tests = ml_model.tests.all()
