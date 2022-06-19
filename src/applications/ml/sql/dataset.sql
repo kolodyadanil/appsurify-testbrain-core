@@ -571,7 +571,8 @@ ttrr.riskiness,
 ttrr.tt_id
 )
 
-SELECT COALESCE(ttrr.test_changed, 0) AS test_changed,
+SELECT
+    COALESCE(ttrr.test_changed, 0) AS test_changed,
 ttrr.test_run_id,
 ttrr.sha,
 ttrr.test_names,

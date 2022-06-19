@@ -10,6 +10,7 @@ from dateutil.relativedelta import relativedelta
 from django.conf import settings
 from applications.ml.database import prepare_dataset_to_file
 from applications.ml.network import train_model, load_model
+from applications.ml.utils import logger
 
 
 class States(models.TextChoices):
@@ -74,7 +75,7 @@ class MLModel(models.Model):
         verbose_name_plural = "models"
 
     def __str__(self):
-        return f"<Model: {self.id} (TestSuite: {self.test_suite_id})> {self.state}"
+        return f"<MLModel: {self.id}> for <TestSuite: {self.test_suite_id}> [{self.index}] [{self.state}]"
 
     def dataset_sql(self, test):
         sql_template_filepath = settings.BASE_DIR / "applications" / "ml" / "sql" / "dataset.sql"
@@ -157,10 +158,14 @@ class MLModel(models.Model):
         self.state = States.TRAINING
         self.save()
         # TODO: RUN function with threads
-        result = train_model(ml_model=self)
-        self.state = States.TRAINED
+        result = None
+        try:
+            result = train_model(ml_model=self)
+            self.state = States.TRAINED
+        except Exception as exc:
+            self.state = States.PREPARED
         self.save()
-        return
+        return result
 
     @classmethod
     def train_model(cls, test_suite_id):
@@ -179,7 +184,7 @@ class MLModel(models.Model):
                     if prev_ml_model.state == States.TRAINED:
                         result = ml_model.train()
                     else:
-                        raise Exception("SKIPPED")
+                        logger.error(f"Skipped this ml_model: previous model not trained")
             except Exception as exc:
                 raise exc
 
@@ -233,7 +238,7 @@ class MLModel(models.Model):
             else:
                 model = None
 
-        return cls.objects.filter(test_suite_id=test_suite_id).count()
+        return cls.objects.filter(test_suite_id=test_suite_id)
 
 
 
@@ -245,8 +250,9 @@ def create_directories(sender, instance, created, **kwargs):
 
         dataset_path = instance.dataset_path
         dataset_path.mkdir(parents=True, exist_ok=True)
-    except Exception as e:
-        print(e)
+    except Exception as exc:
+        logger.exception(f"Unknown error on create directories for "
+                         f"<MLModel: '{instance.id}' [{instance.test_suite_id}]>", exc_info=True)
 
 
 @receiver(post_delete, sender=MLModel)
@@ -257,5 +263,6 @@ def delete_directories(sender, instance, **kwargs):
 
         dataset_path = instance.dataset_path
         dataset_path.rmdir()
-    except Exception as e:
-        print(e)
+    except Exception as exc:
+        logger.exception(f"Unknown error on create directories for "
+                         f"<MLModel: '{instance.id}' [{instance.test_suite_id}]>", exc_info=True)

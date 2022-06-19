@@ -1,9 +1,14 @@
-# -*- coding: utf-8 -*-
-
-import concurrent.futures
 import os
 import subprocess
+from threading import Lock
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import as_completed
 from django.conf import settings
+from applications.ml.utils import logger, Statistic
+
+
+stats = Statistic()
+lock = Lock()
 
 
 class QueryException(Exception):
@@ -29,48 +34,79 @@ def execute_query(query):
     stderr = stderr.rstrip().lstrip()
     if stderr:
         psql_process.kill()
+        logger.exception(f"An error occurred while executing '{psql_cmd}' {stderr}", exc_info=True)
         raise QueryException(stderr)
     return stdout
 
 
 def processing_dataset(ml_model, test):
+    global stats
     result = False
+
+    logger.debug(f"{stats} {ml_model} preparing for the <Test: {test.id}>")
+
     dataset_filename = ml_model.dataset_filename.format(test_id=test.id)
     dataset_path = ml_model.dataset_path
     dataset_path.mkdir(parents=True, exist_ok=True)
-    test_id = test.id
-    print(f"<TestSuiteID: {ml_model.test_suite_id}> / <TestID: {test_id}> processing...")
-    sql = ml_model.dataset_sql(test)
 
+    sql = ml_model.dataset_sql(test)
     sql_query = f"\copy (SELECT row_to_json(t) FROM ({sql}) t) " \
                 f"To '{dataset_path / dataset_filename}'"
 
     try:
         output = execute_query(query=sql_query)
-        print(f"<TestSuiteID: {ml_model.test_suite_id}> / <TestID: {test_id}> success {output}")
+        logger.debug(f"{stats} {ml_model} complete preparing for the <Test: {test.id}>: {output}")
         result = True
-    except Exception as e:
-        print(f"<TestSuiteID: {ml_model.test_suite_id}> / <TestID: {test_id}> {str(e)}")
+    except Exception as exc:
+        logger.exception(f"{stats} {ml_model} error preparing for the <Test: {test.id}>", exc_info=True)
+        result = False
     return result
 
 
+# simple progress indicator callback function
+def progress_indicator(future):
+    global lock, stats
+    # obtain the lock
+    with lock:
+        # update the counter
+        stats.increase_current()
+
+    # check if task was cancelled
+    if future.cancelled():
+        # the task was cancelled
+        ...
+    elif future.exception():
+        # the task raised an exception
+        ...
+    else:
+        # the task finished successfully
+        result = future.result()
+        if result:
+            stats.increase_success()
+        else:
+            stats.increase_failure()
+
+    if stats.progress_percent % 10 == 0:
+        logger.debug(f"{stats} {stats.context['ml_model']} preparing datasets for tests")
+
+
 def prepare_dataset_to_file(ml_model, max_workers=20):
-    _complete = 0
+    global stats
+    stats.reset()
 
-    tests = ml_model.tests.all()
+    queryset = ml_model.tests.all()
+    stats.total = queryset.count()
+    stats.context = {"ml_model": ml_model}
 
-    print(f"--- Total tests for dataset: {tests.count()} ---")
+    logger.info(f"{stats} {ml_model} tests for preparing datasets for the model are selected")
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {}
-        for test in tests:
-            futures.update({executor.submit(processing_dataset, ml_model, test): ml_model})
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_test = {
+            executor.submit(processing_dataset, ml_model, test):
+                (ml_model, test) for test in queryset}
 
-        for future in concurrent.futures.as_completed(futures):
-            ml_model = futures[future]
-            result = future.result()
-            if result:
-                _complete += 1
+        for future in as_completed(future_to_test):
+            future.add_done_callback(progress_indicator)
 
-    print(f"--- Success datasets: {_complete} ---")
-    return _complete
+    logger.info(f"{stats} {stats.context['ml_model']} prepared datasets for tests")
+    return stats.success

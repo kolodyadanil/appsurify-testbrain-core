@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 import os
 import io
-import textdistance
 import pickle
 import pathlib
-import hashlib
+
 import pandas as pd
 import numpy as np
 from imblearn.over_sampling import RandomOverSampler
@@ -17,6 +16,7 @@ from django.conf import settings
 from django.db import connection
 
 from applications.testing.models import TestSuite, Test
+from applications.ml.utils import hash_value, similarity
 
 
 import warnings
@@ -36,21 +36,6 @@ def load_data(sql):
     cursor.execute(sql)
     data = dictfetchall(cursor)
     return data
-
-
-def similarity(value1, value2):
-    value1 = value1.lower()
-    value2 = value2.lower()
-
-    return textdistance.damerau_levenshtein.normalized_similarity(value1, value2) +\
-        textdistance.sorensen_dice.normalized_similarity(value1, value2) +\
-        textdistance.lcsseq.normalized_similarity(value1, value2)
-
-
-def hash_value(data):
-    if isinstance(data, (list, tuple)):
-        return [hashlib.md5(i.encode('utf-8')).hexdigest() for i in data]
-    return []
 
 
 def read_json(filename: pathlib.PosixPath) -> pd.DataFrame:
@@ -116,7 +101,7 @@ class MLHolder(object):
                 self._model = None
         except IOError:
             self._model = None
-        except Exception as e:
+        except Exception as exc:
             self._model = None
 
     def save(self):
@@ -161,11 +146,12 @@ class MLTrainer(MLHolder):
             clf = self._model.classifier
         else:
             self._model = TestPriorityMLModel()
-            clf = CatBoostClassifier(auto_class_weights='Balanced', random_state=0, verbose=False)
+            clf = CatBoostClassifier(auto_class_weights='Balanced',
+                                     random_state=0, verbose=False,
+                                     train_dir=settings.STORAGE_ROOT / pathlib.PosixPath("catboos_train_tmp"))
 
         dataset_files = self.ml_model.dataset_filepaths
 
-        print("Processing all datasets for store classes...")
         for dataset_file in dataset_files:
             df = read_json(dataset_file)
 
@@ -183,20 +169,14 @@ class MLTrainer(MLHolder):
                     model_classes[column_name] = set()
                 model_classes[column_name].update(binarizer.classes_)
 
-        print("Processing fits...")
         for dataset_file in dataset_files:
-            print(f"<TestSuite: {self.ml_model.test_suite_id}> - {dataset_file}")
 
             df = read_json(dataset_file)
 
             if len(df.index) < 10:
-                print('Empty dataset for this TestSuite id: "{}" {}'.format(
-                    self.ml_model.test_suite_id, str(dataset_file)))
                 continue
 
             if len(df.columns) < 5:
-                print('Small dataset for this TestSuite id: "{}" {}'.format(
-                    self.ml_model.test_suite_id, str(dataset_file)))
                 continue
 
             # Keep only allowed columns
@@ -233,15 +213,15 @@ class MLTrainer(MLHolder):
                     is_init = False
                 else:
                     # For local test only
-                    validation_model = CatBoostClassifier()
-                    validation_model.load_model(f"{self.ml_model_filepath}.init.cbm")
-                    cv = 5
-                    print('CV recall', cross_val_score(validation_model, x_res, y_res, cv=cv,
-                                                       scoring='recall', fit_params=dict(verbose=False),
-                                                       error_score="raise"))
-                    print('CV accuracy', cross_val_score(validation_model, x_res, y_res, cv=cv,
-                                                         scoring='balanced_accuracy', fit_params=dict(verbose=False),
-                                                         error_score="raise"))
+                    # validation_model = CatBoostClassifier(train_dir=settings.STORAGE_ROOT.join("catboos_train_tmp"))
+                    # validation_model.load_model(f"{self.ml_model_filepath}.init.cbm")
+                    # cv = 5
+                    # print('CV recall', cross_val_score(validation_model, x_res, y_res, cv=cv,
+                    #                                    scoring='recall', fit_params=dict(verbose=False),
+                    #                                    error_score="raise"))
+                    # print('CV accuracy', cross_val_score(validation_model, x_res, y_res, cv=cv,
+                    #                                      scoring='balanced_accuracy', fit_params=dict(verbose=False),
+                    #                                      error_score="raise"))
 
                     # Improve fit
                     clf.fit(x_res, y_res, init_model=f"{self.ml_model_filepath}.init.cbm")

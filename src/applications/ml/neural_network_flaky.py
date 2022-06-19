@@ -107,9 +107,8 @@ class MLTrainer(MLHolder):
             outfile = open(f"{model_path / model_filename}", "wb")
             pickle.dump(self.model, outfile)
         else:
-            print(f"TestSuite model not exists! (TestSuite: {self.test_suite_id})")
-            #needs to be changed, should only run if there are more than 10 flaky failures
-
+            # TODO: needs to be changed, should only run if there are more than 10 flaky failures
+            ...
 
     def train(self):
         #needs to be changed for defects
@@ -147,11 +146,6 @@ class MLTrainer(MLHolder):
 
         if self.auto_save:
             self.save()
-
-        # For test only
-        # cv = 10
-        # print(cross_val_score(clf, x, y, cv=cv, scoring='recall'))
-        # print(cross_val_score(clf, x, y, cv=cv))
 
 
 class MLPredictor(MLHolder):
@@ -206,7 +200,7 @@ class MLPredictor(MLHolder):
                     self.model = unpickler.load()
             except IOError:
                 self.model = None
-            except Exception as e:
+            except Exception as exc:
                 self.model = None
 
     @property
