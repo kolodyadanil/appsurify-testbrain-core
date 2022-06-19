@@ -5,17 +5,18 @@ from kombu import Queue, Exchange
 from celery.schedules import crontab
 
 
+CELERY_SINGLETON_BACKEND_URL = env.str("REDIS_URL", default="redis://localhost:6379/0")
+
 # CELERY
 # ------------------------------------------------------------------------------
 CELERY_BROKER_URL = env.str("BROKER_URL", default="amqp://guest:guest@localhost:5672//")
-# CELERY_RESULT_BACKEND = env.str("REDIS_URL", default="redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = "django-db"
 CELERY_CACHE_BACKEND = "django-cache"
 
 CELERY_TIMEZONE = "UTC"
 CELERY_BROKER_TRANSPORT_OPTIONS = {
     "visibility_timeout": 1800,
-    "priority_steps": list(range(11)),
+    "priority_steps": list(range(101)),
     "queue_order_strategy": "priority",
     "max_retries": 10,
 
@@ -82,6 +83,8 @@ CELERY_TASK_ROUTES = {
 
     # default
     'applications.testing.tasks.periodic_add_association': {'queue': 'default', 'priority': 50},
+    'applications.vcs.tasks.create_area_from_folders_task': {'queue': 'default', 'priority': 50},
+    'applications.api.payments.tasks.update_organization_plan_task': {'queue': 'default', 'priority': 50},
 
 }
 
@@ -101,7 +104,7 @@ CELERY_WORKER_AUTOSCALER = "celery.worker.autoscale:Autoscaler"
 CELERY_WORKER_POOL = env.str("WORKER_POOL", default="prefork")
 CELERY_WORKER_POOL_RESTARTS = True
 CELERY_WORKER_CONCURRENCY = env.int("WORKER_CONCURRENCY", default=2)
-CELERY_WORKER_PREFETCH_MULTIPLIER = env.int("WORKER_PREFETCH_MULTIPLIER", default=1)
+CELERY_WORKER_PREFETCH_MULTIPLIER = env.int("WORKER_PREFETCH_MULTIPLIER", default=2)
 # CELERY_WORKER_MAX_TASKS_PER_CHILD = env.int("WORKER_MAX_TASKS_PER_CHILD", default=10)
 
 CELERY_WORKER_TIMER_PRECISION = 1.0
@@ -119,6 +122,20 @@ CELERY_BEAT_SCHEDULE = {
     #     "task": "applications.testing.tasks.periodic_add_association",
     #     "schedule": crontab(hour=8, minute=0, day_of_week="saturday"),
     # },
+    "create_area_from_folders_every_day": {
+        "task": "applications.vcs.tasks.create_area_from_folders_task",
+        "schedule": crontab(minute=0, hour=0),
+    },
+    "update_org_plan_every_6_hours": {
+        "task": "applications.vcs.tasks.create_area_from_folders_task",
+        "schedule": crontab(minute=0, hour='*/6'),
+    },
+    "update_test_run_statistics": {
+        "task": "applications.testing.tasks.update_materialized_view",
+        "schedule": crontab(minute='*/5'),
+    },
 }
 
 CELERYD_POOL_RESTARTS = CELERY_WORKER_POOL_RESTARTS
+
+CELERY_HIJACK_ROOT_LOGGER = True

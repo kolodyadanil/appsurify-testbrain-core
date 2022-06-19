@@ -5,15 +5,14 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from applications.project.models import Project
 from applications.vcs.models import Area
-from system.celery_app import app
+from celery import shared_task
 
 
-@app.task(bind=True)
-def create_area_from_folders_task(self, project_id):
-    project = Project.objects.filter(pk=project_id)
-    if not project.exists():
-        raise ObjectDoesNotExist()
-
-    Area.create_from_folders(project_id)
-
-    return True
+@shared_task
+def create_area_from_folders_task():
+    projects = Project.objects.all()
+    ids = list()
+    for project in projects:
+        Area.create_from_folders(project.id)
+        ids.append(project.id)
+    return f'Area is auto generated for projects {ids}'

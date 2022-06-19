@@ -77,6 +77,8 @@ LOCAL_APPS = [
     "applications.integration.ssh_v2",
     "applications.integration.jira",
     "applications.api",
+    "applications.api.user_role",
+    "applications.api.payments",
     # "applications.license",
 
 ]
@@ -94,7 +96,9 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
-    "django.middleware.csrf.CsrfViewMiddleware",
+    # "django.middleware.csrf.CsrfViewMiddleware",
+    'csp.middleware.CSPMiddleware',
+    "applications.disable_csrf_check.apps.DisableCSRFMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",

@@ -14,6 +14,7 @@ class AreaFilterSet(FilterSet):
     only_empty = BooleanFilter(field_name='only_empty', method='filter_only_empty')
     functional_areas = BooleanFilter(field_name='functional_areas', method='filter_functional_areas')
     test_areas = BooleanFilter(field_name='test_areas', method='filter_test_areas')
+    ignore_auto_generated = BooleanFilter(field_name='auto', method='filter_auto_areas')
 
     class Meta(object):
         model = Area
@@ -51,6 +52,11 @@ class AreaFilterSet(FilterSet):
 
     def filter_test_areas(self, qs, name, value):
         qs = qs.filter(~models.Q(tests__isnull=value)).distinct()
+        return qs
+    
+    def filter_auto_areas(self, qs, name, value):
+        if value == True:
+            qs = qs.filter(~models.Q(type=1)).distinct()
         return qs
 
 

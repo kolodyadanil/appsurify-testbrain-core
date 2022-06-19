@@ -106,7 +106,7 @@ class DynamicFieldsRelatedSerializer(serializers.RelatedField):
             data = self.pk_field.to_internal_value(data)
 
         try:
-            if isinstance(data, dict) and data.has_key(self.pk_name):
+            if isinstance(data, dict) and self.pk_name in data:
                 data = self.get_queryset().get(pk=data[self.pk_name])
             else:
                 data = self.get_queryset().get(pk=data)

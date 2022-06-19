@@ -1,14 +1,29 @@
 # -*- coding: utf-8 -*-
+import time
+from datetime import timedelta, date
 
 from django.db import models
 from django.db.models import Q, F, Count, Value, CharField, Subquery, OuterRef
 from django.db.models.functions import Concat, Coalesce
 from django.utils import timezone
+
+from django.contrib.postgres.fields.jsonb import KeyTextTransform
+from django.db.models import Count
+from django.db.models.expressions import *
+from django.db.models.lookups import GreaterThan
+from django.db.models.functions import *
+
+from rest_framework_filters import FilterSet
+
+from applications.integration.ssh_v2.tasks import fetch_commits_task_v2
+from applications.integration.ssh_v2.utils import prioritize_task
+
 from applications.testing.models import Test, TestRun, TestSuite, TestRunResult, Defect
 from applications.vcs.models import Commit, Area, Branch
 from applications.vcs.utils.analysis import calculate_user_analysis, calculate_user_analysis_by_range, \
     avg_per_range, calculate_similar_by_commit
 from applications.ml.models import MLModel
+from system.celery_app import app
 
 
 LOOKUP_SEP = '__'
@@ -57,14 +72,29 @@ def prioritized_test_list(*, params=None):
     commit_list = get_commit_list(params=params)
     commit_queryset = Commit.objects.filter(id__in=set(commit_list))
 
+    commit_queryset_sha = commit_queryset.values_list("sha", flat=True)
+    prioritize_task(commits_sha=commit_queryset_sha)
+
+    # while True:
+    #     fully_processed = True
+    #     for commit in commit_queryset:
+    #         if not commit.is_processed:
+    #             fully_processed = False
+    #             break
+    #     if fully_processed:
+    #         break
+
     test_run_count = TestRun.objects.filter(test_suite=test_suite).count()
 
     queryset = Test.objects.filter(
-        project=params["project"],
-        test_suites=test_suite
+        project=params["project"]
     )
+    if test_suite:
+        queryset = queryset.filter(test_suites=test_suite)
 
-    ml_predictor = MLModel.open_model(test_suite_id=test_suite.id)
+    ml_predictor = None
+    if test_suite:
+        ml_predictor = MLModel.open_model(test_suite_id=test_suite.id)
     ml_model_existing_flag = ml_predictor is not None
 
     if ml_model_existing_flag is False or test_run_count < MINIMAL_NUMBER_OF_TESTRUNS_FOR_ML_MODEL_USING:
@@ -306,7 +336,8 @@ def get_default_high_queryset(queryset, commits_ids, params=None):
     high_priority_query = Q(id__in=file_query_set.values_list('id', flat=True))
     high_priority_query |= Q(id__in=queryset.values_list('id', flat=True))
     qs = Test.objects.filter(high_priority_query)
-    return qs.distinct('name')
+    qs = qs.distinct('name')
+    return qs
 
 
 def get_default_medium_queryset(queryset, commits_ids, params=None):
@@ -325,39 +356,144 @@ def get_default_medium_queryset(queryset, commits_ids, params=None):
     :param commits_ids:
     :return:
     """
-    qs = queryset
-    area_query_set = qs.filter(Q(associated_areas__isnull=False))
-    commits_areas = list(Commit.objects.filter(id__in=commits_ids).values_list('areas', flat=True))
-    depended_areas_annotations = {
-        'depended_area_lvl%d' % i: F('associated_areas'+(LOOKUP_SEP+'dependencies')*i) for i in range(1, 6)}
-    area_query_set = area_query_set.annotate(**depended_areas_annotations)
-    area_query_filter = Q(associated_areas__in=commits_areas)
-    for depended_area_level in depended_areas_annotations.keys():
-        area_query_filter |= Q(**{LOOKUP_SEP.join([depended_area_level, 'in']): commits_areas})
-    area_query_set = area_query_set.filter(area_query_filter)
+    # qs = queryset
+    # area_query_set = qs.filter(Q(associated_areas__isnull=False))
+    # commits_areas = list(Commit.objects.filter(id__in=commits_ids).values_list('areas', flat=True))
+    # depended_areas_annotations = {
+    #     'depended_area_lvl%d' % i: F('associated_areas'+(LOOKUP_SEP+'dependencies')*i) for i in range(1, 6)}
+    # area_query_set = area_query_set.annotate(**depended_areas_annotations)
+    # area_query_filter = Q(associated_areas__in=commits_areas)
+    # for depended_area_level in depended_areas_annotations.keys():
+    #     area_query_filter |= Q(**{LOOKUP_SEP.join([depended_area_level, 'in']): commits_areas})
+    # area_query_set = area_query_set.filter(area_query_filter)
+    #
+    # qs = qs.filter(project__commits__id__in=commits_ids)
+    # qs = qs.filter(
+    #     associated_defects__type=Defect.TYPE_PROJECT,
+    #     associated_defects__status=Defect.STATUS_CLOSED,
+    #     associated_defects__close_type__in=[Defect.CLOSE_TYPE_FIXED, Defect.CLOSE_TYPE_WONT_FIX],
+    # )
+    #
+    # default_area_id = Area.get_default(project=params['project']).id
+    # qs = qs.annotate(
+    #     commit__areas=F('project__commits__areas'),
+    #     caused_by_commits__areas=F('associated_defects__caused_by_commits__areas')
+    # ).filter(
+    #     ~Q(commit__areas=default_area_id) &
+    #     Q(Q(commit__areas=F('caused_by_commits__areas')) | Q(commit__areas=F('area')))
+    # )
+    # medium_query = Q(id__in=area_query_set.values_list('id', flat=True))
+    # medium_query |= Q(id__in=qs.values_list('id', flat=True))
+    #
+    # high_queryset = get_default_high_queryset(queryset, commits_ids, params=params)
+    # exclude_test_ids = set(list(high_queryset.values_list('id', flat=True)))
+    # qs = Test.objects.exclude(id__in=exclude_test_ids).filter(medium_query)
+    # qs = qs.distinct('name')
+    project = params['project']
+    test_suite = params['test_suite']
 
-    qs = qs.filter(project__commits__id__in=commits_ids)
-    qs = qs.filter(
-        associated_defects__type=Defect.TYPE_PROJECT,
-        associated_defects__status=Defect.STATUS_CLOSED,
-        associated_defects__close_type__in=[Defect.CLOSE_TYPE_FIXED, Defect.CLOSE_TYPE_WONT_FIX],
+    default_area_id = Area.get_default(project=project).id
+    commits_areas_ids = list(Commit.objects.filter(id__in=commits_ids).values_list('areas__id', flat=True))
+
+    pre_qs = Test.objects.raw("""
+    SELECT
+  "testing_test"."id" as "id"
+FROM
+  "testing_test"
+WHERE
+  (
+    "testing_test"."id" IN (
+      with recursive vcs_area_dependency_graph as (
+        select
+          1 as level,
+          d.from_area_id,
+          d.to_area_id,
+          array[d.from_area_id] as all_parents
+        from
+          vcs_area_dependencies d
+        where
+          from_area_id = ANY(%(commits_areas_ids)s)
+        union all
+        select
+          t.level + 1 as level,
+          d.from_area_id,
+          d.to_area_id,
+          t.all_parents || d.from_area_id
+        from
+          vcs_area_dependency_graph t
+          inner join vcs_area_dependencies d on t.to_area_id = d.from_area_id
+          and d.to_area_id <> ALL (t.all_parents)
+        where
+          t.level <= 4
+      )
+      SELECT
+        U0."id"
+      FROM
+        "testing_test" U0
+        inner join "testing_testsuite_tests" U2 ON (U0."id" = U2."test_id")
+        inner join "testing_test_associated_areas" U4 ON (U0."id" = U4."test_id")
+        inner join "vcs_area" U5 ON (U4."area_id" = U5."id")
+        left outer join "testing_test_associated_areas" U16 ON (U0."id" = U16."test_id")
+      WHERE
+        (
+          U0."project_id" = %(project_id)s
+          AND U2."testsuite_id" = %(testsuite_id)s
+          AND U4."area_id" IS NOT NULL
+          AND (
+            U16."area_id" = ANY(%(commits_areas_ids)s)
+            OR U5.id IN (
+              SELECT
+                to_area_id
+              FROM
+                vcs_area_dependency_graph
+            )
+          )
+        )
+      group by
+        1
     )
-
-    default_area_id = Area.get_default(project=params['project']).id
-    qs = qs.annotate(
-        commit__areas=F('project__commits__areas'),
-        caused_by_commits__areas=F('associated_defects__caused_by_commits__areas')
-    ).filter(
-        ~Q(commit__areas=default_area_id) &
-        Q(Q(commit__areas=F('caused_by_commits__areas')) | Q(commit__areas=F('area')))
+    OR "testing_test"."id" IN (
+      SELECT
+        U0."id"
+      FROM
+        "testing_test" U0
+        inner join "project_project" U1 ON (U0."project_id" = U1."id")
+        inner join "testing_testsuite_tests" U2 ON (U0."id" = U2."test_id")
+        inner join "vcs_commit" U4 ON (U1."id" = U4."project_id")
+        inner join "testing_defect_associated_tests" U5 ON (U0."id" = U5."test_id")
+        inner join "testing_defect" U6 ON (U5."defect_id" = U6."id")
+        left outer join "vcs_commit_areas" U7 ON (U4."id" = U7."commit_id")
+        left outer join "testing_defect_caused_by_commits" U9 ON (U6."id" = U9."defect_id")
+        left outer join "vcs_commit" U10 ON (U9."commit_id" = U10."id")
+        left outer join "vcs_commit_areas" U11 ON (U10."id" = U11."commit_id")
+      WHERE
+        (
+          U0."project_id" = %(project_id)s
+          AND U2."testsuite_id" = %(testsuite_id)s
+          AND U4."id" = ANY(%(commits_ids)s)
+          AND U6."close_type" IN (1, 3)
+          AND U6."status" = 4
+          AND U6."type" = 3
+          AND NOT (U7."area_id" = %(default_area_id)s)
+          AND (
+            U7."area_id" = U11."area_id"
+            OR U7."area_id" = U0."area_id"
+          )
+        )
     )
-    medium_query = Q(id__in=area_query_set.values_list('id', flat=True))
-    medium_query |= Q(id__in=qs.values_list('id', flat=True))
+  )
 
-    high_queryset = get_default_high_queryset(queryset, commits_ids, params=params)
-    exclude_test_ids = set(list(high_queryset.values_list('id', flat=True)))
-    qs = Test.objects.exclude(id__in=exclude_test_ids).filter(medium_query)
-    return qs.distinct('name')
+    """, params={
+        'project_id': project.id,
+        'testsuite_id': test_suite.id,
+        'default_area_id': default_area_id,
+        'commits_areas_ids': commits_areas_ids,
+        'commits_ids': commits_ids
+    })
+    qs = Test.objects.filter(id__in=[item.id for item in pre_qs])
+    qs = qs.distinct('name')
+    # print(qs.query)
+    return qs
 
 
 def get_default_unassigned_queryset(queryset, params=None):
@@ -380,20 +516,20 @@ def get_default_unassigned_queryset(queryset, params=None):
     ).values_list('id', flat=True)
     qs = qs.exclude(id__in=exclude_test_ids)
     qs = qs.exclude(Q(associated_files__isnull=False) | Q(associated_areas__isnull=False))
-    return qs.distinct('name')
+    qs = qs.distinct('name')
+    return qs
 
 
 def get_default_low_queryset(queryset, commits_ids, params=None):
     qs = queryset
-    # exclude_test_ids = set(list(get_default_high_queryset(queryset, commits_ids).values_list('id', flat=True)))
-    # qs = qs.exclude(id__in=exclude_test_ids)
 
     exclude_test_ids = set(list(get_default_medium_queryset(queryset, commits_ids, params=params).values_list('id', flat=True)))
     qs = qs.exclude(id__in=exclude_test_ids)
 
     exclude_test_ids = set(list(get_default_unassigned_queryset(queryset, params=params).values_list('id', flat=True)))
     qs = qs.exclude(id__in=exclude_test_ids)
-    return qs.distinct('name')
+    qs = qs.distinct('name')
+    return qs
 
 
 def get_default_ready_defect_queryset(queryset, params=None):
@@ -492,8 +628,14 @@ def get_default_by_percent_queryset(queryset, commits_ids, percent, params=None)
     # default_queryset.extend(list(get_default_high_queryset(queryset, commits_ids).values_list('id', flat=True)))
     # default_queryset.extend(list(get_default_medium_queryset(queryset, commits_ids).values_list('id', flat=True)))
     # default_queryset.extend(list(get_default_unassigned_queryset(queryset).values_list('id', flat=True)))
-    default_queryset.extend(set(list(get_default_low_queryset(queryset, commits_ids, params=params).values_list('id', flat=True))))
 
+    # print("--- BEGIN DEFAULT PERCENT")
+    # start_time = time.time()
+    # print("--- %s seconds ---" % (time.time() - start_time))
+    low_queryset = get_default_low_queryset(queryset, commits_ids, params=params).values_list('id', flat=True)
+    # print("--- LOW: %s seconds ---" % (time.time() - start_time))
+    default_queryset.extend(set(list(low_queryset)))
+    # print("--- Default: %s seconds ---" % (time.time() - start_time))
     if len(test_ids) > 0:
         default_queryset.extend(list(test_ids))
 
@@ -552,3 +694,119 @@ def get_default_highest_tests_under_time(queryset, params=None):
         return qs.distinct('name')
     else:
         raise Exception('Time is required in minute(s).')
+
+
+class TestRunReportFilterSet(FilterSet):
+
+    # test_run_type = NumberFilter(field_name='test_run_type')
+    # status = NumberFilter(field_name='test_run_status')
+    # is_local = BooleanFilter(field_name='is_local')
+
+    class Meta(object):
+        model = TestRun
+        fields = ('project', 'test_suite', 'type', 'status', 'is_local')
+
+
+def test_run_report_list(*, filters=None):
+    """
+    'project', 'test_suite', 'test_run_type', 'status', 'is_local'
+
+    params = {
+        'organization': Organization(),
+        'project': Project(),
+        'test_suite': TestSuite() | None,
+        'test_run_type': 1 | 2 | 3 | None,
+        'status': 1 | 2 | 3 | None,
+        'is_local': True | False,
+    }
+
+    """
+    filters = filters or {}
+
+    class BaseTestRunFilter(FilterSet):
+        class Meta:
+            model = TestRun
+            fields = ('project', 'test_suite', 'type', 'status', 'is_local')
+
+    queryset = TestRun.objects.all()
+    queryset = BaseTestRunFilter(filters, queryset).qs
+
+    queryset = queryset.extra(
+        select={
+            'created_defect_count': """
+                    SELECT COUNT(*) AS created_defects_count 
+                    FROM testing_defect 
+                    WHERE
+                    testing_defect.project_id = testing_testrun.project_id 
+                    AND testing_defect.created_by_test_run_id = testing_testrun.id
+                    """,
+            'founded_defect_count': """
+                    SELECT COUNT(*) AS founded_defects_flaky_failure_count
+                    FROM testing_defect
+                    INNER JOIN testing_testrunresult ON testing_testrunresult.id = testing_defect.created_by_test_run_result_id
+                    WHERE
+                    testing_defect.project_id = testing_testrun.project_id  
+                    AND testing_defect."type" IN (2, 4, 1)
+                    AND testing_defect.created_by_test_run_id = testing_testrun.id
+                    AND testing_testrunresult.test_run_id = testing_testrun.id
+                    """,
+            'previous_test_run_execution_time': """
+                    SELECT COALESCE(SUM("execution_time"), 0) as execution_time
+                    FROM testing_testrunresult 
+                    WHERE testing_testrunresult.test_run_id = testing_testrun.previous_test_run_id
+                    """
+        }
+    )
+
+
+
+    queryset = queryset.annotate(
+        _project=JSONObject(id='project__id', name='project__name'),
+        _test_suite=JSONObject(id='test_suite__id', name='test_suite__name'),
+        _start_date=TruncSecond(models.F('start_date')),
+        _end_date=models.Case(
+            models.When(
+                ~models.Q(end_date=None),
+                then=TruncSecond(models.F('end_date'))
+            )
+        ),
+        tests__execution_time=models.Case(
+            models.When(models.Q(mv_test_count_by_type__isnull=False),
+                        then=models.F('mv_test_count_by_type__execution_time')),
+            default=Value(0.0)
+        ),
+        # _previous_execution_time=models.F('previous_test_run_execution_time'),
+        tests__count=models.Case(
+            models.When(models.Q(mv_test_count_by_type__isnull=False),
+                        then=models.F('mv_test_count_by_type__tests_count')),
+            default=Value(0)
+        ),
+        passed_tests__count=models.Case(
+            models.When(models.Q(mv_test_count_by_type__isnull=False),
+                        then=models.F('mv_test_count_by_type__passed_tests_count')),
+            default=Value(0)
+        ),
+        failed_tests__count=models.Case(
+            models.When(models.Q(mv_test_count_by_type__isnull=False),
+                        then=models.F('mv_test_count_by_type__failed_tests_count')),
+            default=Value(0)
+        ),
+        broken_tests__count=models.Case(
+            models.When(models.Q(mv_test_count_by_type__isnull=False),
+                        then=models.F('mv_test_count_by_type__broken_tests_count')),
+            default=Value(0)
+        ),
+        not_run_tests__count=models.Case(
+            models.When(models.Q(mv_test_count_by_type__isnull=False),
+                        then=models.F('mv_test_count_by_type__not_run_tests_count')),
+            default=Value(0)
+        ),
+        tests_failure_sum=models.F('failed_tests__count') + models.F('broken_tests__count'),
+        tests__status=models.Case(
+            models.When(
+                tests_failure_sum__gt=0,
+                then=Value('Failure')),
+            default=Value('Passed')
+        )
+    )
+    return queryset

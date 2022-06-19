@@ -2,6 +2,13 @@
 from __future__ import unicode_literals
 
 # from djangotasks.models import Task
+import datetime
+import time
+from enum import Enum
+from functools import reduce
+
+import pytz
+from drf_yasg.utils import swagger_serializer_method
 from rest_framework import serializers
 
 from applications.api.common.serializers import DynamicFieldsModelSerializer, DynamicFieldsRelatedSerializer
@@ -25,28 +32,7 @@ class ProjectUserSerializer(DynamicFieldsModelSerializer):
         return project.is_owner(user.user)
 
 
-class ProjectSerializer(DynamicFieldsModelSerializer):
-    """
-    Base serializer for Project model.
-    """
-
-    slug = serializers.SlugField(read_only=True, required=False, allow_blank=True, allow_null=True)
-
-    users = ProjectUserSerializer(source='project_users', many=True, read_only=True)
-
-    number_of_tests = serializers.SerializerMethodField()
-    number_of_defects = serializers.SerializerMethodField()
-    number_of_flaky_failure_results = serializers.SerializerMethodField()
-    percentage_of_pass_results = serializers.SerializerMethodField()
-
-    defect_summary = serializers.ReadOnlyField()
-    integration = serializers.SerializerMethodField()
-    import_status = serializers.SerializerMethodField()
-
-    class Meta(object):
-        model = Project
-        fields = '__all__'
-
+class BaseProjectSerializer(DynamicFieldsModelSerializer):
     def get_number_of_tests(self, project):
         return project.tests.count()
 
@@ -231,8 +217,208 @@ class ProjectSerializer(DynamicFieldsModelSerializer):
         return status
 
 
+class ProjectSerializer(BaseProjectSerializer):
+    """
+    Base serializer for Project model.
+    """
+
+    slug = serializers.SlugField(read_only=True, required=False, allow_blank=True, allow_null=True)
+
+    users = ProjectUserSerializer(source='project_users', many=True, read_only=True)
+
+    number_of_tests = serializers.SerializerMethodField()
+    number_of_defects = serializers.SerializerMethodField()
+    number_of_flaky_failure_results = serializers.SerializerMethodField()
+    percentage_of_pass_results = serializers.SerializerMethodField()
+
+    defect_summary = serializers.ReadOnlyField()
+    integration = serializers.SerializerMethodField()
+    import_status = serializers.SerializerMethodField()
+
+    class Meta(object):
+        model = Project
+        fields = '__all__'
+
+
 class ProjectRelatedSerializer(DynamicFieldsRelatedSerializer):
     class Meta(object):
         model_class = Project
         model_serializer_class = ProjectSerializer
 
+
+class ProjectStatus(str, Enum):
+    NOT_STARTED = "NOT_STARTED"
+    IN_PROGRESS = "IN_PROGRESS"
+    SUCCESSFUL = "SUCCESSFUL"
+    FAILURE = "FAILURE"
+
+
+project_status_choices = [e.value for e in ProjectStatus]
+
+
+class ProjectSetupStatusSerializer(serializers.Serializer):
+    repo_bind = serializers.ChoiceField(choices=project_status_choices)
+    test_bind = serializers.ChoiceField(choices=project_status_choices)
+    building_model = serializers.ChoiceField(choices=project_status_choices)
+
+
+class SubcriptionPlan(str, Enum):
+    FREE_TRIAL = "FREE_TRIAL"
+    FREE = "FREE"
+    PLUS = "PLUS"
+    PROFESSIONAL = "PROFESSIONAL"
+
+org_subcription_plan = [e.value for e in SubcriptionPlan]
+
+
+class SubscriptionSerializer(serializers.Serializer):
+    paid_until = serializers.IntegerField()
+    active = serializers.BooleanField()
+    current_plan = serializers.ChoiceField(choices=org_subcription_plan)
+    time_saving_left = serializers.IntegerField()
+
+
+class ProjectTestRunStats(serializers.Serializer):
+    count = serializers.IntegerField()
+    failed = serializers.IntegerField()
+    passed = serializers.IntegerField()
+    broken = serializers.IntegerField()
+    skipped = serializers.IntegerField()
+    execution_time_seconds = serializers.FloatField()
+    time_savings_seconds = serializers.FloatField()
+
+
+class ProjectSummarySerializer(BaseProjectSerializer):
+    """
+    Aggregates data to display on the updated dashboard.
+    """
+
+    class Meta(object):
+        model = Project
+        fields = ('id', 'name', 'setup_status', 'maturity', "stats", "subscription")
+
+    @swagger_serializer_method(serializer_or_field=serializers.FloatField)
+    def get_maturity(self, project):
+        """
+        Maturity is 100% after 50 test runs. Every tests run add 2%
+        """
+        count_test_runs = len(TestRun.objects.filter(project=project))
+        if count_test_runs >= 50:
+            maturity = 1.0
+        else:
+            maturity = count_test_runs / 50
+        return maturity
+
+    @swagger_serializer_method(serializer_or_field=ProjectTestRunStats)
+    def get_stats(self, project):
+        """
+        Gives stats for summary page related to tests.
+        """
+        # Take 20 latest test run ids for project (ordered by date)
+        latest_query_ids = list(
+            map(lambda x: x.pk, TestRun.objects.filter(project=project).order_by("-start_date")[:20]))
+
+        # Honestly, I have no idea if it's a correct way to calculate total saved time
+        # Take the max execution time for latest 20 test runs and then subtract this maximum per each test run
+        # TODO: consult if it's a correct way of calculating this.
+        # Filter expression for queryset
+        filter_dict = dict(project=project, test_run_id__in=latest_query_ids)
+
+        # Find max execution time for the TestRun
+        # Group by test_run_id
+        execution_time_by_test_run = TestRunResult.objects.filter(**filter_dict).values('test_run_id').annotate(
+            sum=models.Sum('execution_time'))
+        standard_execution_time = execution_time_by_test_run.aggregate(max=models.Max('sum'))['max']
+        # TODO: this is a way to avoid 500 while we have no data for execution_time_by_test_run after project creation
+        if not execution_time_by_test_run:
+            time_savings_seconds = 0
+        else:
+            time_savings_seconds = reduce(lambda x, y: x + y,
+                                          map(lambda x: standard_execution_time - x['sum'], execution_time_by_test_run))
+        result = dict(
+            **TestRunResult.objects.filter(**filter_dict).aggregate(
+                count=models.Count("id"),
+                execution_time_seconds=models.Sum('execution_time'),
+                failed=models.Count(
+                    models.Case(models.When(models.Q(status=TestRunResult.STATUS_FAIL), then=models.F('id')))),
+                passed=models.Count(
+                    models.Case(models.When(models.Q(status=TestRunResult.STATUS_PASS), then=models.F('id')))),
+                broken=models.Count(
+                    models.Case(models.When(models.Q(status=TestRunResult.STATUS_BROKEN), then=models.F('id')))),
+                # skipped=models.Count(
+                #     models.Case(models.When(models.Q(status=TestRunResult.STATUS_SKIPPED), then=models.F('id')))),
+            ),
+            time_savings_seconds=time_savings_seconds)
+        skipped = result['count'] - result['failed'] - result['passed'] - result['broken']
+        result.update({'skipped': skipped})
+        return result
+
+    @swagger_serializer_method(serializer_or_field=ProjectSetupStatusSerializer)
+    def get_setup_status(self, project):
+        """
+        Checks if test suite exists, repo is linked and if ml model is created and processed.
+        """
+        integration = self.get_integration(project)
+        # Check if there's a test suite created. (Are we taking the first test suite added to the system?)
+        # TODO: Clarify this later
+        # From requirements:
+        # No Test Bind phase needs to be completed after a test run has been sent
+        # I think we can ignore testing at the test bind stage atm
+        # So green if sent data, grey if it hasn't
+        # Red if it had sent data but hasn't sent any within the 8 days
+        test_suite = project.test_suites.first()
+
+        # If the integration is not set up an empty dict is returned.
+        utc = pytz.UTC
+        if not len(integration) > 0:
+            repo_bind = ProjectStatus.NOT_STARTED
+        elif len(project.commits.all()) > 0 and project.commits.all().latest('created').created < (datetime.datetime.today() - datetime.timedelta(3)).replace(tzinfo=utc):
+            repo_bind = ProjectStatus.FAILURE
+        else:
+            repo_bind = ProjectStatus.SUCCESSFUL
+
+        test_runs = project.test_runs.all()
+        if len(test_runs) > 0 and test_runs.latest('created').created < (datetime.datetime.today() - datetime.timedelta(3)).replace(tzinfo=utc):
+            test_bind = ProjectStatus.FAILURE
+        elif len(test_runs) > 0:
+            test_bind = ProjectStatus.SUCCESSFUL
+        elif project.created < (datetime.datetime.today() - datetime.timedelta(days=8)).replace(tzinfo=utc) and test_suite == ProjectStatus.SUCCESSFUL:
+            test_bind = ProjectStatus.FAILURE
+        else:
+            test_bind = ProjectStatus.NOT_STARTED
+
+        if len(project.test_runs.all()) > 50:
+            building_model = ProjectStatus.SUCCESSFUL
+        else:
+            building_model = ProjectStatus.NOT_STARTED
+
+        # model = test_suite.model if test_suite else None
+        # if model:
+        #     status = model.model_status
+        #     if status == "SUCCESS":
+        #         building_model = ProjectStatus.SUCCESSFUL
+        #     elif status == "FAILURE":
+        #         building_model = ProjectStatus.FAILURE
+        #     else:
+        #         building_model = ProjectStatus.NOT_STARTED
+
+        return dict(
+            repo_bind=repo_bind,
+            test_bind=test_bind,
+            building_model=building_model)
+
+    def get_subscription(self, project):
+        paid_until = project.organization.subscription_paid_until if project.organization.subscription_paid_until else 0
+        active = True if paid_until > int(time.time()) else False
+        current_plan = project.organization.plan
+        time_saving_left = project.organization.time_saving_left
+        subscription = dict({"paid_until": paid_until,
+                             "active": active,
+                             "current_plan": current_plan,
+                             "time_saving_left": time_saving_left,})
+        return subscription
+
+    setup_status = serializers.SerializerMethodField()
+    maturity = serializers.SerializerMethodField()
+    stats = serializers.SerializerMethodField()
+    subscription = serializers.SerializerMethodField()

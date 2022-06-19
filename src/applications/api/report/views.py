@@ -6,7 +6,10 @@ import pytz
 from django.contrib.postgres.fields.jsonb import KeyTextTransform
 from django.db.models import Count
 from django.db.models.expressions import *
+from django.db.models.lookups import GreaterThan
+from django.db.models.functions import *
 from django.http import Http404
+from django.http import HttpRequest
 from django.shortcuts import get_object_or_404 as _get_object_or_404
 from rest_framework import permissions
 from rest_framework import viewsets, mixins
@@ -17,12 +20,22 @@ from datetime import timedelta, date
 
 from applications.api.common.views import MultiSerializerViewSetMixin
 from applications.project.permissions import IsOwnerOrReadOnly
-from applications.vcs.utils.analysis import calculate_user_analysis, calculate_user_analysis_by_range, avg_per_range, calculate_similar_by_commit
+from applications.vcs.utils.analysis import calculate_user_analysis, calculate_user_analysis_by_range, avg_per_range, \
+    calculate_similar_by_commit
 from applications.vcs.utils.bugspots import Bugspots
+
+from applications.testing.models import *
+
 from .filters import *
 from .serializers import *
 
-from applications.ml.network import MLPredictor
+from rest_framework.authentication import TokenAuthentication, SessionAuthentication
+
+from rest_framework.permissions import IsAuthenticated
+from applications.api.external.permissions import IsAuthenticatedToken
+
+# from applications.ml.network import MLPredictor
+from applications.testing.selectors import Priority, prioritized_test_list, test_run_report_list
 
 
 def get_object_or_404(queryset, *filter_args, **filter_kwargs):
@@ -1629,7 +1642,7 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
     model = TestRunResult
     queryset = TestRunResult.objects.all()
     queryset_action = {
-        'list': TestRunResult.objects.all().annotate(start_date=TruncSecond(models.F('test_run_start_date'))),
+        'list': TestRun.objects.all(),
         'retrieve': TestRun.objects.all()
     }
 
@@ -1639,11 +1652,11 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
         'retrieve': TestRunDetailReportSerializer
     }
 
-    filter_class = TestRunReportFilterSet
-    filter_action_classes = {
-        'list': TestRunReportFilterSet,
-        'retrieve': None
-    }
+    # filter_class = TestRunReportFilterSet
+    # filter_action_classes = {
+    #     'list': TestRunReportFilterSet,
+    #     'retrieve': None
+    # }
 
     search_fields = ()
     ordering_fields = ('id', 'start_date', 'end_date',)
@@ -1657,6 +1670,64 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
         queryset = queryset.filter(project__organization=get_current_organization(self.request))
         return queryset
 
+    class TestRunListFilterSerializer(serializers.Serializer):
+        organization = serializers.ReadOnlyField()
+        project = serializers.CharField(required=False, allow_null=True)
+        test_suite = serializers.CharField(required=False, allow_null=True)
+        test_run_type = serializers.IntegerField(required=False, allow_null=True)
+        status = serializers.IntegerField(required=False, allow_null=True)
+        is_local = serializers.BooleanField(required=False, default=False)
+
+        def _get_request(self):
+            request = self.context.get('request')
+            if not isinstance(request, HttpRequest):
+                request = request._request
+            return request
+
+        def validate_test_suite(self, test_suite):
+            if str(test_suite).isdigit():
+                test_suite = int(test_suite)
+            elif str(test_suite) == 'NaN':
+                test_suite = None
+            else:
+                raise serializers.ValidationError('TestSuite ID must be specified')
+            return test_suite
+
+    def list(self, request, *args, **kwargs):
+
+        filters_serializer = self.TestRunListFilterSerializer(data=request.query_params)
+        filters_serializer.is_valid(raise_exception=True)
+
+        queryset = test_run_report_list(filters=filters_serializer.validated_data)
+
+        page = self.paginate_queryset(queryset)
+
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
+
+class TestRunReportModelViewSetByDayViewSet(TestRunReportModelViewSet):
+    filter_class = TestRunReportByDayFilterSet
+    filter_action_classes = {
+        'list': TestRunReportByDayFilterSet,
+        'retrieve': None
+    }
+
+    serializer_class = TestRunReportByDaySerializer
+    serializer_action_classes = {
+        'list': TestRunReportByDaySerializer,
+        'retrieve': None
+    }
+
     def list(self, request, *args, **kwargs):
         # import time
         # start_time = time.time()
@@ -1664,42 +1735,41 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
         # print '#1: {}'.format(time.time()-start_time)
         sub_queryset = (
             queryset
-                .filter(test_id=models.OuterRef('test_id'), test_run_id=models.OuterRef('test_run_id'))
+                .filter(test_id=models.OuterRef('project_id'))
                 .values('status')[:1]
         )
         # print '#2: {}'.format(time.time() - start_time)
-        qs = queryset.annotate(
-            last_test_run_result=models.Subquery(sub_queryset)
-        ).values(
-            'test_run_id'
-        ).annotate(
+        qs = queryset.annotate(day=TruncDay('start_date')).values('day').annotate(
+            test_runs__count=models.Count(models.F('test_run_id'), distinct=True),
+            last_test_run_result=models.Subquery(sub_queryset),
+            max_execution_time=models.Max(
+                models.Case(
+                    models.When(test_run_id=models.F('id'), then=models.F('execution_time')),
+                )
+            ),
+
             tests__count=models.Count(
                 models.Case(
                     models.When(test_run_id=models.F('test_run_id'), then=models.F('test_id')),
                 ), distinct=True
             ),
-            created_defects__count=models.Count(
-                models.Case(
-                    models.When(test_run_id=models.F('test_run_id'), then=models.F('created_defects__id'))
-                ), distinct=True
-            ),
-            founded_defects__flaky_failure__count=models.Count(
-                models.Case(
-                    models.When(
-                        models.Q(
-                            test_run_id=models.F('test_run_id'),
-                            founded_defects__type__in=[Defect.TYPE_FLAKY, Defect.TYPE_INVALID_TEST,
-                                                       Defect.TYPE_ENVIRONMENTAL]
-                        ), then=models.F('founded_defects__id')
-                    )
-                ), distinct=True
-            ),
+
             passed_tests__count=models.Count(
                 models.Case(
                     models.When(
                         models.Q(
                             # test_run_id=models.F('test_run_id'),
                             last_test_run_result=TestRunResult.STATUS_PASS
+                        ), then=models.F('test_id')
+                    )
+                ), distinct=True
+            ),
+            skipped_tests__count=models.Count(
+                models.Case(
+                    models.When(
+                        models.Q(
+                            # test_run_id=models.F('test_run_id'),
+                            last_test_run_result=TestRunResult.STATUS_SKIPPED
                         ), then=models.F('test_id')
                     )
                 ), distinct=True
@@ -1735,43 +1805,29 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
                     )
                 ), distinct=True
             ),
-            id=models.F('test_run_id'),
-            name=models.F('test_run_name'),
-            type=models.F('test_run_type'),
-            start_date=TruncSecond(models.F('test_run_start_date')),
-            end_date=models.Case(
-                models.When(
-                    ~models.Q(test_run_end_date=None),
-                    then=TruncSecond(models.F('test_run_end_date'))
-                )
-            ),
+            execution_time=models.Sum('execution_time'),
         ).values(
-            'project_id',
-            'project_name',
-
-            'test_suite_id',
-            'test_suite_name',
-
-            'id',
-            'name',
-
-            'start_date',
-            'end_date',
-
+            "passed_tests__count",
+            "skipped_tests__count",
+            "failed_tests__count",
+            "broken_tests__count",
+            "not_run_tests__count",
+            "execution_time",
             'tests__count',
-            'created_defects__count',
-            'founded_defects__flaky_failure__count',
-            'passed_tests__count',
-            'failed_tests__count',
-            'broken_tests__count',
-            'not_run_tests__count',
-
-        )
+            'day', 'test_runs__count', 'max_execution_time')
         # print '#3: {}'.format(time.time() - start_time)
         queryset = qs
         # print '#4: {}'.format(time.time() - start_time)
         page = self.paginate_queryset(queryset)
         # print '#5: {}'.format(time.time() - start_time)
+        sum = 0
+        i = 1
+        # Todo: WIP. This code counts step by step average values for all values in THIS dict. But we need to start
+        # count values from 60 days before first value.
+        for p in page:
+            sum += p['test_runs__count']
+            i = i + 1
+            p.update({"standard_test_runs": sum / i})
         if page is not None:
             # print '#6.0: {}'.format(time.time() - start_time)
             serializer = self.get_serializer(page, many=True)
@@ -1782,11 +1838,6 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
         # print '#6.2: {}'.format(time.time() - start_time)
         # data =
         # print '#7: {}'.format(time.time() - start_time)
-        return Response(serializer.data)
-
-    def retrieve(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
         return Response(serializer.data)
 
 
@@ -1814,6 +1865,8 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
     test_runs_ml_using_threshold = 500
     minimal_number_of_testruns_for_ml_model_usnig = 50
 
+    # authentication_classes = ()
+    # permission_classes = (IsAuthenticatedToken, )
 
     model = Test
     queryset = Test.objects.all()
@@ -2011,14 +2064,14 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
         newest_test_run = TestRun.objects.filter(
             id__in=set(list(queryset.values_list('test_runs__id', flat=True)))).order_by('-created').first()
 
-        if self.request.query_params.has_key('test_run'):
+        if 'test_run' in self.request.query_params:
             value = self.request.query_params['test_run']
             try:
                 newest_test_run = TestRun.objects.get(id=value)
             except TestRun.DoesNotExist:
                 raise APIException('TestRun not found!')
 
-        if self.request.query_params.has_key('current_status'):
+        if 'current_status' in self.request.query_params:
             value = self.request.query_params['current_status']
             value = [x.lstrip().rstrip() for x in value.split(u',')]
             if TestRunResult.STATUS_SKIPPED in value:
@@ -2096,7 +2149,7 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
 
     def get_group_invalid_tests_queryset(self, queryset):
         extra_filters = dict()
-        if self.request.query_params.has_key('current_status'):
+        if 'current_status' in self.request.query_params:
             value = self.request.query_params['current_status']
             value = [x.lstrip().rstrip() for x in value.split(u',')]
             if TestRunResult.STATUS_SKIPPED in value:
@@ -2135,7 +2188,7 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
 
     def get_group_open_defect_tests_queryset(self, queryset):
         extra_filters = dict()
-        if self.request.query_params.has_key('current_status'):
+        if 'current_status' in self.request.query_params:
             value = self.request.query_params['current_status']
             value = [x.lstrip().rstrip() for x in value.split(u',')]
             if TestRunResult.STATUS_SKIPPED in value:
@@ -2174,7 +2227,7 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
 
     def get_group_ready_tests_queryset(self, queryset):
         extra_filters = dict()
-        if self.request.query_params.has_key('current_status'):
+        if 'current_status' in self.request.query_params:
             value = self.request.query_params['current_status']
             value = [x.lstrip().rstrip() for x in value.split(u',')]
             if TestRunResult.STATUS_SKIPPED in value:
@@ -2213,7 +2266,7 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
 
     def get_group_passed_tests_queryset(self, queryset):
         extra_filters = dict()
-        if self.request.query_params.has_key('current_status'):
+        if 'current_status' in self.request.query_params:
             value = self.request.query_params['current_status']
             value = [x.lstrip().rstrip() for x in value.split(u',')]
             if TestRunResult.STATUS_SKIPPED in value:
@@ -2224,7 +2277,7 @@ class TestReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModel
         newest_test_run = TestRun.objects.filter(
             id__in=set(list(queryset.values_list('test_runs__id', flat=True)))).order_by('-created').first()
 
-        if self.request.query_params.has_key('test_run'):
+        if 'test_run' in self.request.query_params:
             value = self.request.query_params['test_run']
             try:
                 newest_test_run = TestRun.objects.get(id=value)
@@ -2379,7 +2432,7 @@ WHERE
 
     def get_open_defect_queryset(self, queryset):
         extra_filters = dict()
-        if self.request.query_params.has_key('commit'):
+        if 'commit' in self.request.query_params:
             value = self.request.query_params['commit']
             lookup_expr = LOOKUP_SEP.join(['test_suites__test_runs__commit__id', 'exact'])
             extra_filters = {lookup_expr: value}
@@ -2396,8 +2449,16 @@ WHERE
     @action(methods=['GET', ], detail=False, url_path=r'open-defect')
     def open_defect(self, request, *args, **kwargs):
         # queryset = self.filter_queryset(self.get_queryset())
-        queryset = self.get_queryset()
-        queryset = self.get_open_defect_queryset(queryset).distinct('name')
+        # queryset = self.get_queryset()
+        # queryset = self.get_open_defect_queryset(queryset).distinct('name')
+        kwargs['context'] = self.get_serializer_context()
+        query_params = request.query_params.copy()
+        query_params['priority'] = Priority.OPEN_DEFECT
+        query_params['commit_type'] = 'Single'
+        params_serializer = self.ParamsPrioritizationTestSerializer(data=query_params, **kwargs)
+        params_serializer.is_valid(raise_exception=True)
+        params = params_serializer.validated_data
+        queryset = prioritized_test_list(params=params)
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
@@ -2407,7 +2468,7 @@ WHERE
 
     def get_ready_defect_queryset(self, queryset):
         extra_filters = dict()
-        if self.request.query_params.has_key('commit'):
+        if 'commit' in self.request.query_params:
             value = self.request.query_params['commit']
             lookup_expr = LOOKUP_SEP.join(['test_suites__test_runs__commit__id', 'exact'])
             extra_filters = {lookup_expr: value}
@@ -2425,8 +2486,16 @@ WHERE
 
     @action(methods=['GET', ], detail=False, url_path=r'ready-defect')
     def ready_defect(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-        queryset = self.get_ready_defect_queryset(queryset)
+        # queryset = self.get_queryset()
+        # queryset = self.get_ready_defect_queryset(queryset)
+        kwargs['context'] = self.get_serializer_context()
+        query_params = request.query_params.copy()
+        query_params['priority'] = Priority.READY_DEFECT
+        query_params['commit_type'] = 'Single'
+        params_serializer = self.ParamsPrioritizationTestSerializer(data=query_params, **kwargs)
+        params_serializer.is_valid(raise_exception=True)
+        params = params_serializer.validated_data
+        queryset = prioritized_test_list(params=params)
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
@@ -2453,7 +2522,7 @@ WHERE
                                                         test_runs__test_suite=test_suite,
                                                         timestamp__gt=time_threshold,
                                                         timestamp__lt=commit.timestamp).order_by('-timestamp')
-    
+
         if len(last_run_commit_list) == 0:
             all_commits = Commit.objects.filter(project=project,
                                                 branches=target_branch,
@@ -2538,7 +2607,10 @@ WHERE
                     else:
                         raise APIException('Unknown argument type')
                 except Commit.DoesNotExist:
-                    raise ValidationError({'detail': "Commit from '{0}' not found".format(commit_arg)})
+                    # TODO: find out why there was Validation Error here if there is not high or medium or low
+                    #  priority tests.
+                    # raise ValidationError({'detail': "Commit from '{0}' not found".format(commit_arg)})
+                    return []
 
         target_branch_id = self.request.query_params.get('target_branch')
         if target_branch_id:
@@ -2595,78 +2667,6 @@ WHERE
             raise ValidationError({'detail': "'{0}' is wrong value of 'CommitType' argument".format(commit_type)})
         return commits_ids
 
-    @staticmethod
-    def get_default_high_queryset(queryset, commits_ids):
-        """
-
-        High tests:
-        * Tests that have associations with files that have filechanges related with
-          specified commits
-
-        * If test associated with defects that have type=TYPE_PROJECT, status=STATUS_CLOSED and
-          close_type in [Defect.CLOSE_TYPE_FIXED, Defect.CLOSE_TYPE_WONT_FIX].
-          Also this defects should have associations with filechanges (through 'caused_by_commit' field) for file that
-          has associated filechange in specified commit.
-
-        :param queryset:
-        :param commits_ids:
-        :return:
-        """
-        commits_files_changes_query = Commit.objects.filter(id__in=commits_ids).values_list('files', flat=True)
-        file_query_set = queryset.filter(associated_files__in=Subquery(commits_files_changes_query))
-
-        queryset = queryset.filter(project__commits__id__in=commits_ids)
-        queryset = queryset.annotate(
-            filechange__file_id=models.F('project__commits__filechange__file_id'),
-        ).filter(
-            associated_defects__type=Defect.TYPE_PROJECT,
-            associated_defects__status=Defect.STATUS_CLOSED,
-            associated_defects__close_type__in=[Defect.CLOSE_TYPE_FIXED, Defect.CLOSE_TYPE_WONT_FIX],
-            filechange__file_id=models.F('associated_defects__caused_by_commits__filechange__file_id')
-        )
-        high_priority_query = Q(id__in=file_query_set.values_list('id', flat=True))
-        high_priority_query |= Q(id__in=queryset.values_list('id', flat=True))
-        return Test.objects.filter(high_priority_query).distinct('name')
-
-    def get_high_queryset(self, queryset):
-        """
-        This function returns high priority tests queryset.
-
-
-        :param queryset:
-        :return queryset:
-        """
-        queryset = self.filter_queryset(queryset)
-        commits_ids = self._get_commit_list_from_request()
-
-        test_suite_id = self.request.query_params.get('test_suite', None)
-        if test_suite_id is not None:
-            try:
-                test_suite = TestSuite.objects.get(id=test_suite_id)
-                num_testruns = test_suite.test_runs.count()
-                project_id = test_suite.project_id
-            except TestSuite.DoesNotExist:
-                raise ValidationError("Test suite with id '{0}' doesn't exists.".format(test_suite_id))
-            ml_predictor = MLPredictor(test_suite_id=test_suite_id)
-            ml_model_existing_flag = ml_predictor.is_loaded
-            if ml_model_existing_flag is False or num_testruns < self.minimal_number_of_testruns_for_ml_model_usnig:
-                return self.get_default_high_queryset(queryset, commits_ids)
-            else:
-                commits_queryset = Commit.objects.filter(id__in=commits_ids)
-                if num_testruns >= self.test_runs_ml_using_threshold:
-                    high_tests = ml_predictor.get_test_prioritization(queryset, commits_queryset)['h']
-                    return high_tests.distinct('name')
-                else:
-                    ml_prediction_results = ml_predictor.get_test_prioritization(queryset, commits_queryset)
-                    ml_unassigned_tests_num = ml_prediction_results['u'].count()
-                    original_unassigned_num = self.get_unassigned_queryset(queryset).count()
-                    if original_unassigned_num > ml_unassigned_tests_num:
-                        return ml_prediction_results['h'].distinct('name')
-                    else:
-                        return self.get_default_high_queryset(queryset, commits_ids)
-        else:
-            return self.get_default_high_queryset(queryset, commits_ids)
-
     @action(methods=['GET', ], detail=False, url_path=r'high')
     def high(self, request, *args, **kwargs):
         """
@@ -2677,104 +2677,20 @@ WHERE
         :param kwargs:
         :return:
         """
-        queryset = self.get_queryset()
-        queryset = self.get_high_queryset(queryset)
+        kwargs['context'] = self.get_serializer_context()
+        query_params = request.query_params.copy()
+        query_params['priority'] = Priority.HIGH
+        query_params['commit_type'] = 'Single'
+        params_serializer = self.ParamsPrioritizationTestSerializer(data=query_params, **kwargs)
+        params_serializer.is_valid(raise_exception=True)
+        params = params_serializer.validated_data
+        queryset = prioritized_test_list(params=params)
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
-
-    def get_default_medium_queryset(self, queryset, commits_ids):
-        """
-        Medium tests:
-        * Tests that aren't included in high test set.
-        AND (
-            * Tests that have associations with areas(include 5 level recursion through areas that
-            depends from test associated areas) that associated with specified commits.
-                OR
-            * Tests that associated with defects that have type=TYPE_PROJECT, status=STATUS_CLOSED and
-            close_type in [Defect.CLOSE_TYPE_FIXED, Defect.CLOSE_TYPE_WONT_FIX].
-            Also this defects have areas that associated with commit's areas.
-        )
-        :param queryset:
-        :param commits_ids:
-        :return:
-        """
-        area_query_set = queryset.filter(models.Q(associated_areas__isnull=False))
-        commits_areas = list(Commit.objects.filter(id__in=commits_ids).values_list('areas', flat=True))
-        depended_areas_annotations = {'depended_area_lvl%d' % i:
-                                      models.F('associated_areas'+(LOOKUP_SEP+'dependencies')*i) for i in range(1, 6)}
-        area_query_set = area_query_set.annotate(**depended_areas_annotations)
-        area_query_filter = Q(associated_areas__in=commits_areas)
-        for depended_area_level in depended_areas_annotations.keys():
-            area_query_filter |= Q(**{LOOKUP_SEP.join([depended_area_level, 'in']): commits_areas})
-        area_query_set = area_query_set.filter(area_query_filter)
-
-        queryset = queryset.filter(project__commits__id__in=commits_ids)
-        queryset = queryset.filter(
-            associated_defects__type=Defect.TYPE_PROJECT,
-            associated_defects__status=Defect.STATUS_CLOSED,
-            associated_defects__close_type__in=[Defect.CLOSE_TYPE_FIXED, Defect.CLOSE_TYPE_WONT_FIX],
-        )
-
-        default_area_id = Area.get_default(project=self.request.query_params['project']).id
-        queryset = queryset.annotate(
-            commit__areas=models.F('project__commits__areas'),
-            caused_by_commits__areas=models.F('associated_defects__caused_by_commits__areas')
-        ).filter(
-            ~Q(commit__areas=default_area_id) &
-            Q(
-                models.Q(commit__areas=models.F('caused_by_commits__areas')) |
-                models.Q(commit__areas=models.F('area'))
-            )
-        )
-        medium_query = Q(id__in=area_query_set.values_list('id', flat=True))
-        medium_query |= Q(id__in=queryset.values_list('id', flat=True))
-
-        filtered_queryset = self.filter_queryset(self.get_queryset())
-        high_queryset = self.get_default_high_queryset(filtered_queryset, commits_ids)
-        exclude_test_ids = set(list(high_queryset.values_list('id', flat=True)))
-        return Test.objects.exclude(id__in=exclude_test_ids).filter(medium_query).distinct('name')
-
-    def get_medium_queryset(self, queryset):
-        """
-        This function returns medium priority tests queryset.
-
-        :param queryset:
-        :return queryset:
-        """
-        commits_ids = self._get_commit_list_from_request()
-        queryset = self.filter_queryset(queryset)
-
-        test_suite_id = self.request.query_params.get('test_suite', None)
-        if test_suite_id is not None:
-            try:
-                test_suite = TestSuite.objects.get(id=test_suite_id)
-                num_testruns = test_suite.test_runs.count()
-                project_id = test_suite.project_id
-            except TestSuite.DoesNotExist:
-                raise ValidationError("Test suite with id '{0}' doesn't exists.".format(test_suite_id))
-            ml_predictor = MLPredictor(test_suite_id=test_suite_id)
-            ml_model_existing_flag = ml_predictor.is_loaded
-            if ml_model_existing_flag is False or num_testruns < self.minimal_number_of_testruns_for_ml_model_usnig:
-                return self.get_default_medium_queryset(queryset, commits_ids)
-            else:
-                commits_queryset = Commit.objects.filter(id__in=commits_ids)
-                if num_testruns >= self.test_runs_ml_using_threshold:
-                    medium_tests = ml_predictor.get_test_prioritization(queryset, commits_queryset)['m']
-                    return medium_tests.distinct('name')
-                else:
-                    ml_prediction_results = ml_predictor.get_test_prioritization(queryset, commits_queryset)
-                    ml_unassigned_tests_num = ml_prediction_results['u'].count()
-                    original_unassigned_num = self.get_unassigned_queryset(queryset).count()
-                    if original_unassigned_num > ml_unassigned_tests_num:
-                        return ml_prediction_results['m'].distinct('name')
-                    else:
-                        return self.get_default_medium_queryset(queryset, commits_ids)
-        else:
-            return self.get_default_medium_queryset(queryset, commits_ids)
 
     @action(methods=['GET', ], detail=False, url_path=r'medium')
     def medium(self, request, *args, **kwargs):
@@ -2786,8 +2702,14 @@ WHERE
         :param kwargs:
         :return:
         """
-        queryset = self.get_queryset()
-        queryset = self.get_medium_queryset(queryset)
+        kwargs['context'] = self.get_serializer_context()
+        query_params = request.query_params.copy()
+        query_params['priority'] = Priority.MEDIUM
+        query_params['commit_type'] = 'Single'
+        params_serializer = self.ParamsPrioritizationTestSerializer(data=query_params, **kwargs)
+        params_serializer.is_valid(raise_exception=True)
+        params = params_serializer.validated_data
+        queryset = prioritized_test_list(params=params)
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
@@ -2827,65 +2749,22 @@ WHERE
         :param kwargs:
         :return:
         """
-        queryset = self.get_queryset()
-        queryset = self.get_unassigned_queryset(queryset)
+        # queryset = self.get_queryset()
+        # queryset = self.get_unassigned_queryset(queryset)
+        kwargs['context'] = self.get_serializer_context()
+        query_params = request.query_params.copy()
+        query_params['priority'] = Priority.UNASSIGNED
+        query_params['commit_type'] = 'Single'
+        params_serializer = self.ParamsPrioritizationTestSerializer(data=query_params, **kwargs)
+        params_serializer.is_valid(raise_exception=True)
+        params = params_serializer.validated_data
+        queryset = prioritized_test_list(params=params)
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
-
-    def get_default_low_queryset(self, queryset, commits_ids):
-        exclude_test_ids = set(list(self.get_default_high_queryset(queryset, commits_ids).values_list('id', flat=True)))
-        queryset = queryset.exclude(id__in=exclude_test_ids)
-
-        exclude_test_ids = set(list(self.get_default_medium_queryset(queryset, commits_ids).values_list('id', flat=True)))
-        queryset = queryset.exclude(id__in=exclude_test_ids)
-
-        exclude_test_ids = set(list(self.get_unassigned_queryset(queryset).values_list('id', flat=True)))
-        queryset = queryset.exclude(id__in=exclude_test_ids)
-        return queryset.distinct('name')
-
-    def get_low_queryset(self, queryset):
-        """
-        This function returns low priority tests queryset.
-
-        Low tests:
-        * All tests that aren't included in high, medium and unassigned sets.
-
-        :param queryset:
-        :return queryset:
-        """
-        commits_ids = self._get_commit_list_from_request()
-        queryset = self.filter_queryset(queryset)
-        test_suite_id = self.request.query_params.get('test_suite', None)
-        if test_suite_id is not None:
-            try:
-                test_suite = TestSuite.objects.get(id=test_suite_id)
-                num_testruns = test_suite.test_runs.count()
-                project_id = test_suite.project_id
-            except TestSuite.DoesNotExist:
-                raise ValidationError("Test suite with id '{0}' doesn't exists.".format(test_suite_id))
-            ml_predictor = MLPredictor(test_suite_id=test_suite_id)
-            ml_model_existing_flag = ml_predictor.is_loaded
-            if ml_model_existing_flag is False or num_testruns < self.minimal_number_of_testruns_for_ml_model_usnig:
-                return self.get_default_low_queryset(queryset, commits_ids)
-            else:
-                commits_queryset = Commit.objects.filter(id__in=commits_ids)
-                if num_testruns >= self.test_runs_ml_using_threshold:
-                    low_tests = ml_predictor.get_test_prioritization(queryset, commits_queryset)['l']
-                    return low_tests.distinct('name')
-                else:
-                    ml_prediction_results = ml_predictor.get_test_prioritization(queryset, commits_queryset)
-                    ml_unassigned_tests_num = ml_prediction_results['u'].count()
-                    original_unassigned_num = self.get_unassigned_queryset(queryset).count()
-                    if original_unassigned_num > ml_unassigned_tests_num:
-                        return ml_prediction_results['l'].distinct('name')
-                    else:
-                        return self.get_default_low_queryset(queryset, commits_ids)
-        else:
-            return self.get_default_low_queryset(queryset, commits_ids)
 
     def get_default_top20_queryset(self, queryset, commits_ids, percent):
         default_queryset = list()
@@ -2949,12 +2828,14 @@ WHERE
     #             for name_test_suite in list_name_test_suite:
     #                 name_for_search.append(name_test_suite.name)
     #             name_test = name_test.filter(testsuite_name__in = name_for_search)
+
     #         if day is not None and int(priority_param) == 11:
     #             to_date   = datetime.datetime.now()
     #             from_date = to_date - timedelta(days=int(day))
     #             name_test  = name_test.filter(created__range=(from_date, to_date))
     #     except:
     #         raise APIException('Test not found!')
+
     #     return name_test
 
     def get_all_queryset(self, queryset):
@@ -2990,8 +2871,8 @@ WHERE
             queryset = queryset.order_by('-priority')
             id_set = set()
             for test in queryset:
-                testrunresult_set = TestRunResult.objects.filter(test=test).filter(status='pass').order_by('execution_started')
-                last_pass = testrunresult_set.first()
+                testrunresult_set = TestRunResult.objects.filter(test=test).filter(status='pass')
+                last_pass = testrunresult_set.latest('execution_started')
                 if last_pass is not None:
                     if last_pass.execution_time < time*60:
                         id_set.add(last_pass.id)
@@ -3001,7 +2882,7 @@ WHERE
                     continue
             queryset = queryset.filter(id__in=id_set)
             return queryset.distinct('name')
-        else: 
+        else:
             raise APIException('Time is required in minute(s).')
 
     def get_default_by_percent_queryset(self, queryset, commits_ids, percent):
@@ -3025,39 +2906,6 @@ WHERE
 
         return Test.objects.filter(id__in=_ids).distinct('name')
 
-    def get_top_by_percent_queryset(self, queryset):
-        commits_ids = self._get_commit_list_from_request()
-        queryset = self.filter_queryset(queryset)
-
-        test_suite_id = self.request.query_params.get('test_suite', None)
-
-        if 'percent' in self.request.query_params:
-            percent = int(self.request.query_params.get('percent', 20))
-        elif 'percentage' in self.request.query_params:
-            percent = int(self.request.query_params.get('percentage', 20))
-        else:
-            percent = 20
-
-        if test_suite_id is not None:
-            try:
-                test_suite = TestSuite.objects.get(id=test_suite_id)
-                num_testruns = test_suite.test_runs.count()
-                project_id = test_suite.project_id
-            except TestSuite.DoesNotExist:
-                raise ValidationError("Test suite with id '{0}' doesn't exists.".format(test_suite_id))
-
-            ml_predictor = MLPredictor(test_suite_id=test_suite_id)
-            ml_model_existing_flag = ml_predictor.is_loaded
-
-            if ml_model_existing_flag is False:
-                return self.get_default_by_percent_queryset(queryset, commits_ids, percent)
-            else:
-                commits_queryset = Commit.objects.filter(id__in=commits_ids)
-                tests = ml_predictor.get_test_prioritization_top_by_percent(queryset, commits_queryset, percent)
-                return tests
-        else:
-            return self.get_default_by_percent_queryset(queryset, commits_ids, percent)
-
     @action(methods=['GET', ], detail=False, url_path=r'low')
     def low(self, request, *args, **kwargs):
         """
@@ -3068,66 +2916,167 @@ WHERE
         :param kwargs:
         :return:
         """
-        queryset = self.get_queryset()
-        queryset = self.get_low_queryset(queryset)
+        # queryset = self.get_queryset()
+        # queryset = self.get_low_queryset(queryset)
+        kwargs['context'] = self.get_serializer_context()
+        query_params = request.query_params.copy()
+        query_params['priority'] = Priority.LOW
+        query_params['commit_type'] = 'Single'
+        params_serializer = self.ParamsPrioritizationTestSerializer(data=query_params, **kwargs)
+        params_serializer.is_valid(raise_exception=True)
+        params = params_serializer.validated_data
+        queryset = prioritized_test_list(params=params)
+
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
-
-    def get_rerun_queryset(self, queryset):
-        extra_filters = dict()
-        if 'commit' in self.request.query_params:
-            commit_id = self.request.query_params['commit']
-            lookup_expr = LOOKUP_SEP.join(['test_runs__commit__id', 'exact'])
-            extra_filters = {lookup_expr: commit_id}
-
-        queryset = queryset.filter(**extra_filters)
-        queryset = self.filter_queryset(queryset)
-
-        newest_test_run = TestRun.objects.filter(
-            id__in=set(list(queryset.values_list('test_runs__id', flat=True)))).order_by('-created').first()
-
-        if 'test_run' in self.request.query_params:
-            value = self.request.query_params['test_run']
-            try:
-                newest_test_run = TestRun.objects.get(id=value)
-            except TestRun.DoesNotExist:
-                raise APIException('TestRun not found!')
-
-        newest_current_test_run_results = TestRunResult.objects.filter(test_run=newest_test_run,
-                                                                       test=models.OuterRef('id'))
-        if 'commit' in self.request.query_params:
-            commit_id = self.request.query_params['commit']
-            newest_current_test_run_results = newest_current_test_run_results.filter(commit_id=commit_id)
-
-        newest_current_test_run_results = newest_current_test_run_results.annotate(
-            __count=functions.Coalesce(models.Count('*'), 0)
-        ).order_by('-created')
-
-        queryset = queryset.annotate(
-            runtest_result_count=models.Subquery(newest_current_test_run_results.values('__count')[:1]),
-            current_status=models.Subquery(newest_current_test_run_results.values('status')[:1])
-        ).filter(
-            runtest_result_count=1,
-            current_status__in=[TestRunResult.STATUS_FAIL, TestRunResult.STATUS_BROKEN, TestRunResult.STATUS_ERROR]
-        )
-        return queryset.distinct('name')
 
     @action(methods=['GET', ], detail=False, url_path=r'rerun')
     def rerun(self, request, *args, **kwargs):
         # queryset = self.filter_queryset(self.get_queryset())
-        queryset = self.get_queryset()
-        queryset = self.get_rerun_queryset(queryset)
-
+        # queryset = self.get_queryset()
+        # queryset = self.get_rerun_queryset(queryset)
+        kwargs['context'] = self.get_serializer_context()
+        query_params = request.query_params.copy()
+        query_params['priority'] = Priority.RERUN
+        query_params['commit_type'] = 'Single'
+        params_serializer = self.ParamsPrioritizationTestSerializer(data=query_params, **kwargs)
+        params_serializer.is_valid(raise_exception=True)
+        params = params_serializer.validated_data
+        queryset = prioritized_test_list(params=params)
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+
+    class ParamsPrioritizationTestSerializer(serializers.Serializer):
+        name_type = serializers.CharField(required=False)
+
+        project = serializers.IntegerField(required=False)
+        project_name = serializers.CharField(required=False)
+
+        test_suite = serializers.IntegerField(required=False)
+        test_suite_name = serializers.CharField(required=False)
+
+        test_run = serializers.IntegerField(required=False)
+        test_run_name = serializers.CharField(required=False)
+
+        commit_type = serializers.CharField(required=True)
+        commit = serializers.CharField(required=False)
+
+        priority = serializers.IntegerField(required=True)
+        percent = serializers.IntegerField(required=False, allow_null=True, default=None)
+
+        classname = serializers.BooleanField(required=True)
+        classname_separator = serializers.CharField(required=False, default="")
+
+        testsuitename = serializers.BooleanField(required=True)
+        testsuitename_separator = serializers.CharField(required=False, default="")
+
+        day = serializers.CharField(required=False)
+        time = serializers.CharField(required=False)
+
+        keyword = serializers.CharField(required=False, default="")
+
+        organization = serializers.ReadOnlyField()
+
+        def _get_request(self):
+            request = self.context.get('request')
+            if not isinstance(request, HttpRequest):
+                request = request._request
+            return request
+
+        def _validate_project(self, attrs):
+            project = attrs.pop("project", "")
+            project_name = attrs.pop("project_name", "")
+
+            if not project and not project_name:
+                raise serializers.ValidationError("Require set project or project_name")
+            elif project and project_name:
+                raise serializers.ValidationError("Set only one project or project_name")
+
+            try:
+                if project:
+                    attrs["project"] = Project.objects.get(organization=attrs["organization"], id=project)
+                if project_name:
+                    attrs["project"] = Project.objects.get(organization=attrs["organization"],
+                                                           name__iexact=project_name)
+            except Project.DoesNotExist:
+                raise serializers.ValidationError("Project not found")
+
+            return attrs["project"]
+
+        def _validate_commit(self, attrs):
+            commit = attrs.pop("commit", "")
+            if not commit:
+                raise serializers.ValidationError("Require set commit")
+
+            if isinstance(commit, str) and not re.match(r'^\d*$', commit):
+                lookups = {"sha": commit}
+            else:
+                lookups = {"id": commit}
+            try:
+                attrs["commit"] = Commit.objects.get(project=attrs["project"], **lookups)
+            except Commit.DoesNotExist:
+                raise serializers.ValidationError("Commit not found")
+            return attrs["commit"]
+
+        def _validate_test_suite(self, attrs):
+            test_suite = attrs.pop("test_suite", "")
+            test_suite_name = attrs.pop("test_suite_name", "")
+
+            test_suite_instance = None
+            try:
+                if test_suite:
+                    test_suite_instance = TestSuite.objects.get(project=attrs["project"], id=test_suite)
+                if test_suite_name:
+                    test_suite_instance = TestSuite.objects.get(project=attrs["project"], name__iexact=test_suite_name)
+            except TestSuite.DoesNotExist:
+                test_suite_instance = None
+
+            return test_suite_instance
+
+        def _validate_test_run(self, attrs):
+            test_run = attrs.pop("test_run", "")
+            test_run_name = attrs.pop("test_run_name", "")
+            test_run_instance = None
+            try:
+                if test_run:
+                    test_run_instance = TestRun.objects.get(project=attrs["project"], id=test_run)
+                if test_run_name:
+                    test_run_instance = TestRun.objects.get(project=attrs["project"], name__iexact=test_run_name)
+            except TestRun.DoesNotExist:
+                test_run_instance = None
+
+            return test_run_instance
+
+        def validate(self, attrs):
+
+            attrs["organization"] = get_current_organization(self._get_request())
+            attrs["project"] = self._validate_project(attrs)
+            attrs["commit"] = self._validate_commit(attrs)
+            # attrs["test_suite"] = self._validate_test_suite(attrs)
+
+            attrs["test_suite"] = self._validate_test_suite(attrs)
+
+            test_run = self._validate_test_run(attrs)
+            if test_run:
+                attrs["test_run"] = test_run
+
+            if attrs["priority"] == Priority.PERCENT:
+                percent = attrs["percent"]
+                if not percent or percent == 0:
+                    raise serializers.ValidationError("Please define 'percent'")
+
+            if attrs["priority"] == Priority.TOP20:
+                attrs["percent"] = 20
+
+            return attrs
 
 
 class TestRunResultReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyModelViewSet):

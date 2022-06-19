@@ -197,6 +197,25 @@ class TestSuiteModelViewSet(viewsets.ModelViewSet):
         queryset = queryset.filter(project__organization=get_current_organization(self.request))
         return queryset
 
+    def create(self, request, *args, **kwargs):
+        serializer_data = []
+        if type(request.data).__name__ == "list":
+            for test_suite in request.data:
+                serializer = self.get_serializer(data=test_suite)
+                serializer.is_valid(raise_exception=True)
+                self.perform_create(serializer)
+                serializer_data.append(serializer.data)
+        else:
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            self.perform_create(serializer)
+            serializer_data = serializer.data
+        headers = self.get_success_headers(serializer_data)
+        return Response(serializer_data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def perform_create(self, serializer):
+        serializer.save()
+
 
 class TestRunModelViewSet(viewsets.ModelViewSet):
     """
@@ -403,13 +422,14 @@ class DefectModelViewSet(viewsets.ModelViewSet):
 
         return queryset
 
+
 class NumberTestRunModelViewSet(viewsets.ModelViewSet):
     serializer_class = TestRunSerializer
     queryset = TestRun.objects.all()
 
     def get_queryset(self):
         queryset = TestRun.objects.filter(
-            project_id=self.request.query_params.get('project_id'), 
+            project_id=self.request.query_params.get('project_id'),
             test_suite_id=self.request.query_params.get('test_suite_id')
         )
         return queryset

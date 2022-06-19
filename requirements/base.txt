@@ -29,7 +29,7 @@ django-polymorphic
 django-mptt
 requests-oauthlib
 requests-toolbelt
-xmltodict
+xmltodict==0.12.0
 requests
 PyJWT
 paramiko
@@ -45,6 +45,7 @@ rest-framework-generic-relations
 djangorestframework-filters==1.0.0.dev2
 django-utils-six
 lxml
+defusedxml # for security problems
 user_agents
 jira
 catboost
@@ -53,3 +54,6 @@ python-pidfile
 dask
 pqdm
 imblearn
+stripe
+django-csp
+celery-singleton

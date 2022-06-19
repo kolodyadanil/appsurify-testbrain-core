@@ -2,9 +2,14 @@
 from __future__ import unicode_literals
 
 import warnings
+import datetime
+import time
+
+from dateutil.relativedelta import relativedelta
 
 from django.conf import settings
 from django.db import models
+from django.db.models import IntegerField, CharField
 from django.utils.translation import ugettext_lazy as _
 
 from .base_models import AbstractBaseOrganization
@@ -59,10 +64,32 @@ class SharedBaseModel(models.Model):
 class AbstractOrganization(six.with_metaclass(OrgMeta, SharedBaseModel, AbstractBaseOrganization)):
     """
     Abstract Organization model.
+    Whenever a org is created, the following fields are set with default value:
+        subscription_paid_until: 90 days free trial
+        plan: Free Trial
+        time_saving_left: set to 1000 min, but with paid plan or free trial plan
+            this time_saving_left will never be deducted
     """
+    PLAN_FREE_TRIAL = u'free-trial'
+    PLAN_FREE = u'free'
+    PLAN_PLUS = u'plus'
+    PLAN_PRO = u'pro'
+    
+    PLAN_CHOICE = (
+        (PLAN_FREE_TRIAL, 'Free-Trial'),
+        (PLAN_FREE, 'Free'),
+        (PLAN_PLUS, 'Plus'),
+        (PLAN_PRO, 'Professional'),
+    )
+    
+    _90days_trial = int(time.mktime((datetime.datetime.today() + relativedelta(days=90)).timetuple()))
     slug = SlugField(max_length=200, blank=False, editable=True,
                      populate_from='name', unique=True,
                      help_text=_("The name in all lowercase, suitable for URL identification"))
+    subscription_paid_until = IntegerField(default=_90days_trial, blank=True, null=True)
+    plan = CharField(max_length=128, default=PLAN_FREE_TRIAL, choices=PLAN_CHOICE)
+    time_saving_left = IntegerField(default=1000*60, blank=True, null=True,
+                                    help_text="Time saving left in seconds")
 
     class Meta(AbstractBaseOrganization.Meta):
         abstract = True

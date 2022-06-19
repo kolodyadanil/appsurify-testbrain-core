@@ -21,7 +21,7 @@ class GitSSHv2Repository(models.Model):
     user = models.ForeignKey(User, related_name='git_ssh_v2_repository', null=False, on_delete=models.CASCADE)
 
     repository_name = models.CharField(max_length=255, blank=False, null=False)
-    is_installed_hook = models.BooleanField(default=False)
+    is_installed_hook = models.BooleanField(default=True) # TODO: if hook is installed by default, need to remove the "Download script" relating logic
 
     updated = models.DateTimeField(auto_now=True)
     created = models.DateTimeField(auto_now_add=True)

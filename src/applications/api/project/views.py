@@ -10,13 +10,13 @@ from django.utils.text import slugify
 from rest_framework import permissions
 from rest_framework import viewsets, status
 from rest_framework.response import Response
+from rest_framework.generics import GenericAPIView
 
 from applications.notification.models import Notification
 from applications.organization.utils import get_current_organization
 from applications.project.permissions import IsOwnerOrReadOnly, IsAdminOrganizationOrReadOnly
 from .filters import *
 from .serializers import *
-
 
 UserModel = get_user_model()
 
@@ -219,17 +219,29 @@ class ProjectUserModelViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         project = self.get_project()
         organization = project.organization
-        user_id = request.data.get('id')
-        user = UserModel.objects.get(id=user_id)
-
-        if organization.is_member(user=user):
-            project_user, _ = project.get_or_add_user(user=user)
+        serializer_data = []
+        if request.data.get('users'):
+            users_to_add = request.data['users']
+            for user_to_add in users_to_add:
+                user = UserModel.objects.get(id=user_to_add['id'])
+                is_admin = user_to_add.get('is_owner', False)
+                if organization.is_member(user=user):
+                    project_user, _ = project.get_or_add_user(user=user, is_admin=is_admin)
+                else:
+                    raise Exception()
+                serializer = self.get_serializer(project_user)
+                serializer_data.append(serializer.data)
         else:
-            raise Exception()
-
-        serializer = self.get_serializer(project_user)
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+            user_id = request.data.get('id')
+            user = UserModel.objects.get(id=user_id)
+            is_admin = request.data.get('is_owner', False)
+            if organization.is_member(user=user):
+                project_user, _ = project.get_or_add_user(user=user, is_admin=is_admin)
+            else:
+                raise Exception()
+            serializer_data = self.get_serializer(project_user).data
+        headers = self.get_success_headers(serializer_data)
+        return Response(serializer_data, status=status.HTTP_201_CREATED, headers=headers)
 
     def destroy(self, request, *args, **kwargs):
         project = self.get_project()
@@ -243,3 +255,14 @@ class ProjectUserModelViewSet(viewsets.ModelViewSet):
             raise Exception()
 
         return Response({}, status=status.HTTP_200_OK)
+
+
+class ProjectSummaryView(viewsets.ModelViewSet):
+    model = Project
+    serializer_class = ProjectSummarySerializer
+    queryset = Project.objects.all()
+
+    permission_classes = (permissions.IsAuthenticated, IsOwnerOrReadOnly,)
+
+    lookup_field = 'pk'
+    lookup_url_kwarg = 'project_pk'

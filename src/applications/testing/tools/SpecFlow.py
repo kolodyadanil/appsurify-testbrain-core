@@ -4,6 +4,7 @@ from collections import OrderedDict
 from datetime import timedelta
 import subprocess
 import lxml.etree as ET
+import defusedxml.ElementTree as dET
 import xmltodict
 from django.conf import settings
 from django.db import transaction, models
@@ -17,6 +18,8 @@ from applications.testing.models import Test, TestSuite, TestRun, TestRunResult,
 from applications.testing.signals import model_test_run_tests_changed, model_test_run_result_complete_test_run, \
     model_test_run_result_perform_defect
 from applications.vcs.models import Area, ParentCommit
+from applications.testing.tasks import update_materialized_view
+
 
 TYPE_NUNIT3 = 'nunit3'
 TYPE_JUNIT = 'junit'
@@ -137,7 +140,7 @@ class ImportUtils(object):
         if self.type_xml == 'nunit3':
             xslt = ET.parse(os.path.join(settings.BASE_DIR, 'applications/testing/tools/nunit3-junit.xslt'))
             transform = ET.XSLT(xslt)
-            dom = ET.fromstring(self.infile)
+            dom = dET.fromstring(self.infile)
             new_dom = transform(dom)
             new_dom_str = ET.tostring(new_dom, pretty_print=True)
             infile = new_dom_str
@@ -326,6 +329,7 @@ class ImportUtils(object):
 
         self.test_report.status = TestReport.Status.SUCCESS
         self.test_report.save(update_fields=["status", "updated"])
+        update_materialized_view.delay()
         return data
 
     def test_run_result_complete(self):

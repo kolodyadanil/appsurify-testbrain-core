@@ -230,8 +230,11 @@ class File(MPTTModel):
         try:
             current_filename_instance = cls.objects.get(project=project, full_filename=full_path)
         except cls.DoesNotExist:
-            full_filename_parts = full_path.split('/')
-
+            if '\\' in full_path:
+                full_filename_parts = full_path.split('\\')
+            else:
+                full_filename_parts = full_path.split('/')
+                
             default_area_id = Area.get_default(project).id
 
             parent = None
@@ -428,6 +431,7 @@ class Commit(models.Model):
 
     files = models.ManyToManyField('File', through='FileChange', blank=True)
     parents = models.ManyToManyField('self', through='ParentCommit', symmetrical=False, blank=True)
+    is_processed = models.BooleanField(default=False)
 
     timestamp = models.DateTimeField(default=timezone.now, blank=False, null=False)
 
