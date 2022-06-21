@@ -1,3 +1,23 @@
+CREATE OR REPLACE FUNCTION array_cleanup(arr text[], dflt text[] DEFAULT ARRAY [''])
+    RETURNS text[]
+    LANGUAGE plpgsql
+AS $function$
+DECLARE
+    arr_out text[];
+BEGIN
+    arr_out = array_remove(arr, NULL);
+    arr_out := array_remove(arr_out, ' ');
+    arr_out := array_remove(arr_out, '');
+
+    IF cardinality(arr_out) > 0 THEN
+        RETURN arr_out;
+    ELSE
+        RETURN dflt;
+    END IF;
+END;
+$function$;
+
+
 CREATE OR REPLACE FUNCTION assign_test_result_type
 (
     td testing_defect,
