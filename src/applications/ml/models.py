@@ -184,7 +184,7 @@ class MLModel(models.Model):
                     if prev_ml_model.state == States.TRAINED:
                         result = ml_model.train()
                     else:
-                        logger.error(f"Skipped this ml_model: previous model not trained")
+                        logger.error(f"Skipped this {ml_model}: previous model not trained")
             except Exception as exc:
                 raise exc
 
