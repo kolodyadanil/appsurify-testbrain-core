@@ -365,8 +365,8 @@ class MLPredictor(MLHolder):
                     )
                 )
 
-            X = df.drop('test_id', axis=1)
             y = df['test_id']
+            X = df.drop('test_id', axis=1)
 
             pred = self._model.classifier.predict(X)
 
