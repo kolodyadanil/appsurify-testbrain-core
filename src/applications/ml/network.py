@@ -342,6 +342,8 @@ class MLPredictor(MLHolder):
 
         if df.empty is True:
             result['u'] = [test_id for test_id in list(test_queryset.values_list('id', flat=True))]
+        elif not self._model.classifier.is_fitted():
+            result['u'] = [test_id for test_id in list(test_queryset.values_list('id', flat=True))]
         else:
             allowed_columns = [column for (column, _) in self.decode_columns] + ['test_id']
             df = df[allowed_columns]
@@ -415,6 +417,9 @@ class MLPredictor(MLHolder):
         df = pd.DataFrame(data)
 
         if df.empty is True:
+            for test_id in list(test_queryset.values_list('id', flat=True)):
+                test_from_ml.append((0.0, test_id))
+        elif not self._model.classifier.is_fitted():
             for test_id in list(test_queryset.values_list('id', flat=True)):
                 test_from_ml.append((0.0, test_id))
         else:
