@@ -469,5 +469,6 @@ def load_model(ml_model):
     result = None
     ml_predictor = MLPredictor(ml_model=ml_model)
     if ml_predictor.is_loaded:
-        result = ml_predictor
+        if ml_predictor._model.classifier.is_fitted():
+            result = ml_predictor
     return result
