@@ -24,5 +24,4 @@ if __name__ == "__main__":
     except AlreadyRunningError:
         sys.exit(124)
     except Exception as exc:
-        print(exc)
         sys.exit(125)
