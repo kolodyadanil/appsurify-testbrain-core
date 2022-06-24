@@ -173,8 +173,8 @@ def create_sequence(test_suite_id: int) -> typing.Union[models.QuerySet, typing.
         model = MLModel.objects.create(
             test_suite_id=test_suite_id,
             index=0,
-            fr=fr_datetime.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=pytz.UTC),
-            to=to_datetime.replace(hour=23, minute=59, second=59, microsecond=0, tzinfo=pytz.UTC),
+            from_date=fr_datetime.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=pytz.UTC),
+            to_date=to_datetime.replace(hour=23, minute=59, second=59, microsecond=0, tzinfo=pytz.UTC),
             state=States.PENDING
         )
         tests = list(model.tests_for_train)
@@ -191,8 +191,8 @@ def create_sequence(test_suite_id: int) -> typing.Union[models.QuerySet, typing.
             model = MLModel.objects.create(
                 test_suite_id=test_suite_id,
                 index=model.index + 1,
-                fr=next_fr.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=pytz.UTC),
-                to=next_to.replace(hour=23, minute=59, second=59, microsecond=0, tzinfo=pytz.UTC),
+                from_date=next_fr.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=pytz.UTC),
+                to_date=next_to.replace(hour=23, minute=59, second=59, microsecond=0, tzinfo=pytz.UTC),
                 state=States.PENDING
             )
             tests = list(model.tests_for_train)
