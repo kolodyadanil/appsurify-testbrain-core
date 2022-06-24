@@ -182,32 +182,32 @@ def model_test_run_result_perform_defect(sender, instance, created, **kwargs):
     defect = Defect.perform(test_run_result=test_run_result)
 
 
-from applications.ml.neural_network_flaky import MLPredictor as FlakyMLPredictor
-
-
-# @receiver(post_save, sender=Defect)
-def set_defect_as_flaky(sender, instance, created, **kwargs):
-    defect = instance
-    associated_tests = defect.associated_tests.all()
-    for test in associated_tests:
-        try:
-            test_run = test.recently_test_runs[0]
-            if test_run.status == TestRun.STATUS_COMPLETE:
-                if not FlakyMLPredictor.is_loaded:
-                    test_run_results = test_run.test_run_results.all().values_list('status', flat=True)
-                    if Defect.is_flaky(test_run_results):
-                        defect.type = Defect.TYPE_FLAKY
-                    return 0
-                if FlakyMLPredictor._predict_defect_flakiness(defect) >= 0.8:
-                    defect.type = Defect.TYPE_FLAKY
-                    return 1
-                else:
-                    test_run_results = test_run.test_run_results.all().values_list('status', flat=True)
-                    if Defect.is_flaky(test_run_results):
-                        defect.type = Defect.TYPE_FLAKY
-                return 2
-        except:
-            continue
+# from applications.ml.neural_network_flaky import MLPredictor as FlakyMLPredictor
+#
+#
+# # @receiver(post_save, sender=Defect)
+# def set_defect_as_flaky(sender, instance, created, **kwargs):
+#     defect = instance
+#     associated_tests = defect.associated_tests.all()
+#     for test in associated_tests:
+#         try:
+#             test_run = test.recently_test_runs[0]
+#             if test_run.status == TestRun.STATUS_COMPLETE:
+#                 if not FlakyMLPredictor.is_loaded:
+#                     test_run_results = test_run.test_run_results.all().values_list('status', flat=True)
+#                     if Defect.is_flaky(test_run_results):
+#                         defect.type = Defect.TYPE_FLAKY
+#                     return 0
+#                 if FlakyMLPredictor._predict_defect_flakiness(defect) >= 0.8:
+#                     defect.type = Defect.TYPE_FLAKY
+#                     return 1
+#                 else:
+#                     test_run_results = test_run.test_run_results.all().values_list('status', flat=True)
+#                     if Defect.is_flaky(test_run_results):
+#                         defect.type = Defect.TYPE_FLAKY
+#                 return 2
+#         except:
+#             continue
 
 # @receiver(post_save, sender=TestRun)
 def create_defect_and_add_commits_in_last_24hours(sender, instance, created, **kwargs):

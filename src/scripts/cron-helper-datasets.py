@@ -8,11 +8,11 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "system.settings")
 django.setup()
 
 from pidfile import PIDFile, AlreadyRunningError
-from applications.ml.commands import perform_prepare_models
+from applications.ml.commands import perform_prepare_datasets
 
 
 def main():
-    perform_prepare_models()
+    perform_prepare_datasets()
     return 0
 
 

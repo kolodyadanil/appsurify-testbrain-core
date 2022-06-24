@@ -1,6 +1,6 @@
 WITH
-vc_id AS (SELECT unnest(array[{commits_ids}]) AS vc_id),
-test_ids AS (SELECT unnest(array[{tests_ids}]) as test_id),
+vc_id AS (SELECT unnest(array[{commit_ids}]) AS vc_id),
+test_ids AS (SELECT unnest(array[{test_ids}]) as test_id),
 vc AS
 (
     SELECT

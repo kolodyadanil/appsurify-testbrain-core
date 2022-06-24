@@ -1,8 +1,9 @@
+
 from datetime import datetime, timedelta
 from applications.testing.models import TestSuite
-from applications.ml.models import MLModel, States
-from applications.ml.utils import logger, Statistic
-
+from applications.ml.models import MLModel, States, create_sequence
+from applications.ml.utils.log import logger
+from applications.ml.utils.functional import Statistic
 
 
 def create_and_check_models():
@@ -16,7 +17,7 @@ def create_and_check_models():
         stats.increase_current()
         logger.debug(f"{stats} creating model for <TestSuite: {test_suite.id}>")
         try:
-            seq_queryset = MLModel.create_sequence(test_suite_id=test_suite.id)
+            seq_queryset = create_sequence(test_suite_id=test_suite.id)
             stats.increase_success()
 
             logger.debug(f"{stats} created models for "
@@ -45,7 +46,7 @@ def create_and_check_models():
         stats.increase_current()
         logger.debug(f"{stats} creating sequence for {ml_model}")
         try:
-            seq_queryset = MLModel.create_sequence(test_suite_id=ml_model.test_suite_id)
+            seq_queryset = create_sequence(test_suite_id=ml_model.test_suite_id)
             stats.increase_success()
 
             logger.debug(f"{stats} created sequence for "
@@ -61,7 +62,7 @@ def create_and_check_models():
     logger.info(f"{stats} created sequence for models")
 
 
-def perform_prepare_models():
+def perform_prepare_datasets():
     stats = Statistic()
 
     queryset = MLModel.objects.filter(state=States.PENDING).order_by("test_suite", "index", "updated")[:20]
