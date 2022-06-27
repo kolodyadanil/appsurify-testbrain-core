@@ -346,7 +346,7 @@ class CatboostClassifierModel(object):
         predicted_df = predict(self.clf, df, keyword=keyword)
         return predicted_df
 
-    def train(self, params: typing.Optional[typing.Dict] = None) -> cb.CatBoostClassifier:
+    def train(self, params: typing.Optional[typing.Dict] = None) -> 'CatboostClassifierModel':
         if params is None:
             params = {}
 
