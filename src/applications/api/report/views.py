@@ -1672,7 +1672,7 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
 
     class TestRunListFilterSerializer(serializers.Serializer):
         organization = serializers.ReadOnlyField()
-        project = serializers.CharField()
+        project = serializers.CharField(required=False, allow_null=True)
         test_suite = serializers.CharField(required=False, allow_null=True)
         test_run_type = serializers.IntegerField(required=False, allow_null=True)
         status = serializers.IntegerField(required=False, allow_null=True)
@@ -1712,6 +1712,17 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
         serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+    
+    @action(methods=['GET', ], detail=False, url_path=r'summary')
+    def get_testruns_summary_within_60_days(self, request, *args, **kwargs):
+        filters_serializer = self.TestRunListFilterSerializer(data=request.query_params)
+        filters_serializer.is_valid(raise_exception=True)
+        
+        queryset = test_run_report_list(filters=filters_serializer.validated_data)
+        queryset = queryset.filter(start_date__gte=timezone.now() - datetime.timedelta(days=60)).order_by('-start_date')
+        
+        serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
 

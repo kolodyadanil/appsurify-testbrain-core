@@ -35,31 +35,34 @@ GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17
 ),
 ttrr_grp AS (
     SELECT ttrr.test_run_id,
-				(CASE WHEN (tdc.defect_id IS NOT NULL) AND ttrr.td_type IN (3,4) AND ttrr.td_close_type IN (1,3) THEN 1 ELSE 0 END) AS test_changed,
+				ttrr.tt_id,
+				MAX(CASE WHEN (tdc.defect_id IS NOT NULL) AND ttrr.td_type IN (3,4) AND ttrr.td_close_type IN (1,3) THEN 1 ELSE 0 END) AS test_changed,
         ttrr.project_id,
         ttrr.test_name,
         ttrr.sha,
         ttrr.rework,
         ttrr.riskiness,
-    array_remove(array_agg(DISTINCT full_trim(ttrr.tt_name)), NULL) AS test_names,
-    array_remove(array_agg(DISTINCT ttrr.class_name), NULL) AS test_classes_names,
-    array_remove(array_agg(DISTINCT lower(ttrr.va_name)), NULL) AS test_areas,
+    array_cleanup(array_agg(DISTINCT full_trim(ttrr.tt_name)), NULL) AS test_names,
+    array_cleanup(array_agg(DISTINCT ttrr.class_name), NULL) AS test_classes_names,
+    array_cleanup(array_agg(DISTINCT lower(ttrr.va_name)), NULL) AS test_areas,
 
-    ARRAY[''] AS test_similarnamed,
+    NULL AS test_similarnamed,
 
-    COALESCE(NULLIF(array_remove(array(
+    COALESCE(array_cleanup(array(
            SELECT lower(vcs_area.name)
            FROM vcs_area
                INNER JOIN vcs_commit_areas vca ON (vcs_area.id = vca.area_id)
                INNER JOIN testing_defect_closed_by_commits tdclbc ON (tdclbc.commit_id = vca.commit_id)
-           WHERE tdclbc.defect_id = ttrr.td_id
+							 INNER JOIN testing_defect_associated_tests tdat ON tdclbc.defect_id = tdat.defect_id
+           WHERE tdat.test_id = ttrr.tt_id
            INTERSECT
            SELECT lower(vcs_area.name)
            FROM vcs_area
                INNER JOIN vcs_commit_areas vca ON (vcs_area.id = vca.area_id)
                INNER JOIN testing_defect_caused_by_commits tdcabc ON (tdcabc.commit_id = vca.commit_id)
-           WHERE tdcabc.defect_id = ttrr.td_id), NULL), ARRAY[]::text[]),
-					 array_remove(array(
+							 INNER JOIN testing_defect_associated_tests tdat ON tdcabc.defect_id = tdat.defect_id
+           WHERE tdat.test_id = ttrr.tt_id), NULL),
+					 array_cleanup(array(
            SELECT lower(vcs_area.name)
            FROM vcs_area
                INNER JOIN vcs_commit_areas vca ON (vcs_area.id = vca.area_id)
@@ -72,20 +75,22 @@ ttrr_grp AS (
                INNER JOIN testing_testrun ttr ON (ttr.commit_id = vca.commit_id)
            WHERE ttr.id = ttrr.previous_test_run_id), NULL))
 		AS defect_closed_by_caused_by_intersection_areas,
-    COALESCE(NULLIF(array_remove(array(
+    COALESCE(array_cleanup(array(
            SELECT normalize_filepath_string(full_trim(vcs_file.full_filename))
            FROM vcs_file
                INNER JOIN vcs_filechange vf ON (vcs_file.id = vf.file_id)
                INNER JOIN testing_defect_closed_by_commits tdclbc ON (tdclbc.commit_id = vf.commit_id)
-           WHERE tdclbc.defect_id = ttrr.td_id
+							 INNER JOIN testing_defect_associated_tests tdat ON tdclbc.defect_id = tdat.defect_id
+           WHERE tdat.test_id = ttrr.tt_id
            INTERSECT
            SELECT normalize_filepath_string(full_trim(vcs_file.full_filename))
            FROM vcs_file
                INNER JOIN vcs_filechange vf ON (vcs_file.id = vf.file_id)
                INNER JOIN testing_defect_caused_by_commits tdcabc ON (tdcabc.commit_id = vf.commit_id)
-           WHERE tdcabc.defect_id = ttrr.td_id
-           ), NULL), ARRAY[]::text[]),
-					 array_remove(array(
+							 INNER JOIN testing_defect_associated_tests tdat ON tdcabc.defect_id = tdat.defect_id
+           WHERE tdat.test_id = ttrr.tt_id
+           ), NULL),
+					 array_cleanup(array(
            SELECT normalize_filepath_string(full_trim(vcs_file.full_filename))
            FROM vcs_file
                INNER JOIN vcs_filechange vf ON (vcs_file.id = vf.file_id)
@@ -97,20 +102,22 @@ ttrr_grp AS (
                INNER JOIN vcs_filechange vf ON (vcs_file.id = vf.file_id)
                INNER JOIN testing_testrun ttr ON (ttr.commit_id = vf.commit_id)
            WHERE ttr.id = ttrr.previous_test_run_id), NULL)) AS defect_closed_by_caused_by_intersection_files,
-    COALESCE(NULLIF(array_remove(array(
+    COALESCE(array_cleanup(array(
            SELECT DISTINCT normalize_filepath_string(full_trim(unnest(string_to_array(rtrim(vcs_file.full_filename, vcs_file.filename), '/'))))
            FROM vcs_file
                INNER JOIN vcs_filechange vf ON (vcs_file.id = vf.file_id)
                INNER JOIN testing_defect_closed_by_commits tdclbc ON (tdclbc.commit_id = vf.commit_id)
-           WHERE tdclbc.defect_id = ttrr.td_id
+							 INNER JOIN testing_defect_associated_tests tdat ON tdclbc.defect_id = tdat.defect_id
+           WHERE tdat.test_id = ttrr.tt_id
            INTERSECT
            SELECT DISTINCT normalize_filepath_string(full_trim(unnest(string_to_array(rtrim(vcs_file.full_filename, vcs_file.filename), '/'))))
            FROM vcs_file
                INNER JOIN vcs_filechange vf ON (vcs_file.id = vf.file_id)
                INNER JOIN testing_defect_caused_by_commits tdcabc ON (tdcabc.commit_id = vf.commit_id)
-           WHERE tdcabc.defect_id = ttrr.td_id
-           ), NULL), ARRAY[]::text[]),
-					 array_remove(array(
+							 INNER JOIN testing_defect_associated_tests tdat ON tdcabc.defect_id = tdat.defect_id
+           WHERE tdat.test_id = ttrr.tt_id
+           ), NULL),
+					 array_cleanup(array(
            SELECT DISTINCT normalize_filepath_string(full_trim(unnest(string_to_array(rtrim(vcs_file.full_filename, vcs_file.filename), '/'))))
            FROM vcs_file
                INNER JOIN vcs_filechange vf ON (vcs_file.id = vf.file_id)
@@ -122,22 +129,24 @@ ttrr_grp AS (
                INNER JOIN vcs_filechange vf ON (vcs_file.id = vf.file_id)
                INNER JOIN testing_testrun ttr ON (ttr.commit_id = vf.commit_id)
            WHERE ttr.id = ttrr.previous_test_run_id), NULL)) AS defect_closed_by_caused_by_intersection_folders,
-    COALESCE(NULLIF(array_remove(array(
+    COALESCE(array_cleanup(array(
            SELECT DISTINCT normalize_filepath_string(full_trim(va6.name))
            FROM testing_defect_closed_by_commits tdclbc
-			   INNER JOIN vcs_commit_areas vca6 on tdclbc.commit_id = vca6.commit_id
+               INNER JOIN testing_defect_associated_tests tdat ON tdclbc.defect_id = tdat.defect_id
+               INNER JOIN vcs_commit_areas vca6 on tdclbc.commit_id = vca6.commit_id
                INNER JOIN vcs_area_dependencies vad6 on vca6.area_id = vad6.from_area_id
                INNER JOIN vcs_area va6 on va6.id = vad6.to_area_id
-           WHERE tdclbc.defect_id = ttrr.td_id
+           WHERE tdat.test_id = ttrr.tt_id
            INTERSECT
            SELECT DISTINCT normalize_filepath_string(full_trim(va6.name))
            FROM testing_defect_caused_by_commits tdcabc
-			   INNER JOIN vcs_commit_areas vca6 on tdcabc.commit_id = vca6.commit_id
+               INNER JOIN testing_defect_associated_tests tdat ON tdcabc.defect_id = tdat.defect_id
+               INNER JOIN vcs_commit_areas vca6 on tdcabc.commit_id = vca6.commit_id
                INNER JOIN vcs_area_dependencies vad6 on vca6.area_id = vad6.from_area_id
                INNER JOIN vcs_area va6 on va6.id = vad6.to_area_id
-           WHERE tdcabc.defect_id = ttrr.td_id
-           ), NULL), ARRAY[]::text[]),
-					 array_remove(array(
+           WHERE tdat.test_id = ttrr.tt_id
+           ), NULL),
+					 array_cleanup(array(
            SELECT lower(vcs_area.name)
            FROM vcs_area
                INNER JOIN vcs_area_dependencies vad on vcs_area.id = vad.to_area_id
@@ -155,18 +164,17 @@ FROM ttrr
 LEFT JOIN LATERAL (SELECT defect_id, updated FROM testing_defect_caused_by_commits tdcabc WHERE ttrr.td_id = tdcabc.defect_id AND tdcabc.updated > (SELECT min_date FROM min_date) AND tdcabc.updated < (SELECT max_date FROM max_date)
 	UNION SELECT
 	defect_id, updated FROM testing_defect_closed_by_commits tdclbc WHERE ttrr.td_id = tdclbc.defect_id AND tdclbc.updated > (SELECT min_date FROM min_date) AND tdclbc.updated < (SELECT max_date FROM max_date)) tdc ON TRUE
-GROUP BY ttrr.test_run_id, ttrr.previous_test_run_id, test_changed, ttrr.project_id,
+GROUP BY ttrr.test_run_id, ttrr.tt_id, ttrr.previous_test_run_id, ttrr.project_id,
          ttrr.test_name,
          ttrr.sha,
          ttrr.rework,
-         ttrr.riskiness,
-				 ttrr.td_id
+         ttrr.riskiness
 HAVING(MIN(CASE WHEN ttrr.status = 'pass' THEN 1 ELSE 0 END) = 0)
 ),
 test_area_similarnamed AS (
 SELECT ttrr.project_id,
          ttrr.test_areas,
-         array_remove(test_area_similarnamed(ttrr.project_id, array_to_string(ttrr.test_areas, ' ')), NULL) AS test_area_similarnamed
+         array_cleanup(test_area_similarnamed(ttrr.project_id, array_to_string(ttrr.test_areas, ' ')), NULL) AS test_area_similarnamed
 FROM (SELECT project_id, test_areas FROM ttrr_grp GROUP BY project_id, test_areas ORDER BY 1, 2) ttrr
 ),
 test_associated_areas AS (
@@ -175,7 +183,7 @@ tt.name as test_name,
 vc.sha,
 vc.rework,
 vc.riskiness,
-array_remove(array_agg(DISTINCT lower(va2.name)), NULL) AS test_associated_areas
+array_cleanup(array_agg(DISTINCT lower(va2.name)), NULL) AS test_associated_areas
 FROM ttrr
 INNER JOIN vcs_commit vc on ttrr.vc_id = vc.id
 INNER JOIN testing_test tt on ttrr.tt_id = tt.id
@@ -194,7 +202,7 @@ tt.name as test_name,
 vc.sha,
 vc.rework,
 vc.riskiness,
-array_remove(normalize_filepath_string(array_agg(DISTINCT vf.full_filename)), NULL) AS test_associated_files
+array_cleanup(normalize_filepath_string(array_agg(DISTINCT vf.full_filename)), NULL) AS test_associated_files
 FROM ttrr
 INNER JOIN vcs_commit vc on ttrr.vc_id = vc.id
 INNER JOIN testing_test tt on ttrr.tt_id = tt.id
@@ -213,7 +221,7 @@ tt.name as test_name,
 vc.sha,
 vc.rework,
 vc.riskiness,
-array_remove(array_agg(DISTINCT lower(va3.name)), NULL) AS test_dependent_areas
+array_cleanup(array_agg(DISTINCT lower(va3.name)), NULL) AS test_dependent_areas
 FROM ttrr
 INNER JOIN vcs_commit vc on ttrr.vc_id = vc.id
 INNER JOIN testing_test tt on ttrr.tt_id = tt.id
@@ -234,7 +242,7 @@ tt.name as test_name,
 vc.sha,
 vc.rework,
 vc.riskiness,
-array_remove(normalize_filepath_string(array_agg(DISTINCT va4.name)), NULL) AS commit_areas
+array_cleanup(normalize_filepath_string(array_agg(DISTINCT va4.name)), NULL) AS commit_areas
 FROM ttrr
 INNER JOIN vcs_commit vc on ttrr.vc_id = vc.id
 INNER JOIN testing_test tt on ttrr.tt_id = tt.id
@@ -253,7 +261,7 @@ tt.name as test_name,
 vc.sha,
 vc.rework,
 vc.riskiness,
-    array_remove(normalize_filepath_string(array_agg(DISTINCT vf2.full_filename)), NULL) AS commit_files
+    array_cleanup(normalize_filepath_string(array_agg(DISTINCT vf2.full_filename)), NULL) AS commit_files
 FROM ttrr
 INNER JOIN vcs_commit vc on ttrr.vc_id = vc.id
 INNER JOIN testing_test tt on ttrr.tt_id = tt.id
@@ -272,7 +280,7 @@ tt.name as test_name,
 vc.sha,
 vc.rework,
 vc.riskiness,
-    array_remove(normalize_filepath_string(array_agg(DISTINCT vf3.full_filename)), NULL) AS defect_caused_by_commits_files
+    array_cleanup(normalize_filepath_string(array_agg(DISTINCT vf3.full_filename)), NULL) AS defect_caused_by_commits_files
 FROM ttrr
 INNER JOIN vcs_commit vc on ttrr.vc_id = vc.id
 INNER JOIN testing_test tt on ttrr.tt_id = tt.id
@@ -296,7 +304,7 @@ SELECT t.project_id,
 	t.sha,
 	t.rework,
 	t.riskiness,
-  array_remove(normalize_filepath_string(array_agg(DISTINCT t.folder)), NULL) AS defect_caused_by_commits_folders
+  array_cleanup(normalize_filepath_string(array_agg(DISTINCT t.folder)), NULL) AS defect_caused_by_commits_folders
 FROM
 (
 	SELECT tt.project_id,
@@ -329,7 +337,7 @@ tt.name as test_name,
 vc.sha,
 vc.rework,
 vc.riskiness,
-    array_remove(array_agg(DISTINCT lower(va5.name)), NULL) AS defect_caused_by_commits_areas
+    array_cleanup(array_agg(DISTINCT lower(va5.name)), NULL) AS defect_caused_by_commits_areas
 FROM ttrr
 INNER JOIN vcs_commit vc on ttrr.vc_id = vc.id
 INNER JOIN testing_test tt on ttrr.tt_id = tt.id
@@ -352,7 +360,7 @@ tt.name as test_name,
 vc.sha,
 vc.rework,
 vc.riskiness,
-    array_remove(array_agg(DISTINCT lower(va6.name)), NULL) AS defect_caused_by_commits_dependent_areas
+    array_cleanup(array_agg(DISTINCT lower(va6.name)), NULL) AS defect_caused_by_commits_dependent_areas
 FROM ttrr
 INNER JOIN vcs_commit vc on ttrr.vc_id = vc.id
 INNER JOIN testing_test tt on ttrr.tt_id = tt.id
@@ -380,8 +388,8 @@ ttrr.test_name,
 ttrr.sha,
 ttrr.rework,
 ttrr.riskiness,
-ttrr.td_id,
-array_remove(array_agg(ttrr.full_filename), NULL) AS files_since_last_run
+ttrr.tt_id,
+array_cleanup(array_agg(ttrr.full_filename), NULL) AS files_since_last_run
 FROM (
 SELECT ttrr.test_run_id,
 ttrr.previous_test_run_id,
@@ -390,7 +398,7 @@ ttrr.test_name,
 ttrr.sha,
 ttrr.rework,
 ttrr.riskiness,
-ttrr.td_id,
+ttrr.tt_id,
 normalize_filepath_string(full_trim(vcs_file.full_filename)) as full_filename
 FROM vcs_file
 	 INNER JOIN vcs_filechange vf ON (vcs_file.id = vf.file_id)
@@ -404,7 +412,7 @@ ttrr.test_name,
 ttrr.sha,
 ttrr.rework,
 ttrr.riskiness,
-ttrr.td_id,
+ttrr.tt_id,
 normalize_filepath_string(full_trim(vcs_file.full_filename)) as full_filename
 FROM vcs_file
 	 INNER JOIN vcs_filechange vf ON (vcs_file.id = vf.file_id)
@@ -417,7 +425,7 @@ ttrr.test_name,
 ttrr.sha,
 ttrr.rework,
 ttrr.riskiness,
-ttrr.td_id
+ttrr.tt_id
 ),
 folders_since_last_run AS (
 SELECT ttrr.test_run_id,
@@ -427,8 +435,8 @@ ttrr.test_name,
 ttrr.sha,
 ttrr.rework,
 ttrr.riskiness,
-ttrr.td_id,
-array_remove(array_agg(ttrr.foldername), NULL) AS folders_since_last_run
+ttrr.tt_id,
+array_cleanup(array_agg(ttrr.foldername), NULL) AS folders_since_last_run
 FROM (
 SELECT ttrr.test_run_id,
 ttrr.previous_test_run_id,
@@ -437,7 +445,7 @@ ttrr.test_name,
 ttrr.sha,
 ttrr.rework,
 ttrr.riskiness,
-ttrr.td_id,
+ttrr.tt_id,
 normalize_filepath_string(full_trim(unnest(string_to_array(rtrim(vcs_file.full_filename, vcs_file.filename), '/')))) as foldername
 FROM vcs_file
 	 INNER JOIN vcs_filechange vf ON (vcs_file.id = vf.file_id)
@@ -451,7 +459,7 @@ ttrr.test_name,
 ttrr.sha,
 ttrr.rework,
 ttrr.riskiness,
-ttrr.td_id,
+ttrr.tt_id,
 normalize_filepath_string(full_trim(unnest(string_to_array(rtrim(vcs_file.full_filename, vcs_file.filename), '/')))) as foldername
 FROM vcs_file
 	 INNER JOIN vcs_filechange vf ON (vcs_file.id = vf.file_id)
@@ -464,7 +472,7 @@ ttrr.test_name,
 ttrr.sha,
 ttrr.rework,
 ttrr.riskiness,
-ttrr.td_id
+ttrr.tt_id
 ),
 areas_since_last_run AS (
 SELECT ttrr.test_run_id,
@@ -474,8 +482,8 @@ ttrr.test_name,
 ttrr.sha,
 ttrr.rework,
 ttrr.riskiness,
-ttrr.td_id,
-array_remove(array_agg(ttrr.area_name), NULL) AS areas_since_last_run
+ttrr.tt_id,
+array_cleanup(array_agg(ttrr.area_name), NULL) AS areas_since_last_run
 FROM (
 SELECT ttrr.test_run_id,
 ttrr.previous_test_run_id,
@@ -484,7 +492,7 @@ ttrr.test_name,
 ttrr.sha,
 ttrr.rework,
 ttrr.riskiness,
-ttrr.td_id,
+ttrr.tt_id,
 lower(vcs_area.name) AS area_name
 FROM vcs_area
 INNER JOIN vcs_commit_areas vca ON (vcs_area.id = vca.area_id)
@@ -498,7 +506,7 @@ ttrr.test_name,
 ttrr.sha,
 ttrr.rework,
 ttrr.riskiness,
-ttrr.td_id,
+ttrr.tt_id,
 lower(vcs_area.name) AS area_name
 FROM vcs_area
 INNER JOIN vcs_commit_areas vca ON (vcs_area.id = vca.area_id)
@@ -511,7 +519,7 @@ ttrr.test_name,
 ttrr.sha,
 ttrr.rework,
 ttrr.riskiness,
-ttrr.td_id
+ttrr.tt_id
 ),
 dependent_areas_since_last_run AS (
 SELECT ttrr.test_run_id,
@@ -521,8 +529,8 @@ ttrr.test_name,
 ttrr.sha,
 ttrr.rework,
 ttrr.riskiness,
-ttrr.td_id,
-array_remove(array_agg(ttrr.area_name), NULL) AS dependent_areas_since_last_run
+ttrr.tt_id,
+array_cleanup(array_agg(ttrr.area_name), NULL) AS dependent_areas_since_last_run
 FROM (
 SELECT ttrr.test_run_id,
 ttrr.previous_test_run_id,
@@ -531,7 +539,7 @@ ttrr.test_name,
 ttrr.sha,
 ttrr.rework,
 ttrr.riskiness,
-ttrr.td_id,
+ttrr.tt_id,
 lower(vcs_area.name) AS area_name
 FROM vcs_area
 INNER JOIN vcs_area_dependencies vad on vcs_area.id = vad.to_area_id
@@ -546,7 +554,7 @@ ttrr.test_name,
 ttrr.sha,
 ttrr.rework,
 ttrr.riskiness,
-ttrr.td_id,
+ttrr.tt_id,
 lower(vcs_area.name) AS area_name
 FROM vcs_area
 INNER JOIN vcs_area_dependencies vad on vcs_area.id = vad.to_area_id
@@ -560,10 +568,11 @@ ttrr.test_name,
 ttrr.sha,
 ttrr.rework,
 ttrr.riskiness,
-ttrr.td_id
+ttrr.tt_id
 )
 
-SELECT COALESCE(ttrr.test_changed, 0) AS test_changed,
+SELECT
+    COALESCE(ttrr.test_changed, 0) AS test_changed,
 ttrr.test_run_id,
 ttrr.sha,
 ttrr.test_names,
@@ -578,14 +587,14 @@ ttrr.rework AS commit_rework,
 ttrr.riskiness::numeric::integer * 100 AS commit_riskiness,
 ca.commit_areas,
 cf.commit_files,
-COALESCE(NULLIF(dccf.defect_caused_by_commits_files, ARRAY['']), file_slr.files_since_last_run) AS defect_caused_by_commits_files,
-COALESCE(NULLIF(dcca.defect_caused_by_commits_areas, ARRAY['']), aslr.areas_since_last_run) AS defect_caused_by_commits_areas,
-COALESCE(NULLIF(dccda.defect_caused_by_commits_dependent_areas, ARRAY['']), daslr.dependent_areas_since_last_run) AS defect_caused_by_commits_dependent_areas,
+COALESCE(dccf.defect_caused_by_commits_files, file_slr.files_since_last_run) AS defect_caused_by_commits_files,
+COALESCE(dcca.defect_caused_by_commits_areas, aslr.areas_since_last_run) AS defect_caused_by_commits_areas,
+COALESCE(dccda.defect_caused_by_commits_dependent_areas, daslr.dependent_areas_since_last_run) AS defect_caused_by_commits_dependent_areas,
 ttrr.defect_closed_by_caused_by_intersection_areas,
 ttrr.defect_closed_by_caused_by_intersection_files,
 ttrr.defect_closed_by_caused_by_intersection_folders,
 ttrr.defect_closed_by_caused_by_intersection_dependent_areas,
-COALESCE(NULLIF(dccfld.defect_caused_by_commits_folders, ARRAY['']), fold_slr.folders_since_last_run) AS defect_caused_by_commits_folders
+COALESCE(dccfld.defect_caused_by_commits_folders, fold_slr.folders_since_last_run) AS defect_caused_by_commits_folders
 FROM ttrr_grp ttrr
 LEFT OUTER JOIN test_area_similarnamed tasn ON ttrr.project_id = tasn.project_id
 LEFT OUTER JOIN test_associated_areas taa ON ttrr.project_id = taa.project_id
@@ -634,21 +643,25 @@ LEFT OUTER JOIN defect_caused_by_commits_folders dccfld ON ttrr.project_id = dcc
 	and ttrr.rework = dccfld.rework
 	and ttrr.riskiness = dccfld.riskiness
 LEFT OUTER JOIN files_since_last_run file_slr ON ttrr.project_id = file_slr.project_id
+	and ttrr.tt_id = file_slr.tt_id
 	and ttrr.test_name = file_slr.test_name
 	and ttrr.sha = file_slr.sha
 	and ttrr.rework = file_slr.rework
 	and ttrr.riskiness = file_slr.riskiness
 LEFT OUTER JOIN folders_since_last_run fold_slr ON ttrr.project_id = fold_slr.project_id
+	and ttrr.tt_id = fold_slr.tt_id
 	and ttrr.test_name = fold_slr.test_name
 	and ttrr.sha = fold_slr.sha
 	and ttrr.rework = fold_slr.rework
 	and ttrr.riskiness = fold_slr.riskiness
 LEFT OUTER JOIN areas_since_last_run aslr ON ttrr.project_id = aslr.project_id
+	and ttrr.tt_id = aslr.tt_id
 	and ttrr.test_name = aslr.test_name
 	and ttrr.sha = aslr.sha
 	and ttrr.rework = aslr.rework
 	and ttrr.riskiness = aslr.riskiness
 LEFT OUTER JOIN dependent_areas_since_last_run daslr ON ttrr.project_id = daslr.project_id
+	and ttrr.tt_id = daslr.tt_id
 	and ttrr.test_name = daslr.test_name
 	and ttrr.sha = daslr.sha
 	and ttrr.rework = daslr.rework

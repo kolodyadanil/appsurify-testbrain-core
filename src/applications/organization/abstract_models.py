@@ -61,6 +61,10 @@ class SharedBaseModel(models.Model):
         abstract = True
 
 
+def _90days_trial():
+    return int(time.mktime((datetime.datetime.today() + relativedelta(days=90)).timetuple()))
+
+
 class AbstractOrganization(six.with_metaclass(OrgMeta, SharedBaseModel, AbstractBaseOrganization)):
     """
     Abstract Organization model.
@@ -82,7 +86,6 @@ class AbstractOrganization(six.with_metaclass(OrgMeta, SharedBaseModel, Abstract
         (PLAN_PRO, 'Professional'),
     )
     
-    _90days_trial = int(time.mktime((datetime.datetime.today() + relativedelta(days=90)).timetuple()))
     slug = SlugField(max_length=200, blank=False, editable=True,
                      populate_from='name', unique=True,
                      help_text=_("The name in all lowercase, suitable for URL identification"))

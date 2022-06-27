@@ -1,11 +1,11 @@
-# -*- coding: utf-8 -*-
-from django.contrib import admin
+
 from django.db import models
-from .models import MLModel
+from django.contrib import admin
+from applications.ml.models import MLModel
 
 
 class MLModelAdmin(admin.ModelAdmin):
-    list_display = ('id', 'test_suite', 'test_count', 'state', 'index', 'fr', 'to', 'created', 'updated')
+    list_display = ('id', 'test_suite', 'test_count', 'state', 'index', 'from_date', 'to_date', 'created', 'updated')
 
     def get_queryset(self, request):
         qs = super(MLModelAdmin, self).get_queryset(request)

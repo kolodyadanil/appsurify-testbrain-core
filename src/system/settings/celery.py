@@ -5,6 +5,8 @@ from kombu import Queue, Exchange
 from celery.schedules import crontab
 
 
+CELERY_SINGLETON_BACKEND_URL = env.str("REDIS_URL", default="redis://localhost:6379/0")
+
 # CELERY
 # ------------------------------------------------------------------------------
 CELERY_BROKER_URL = env.str("BROKER_URL", default="amqp://guest:guest@localhost:5672//")
@@ -127,6 +129,10 @@ CELERY_BEAT_SCHEDULE = {
     "update_org_plan_every_6_hours": {
         "task": "applications.vcs.tasks.create_area_from_folders_task",
         "schedule": crontab(minute=0, hour='*/6'),
+    },
+    "update_test_run_statistics": {
+        "task": "applications.testing.tasks.update_materialized_view",
+        "schedule": crontab(minute='*/5'),
     },
 }
 

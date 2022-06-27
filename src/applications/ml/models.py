@@ -1,13 +1,13 @@
-# -*- coding: utf-8 -*-
-import pathlib
+import pytz
+import typing
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
+from django.db import models
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
-from django.db import models, connection
-from django.utils import timezone
-from datetime import timedelta
-from django.conf import settings
-from applications.ml.database import prepare_dataset_to_csv
-from applications.ml.network import train_model, load_model
+from applications.ml.utils.dataset import get_dataset_test_ids, export_datasets
+from applications.ml.utils.log import logger
+from applications.ml.network import CatboostClassifierModel
 
 
 class States(models.TextChoices):
@@ -17,6 +17,7 @@ class States(models.TextChoices):
     TRAINING = "TRAINING", "TRAINING"
     TRAINED = "TRAINED", "TRAINED"
     ERROR = "ERROR", "ERROR"
+    SKIPPED = "SKIPPED", "SKIPPED"
 
 
 class MLModel(models.Model):
@@ -43,12 +44,12 @@ class MLModel(models.Model):
 
     index = models.IntegerField(default=0)
 
-    fr = models.DateTimeField(
+    from_date = models.DateTimeField(
         verbose_name="from datetime",
         null=True
     )
 
-    to = models.DateTimeField(
+    to_date = models.DateTimeField(
         verbose_name="to datetime",
         null=True
     )
@@ -72,93 +73,52 @@ class MLModel(models.Model):
         verbose_name_plural = "models"
 
     def __str__(self):
-        return f"<Model: {self.id} (TestSuite: {self.test_suite_id})> {self.state}"
-
-    def dataset_sql(self, test):
-        sql_template_filepath = settings.BASE_DIR / "applications" / "ml" / "sql" / "dataset.sql"
-        sql_template = open(sql_template_filepath, "r", encoding="utf-8").read()
-
-        min_date = self.fr
-        max_date = self.to
-
-        sql = sql_template.format(
-            test_suite_id=self.test_suite_id,
-            test_id=test.id,
-            min_date=min_date,
-            max_date=max_date
-        )
-        return sql
-
-    @property
-    def dataset_filename(self):
-        return "{test_id}.csv"
-
-    @property
-    def dataset_path(self):
-        project = self.test_suite.project
-        organization = project.organization
-        directory = pathlib.PosixPath(settings.STORAGE_ROOT) / "ml" / "datasets" / \
-                    str(organization.id) / str(project.id) / str(self.test_suite_id) / str(self.index)
-        return directory
-
-    @property
-    def dataset_filepaths(self):
-        files = []
-        test_ids = list(self.tests.all().values_list('id', flat=True))
-        for test_id in test_ids:
-            dataset_filename = self.dataset_filename.format(test_id=test_id)
-            dataset_path = self.dataset_path
-            dataset_filepath = dataset_path / dataset_filename
-            if dataset_filepath.exists():
-                files.append(dataset_filepath)
-        return files
-
-    @property
-    def model_filename(self):
-        return f"{self.index}.m"
-
-    @property
-    def model_path(self):
-        project = self.test_suite.project
-        organization = project.organization
-        directory = pathlib.PosixPath(settings.STORAGE_ROOT) / "ml" / "models" / \
-                    str(organization.id) / str(project.id) / str(self.test_suite.id)
-        return directory
+        return f"MLModel object ({self.id}) TestSuite ({self.test_suite_id}) [{self.index}]"
 
     @property
     def tests_for_train(self):
-        sql_template_filepath = settings.BASE_DIR / "applications" / "ml" / "sql" / "test.sql"
-        sql_template = open(sql_template_filepath, "r", encoding="utf-8").read()
-
-        min_date = self.fr
-        max_date = self.to
-
-        sql = sql_template.format(test_suite_id=self.test_suite_id, min_date=min_date, max_date=max_date)
-        with connection.cursor() as cursor:
-            cursor.execute(sql)
-            columns = [col[0] for col in cursor.description]
-            rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
-
-        test_ids = list([row['test_id'] for row in rows])
+        test_ids = get_dataset_test_ids(test_suite_id=self.test_suite.id,
+                                        from_date=self.from_date, to_date=self.to_date)
         return self.test_suite.tests.filter(id__in=test_ids)
 
     def prepare(self):
         self.state = States.PREPARING
         self.save()
         # TODO: RUN function with threads
-        result = prepare_dataset_to_csv(ml_model=self)
-        self.state = States.PREPARED
+        try:
+            organization_id = int(self.test_suite.project.organization_id)
+            project_id = int(self.test_suite.project_id)
+            test_suite_id = int(self.test_suite_id)
+            index = self.index
+            test_ids = list(self.tests.values_list("id", flat=True))
+            result = export_datasets(
+                organization_id=organization_id,
+                project_id=project_id,
+                test_suite_id=test_suite_id,
+                index=index,
+                test_ids=test_ids,
+                from_date=self.from_date,
+                to_date=self.to_date
+            )
+            self.state = States.PREPARED
+        except Exception as exc:
+            self.state = States.PENDING
         self.save()
-        return result
 
     def train(self):
         self.state = States.TRAINING
         self.save()
         # TODO: RUN function with threads
-        result = train_model(ml_model=self)
-        self.state = States.TRAINED
+        try:
+            ccm = CatboostClassifierModel(ml_model=self)
+            clf = ccm.train()
+            if clf.is_fitted:
+                self.state = States.TRAINED
+            else:
+                self.state = States.SKIPPED
+        except Exception as exc:
+            self.state = States.PREPARED
         self.save()
-        return
 
     @classmethod
     def train_model(cls, test_suite_id):
@@ -167,94 +127,125 @@ class MLModel(models.Model):
             state=States.PREPARED
         ).order_by("test_suite", "index")
 
-        print(f"Total models for TestSuite: {test_suite_id} - {queryset.count()}")
-
         for ml_model in queryset:
+            if ml_model.tests.count() == 0:
+                ml_model.state = States.SKIPPED
+                ml_model.save()
+                continue
+
             ml_model.save()
             try:
                 prev_ml_model = cls.objects.filter(test_suite_id=test_suite_id, index=ml_model.index - 1).last()
                 if prev_ml_model is None:
                     result = ml_model.train()
                 else:
-                    if prev_ml_model.state == States.TRAINED:
+                    if prev_ml_model.state in (States.TRAINED, States.SKIPPED):
                         result = ml_model.train()
                     else:
-                        # print(f"<TestSuite: {ml_model.test_suite.id}> - SKIPPED")
-                        raise Exception("SKIPPED")
-                # print(f"<TestSuite: {ml_model.test_suite.id}> - {result}")
-            except Exception as e:
-                # print(f"<TestSuite: {ml_model.test_suite.id}> - {e}")
-                raise e
+                        logger.error(f"Skipped this {ml_model}: previous model not trained")
+            except Exception as exc:
+                raise exc
 
     @classmethod
-    def open_model(cls, test_suite_id):
+    def load_model(cls, test_suite_id) -> CatboostClassifierModel:
         ml_model = cls.objects.filter(test_suite_id=test_suite_id, state=States.TRAINED).order_by("index").last()
         if ml_model is not None:
-            model = load_model(ml_model)
+            ccm = CatboostClassifierModel(ml_model=ml_model)
+            if not ccm.is_fitted:
+                logger.error(f"Classifier not fitted for {ml_model}")
+                ccm = None
         else:
-            model = None
-        return model
+            ccm = None
+        return ccm
 
-    @classmethod
-    def create_sequence(cls, test_suite_id):
 
-        current_datetime = timezone.now()
+def create_sequence(test_suite_id: int) -> typing.Union[models.QuerySet, typing.List[MLModel]]:
+    default_months = 1
+    current_datetime = datetime.now() + relativedelta(day=1)
+    current_datetime = current_datetime.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=pytz.UTC)
 
-        model = cls.objects.filter(test_suite_id=test_suite_id).last()
+    model = MLModel.objects.filter(test_suite_id=test_suite_id).last()
 
-        if model is None:
-            fr_datetime = timezone.now() - timedelta(weeks=28)
-            to_datetime = fr_datetime + timedelta(weeks=4)
+    if model is None:
+        fr_datetime = datetime.now() + relativedelta(months=-12) + relativedelta(day=1)
+        to_datetime = fr_datetime + relativedelta(months=default_months) + relativedelta(day=31)
+
+        model = MLModel.objects.create(
+            test_suite_id=test_suite_id,
+            index=0,
+            from_date=fr_datetime.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=pytz.UTC),
+            to_date=to_datetime.replace(hour=23, minute=59, second=59, microsecond=0, tzinfo=pytz.UTC),
+            state=States.PENDING
+        )
+        tests = list(model.tests_for_train)
+        model.tests.set(tests)
+        if len(tests) == 0:
+            model.state = States.SKIPPED
+            model.save()
+
+    while model is not None:
+        next_fr = model.to
+        next_to = next_fr + relativedelta(months=default_months) + relativedelta(day=31)
+
+        if current_datetime >= next_to:
             model = MLModel.objects.create(
                 test_suite_id=test_suite_id,
-                index=0,
-                fr=fr_datetime,
-                to=to_datetime,
+                index=model.index + 1,
+                from_date=next_fr.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=pytz.UTC),
+                to_date=next_to.replace(hour=23, minute=59, second=59, microsecond=0, tzinfo=pytz.UTC),
                 state=States.PENDING
             )
             tests = list(model.tests_for_train)
             model.tests.set(tests)
+            if len(tests) == 0:
+                model.state = States.SKIPPED
+                model.save()
+        else:
+            model = None
 
-        while model is not None:
-            next_fr = model.to
-            next_to = next_fr + timedelta(weeks=4)
-
-            if current_datetime >= next_to:
-                model = MLModel.objects.create(
-                    test_suite_id=test_suite_id,
-                    index=model.index + 1,
-                    fr=next_fr,
-                    to=next_to,
-                    state=States.PENDING
-                )
-                tests = list(model.tests_for_train)
-                model.tests.set(tests)
-            else:
-                model = None
-
-        return cls.objects.filter(test_suite_id=test_suite_id).count()
-
+    return MLModel.objects.filter(test_suite_id=test_suite_id)
 
 
 @receiver(post_save, sender=MLModel)
 def create_directories(sender, instance, created, **kwargs):
+    from applications.ml.utils.dataset import get_dataset_directory
+    from applications.ml.utils.model import get_model_directory
     try:
-        model_path = instance.model_path
-        model_path.mkdir(parents=True, exist_ok=True)
+        organization_id = instance.test_suite.project.organization_id
+        project_id = instance.test_suite.project_id
+        test_suite_id = instance.test_suite_id
+        index = instance.index
 
-        dataset_path = instance.dataset_path
-        dataset_path.mkdir(parents=True, exist_ok=True)
-    except Exception as e:
-        print(e)
+        model_directory = get_model_directory(organization_id=organization_id, project_id=project_id,
+                                              test_suite_id=test_suite_id, index=index)
+        model_directory.mkdir(parents=True, exist_ok=True)
+
+        dataset_directory = get_dataset_directory(organization_id=organization_id, project_id=project_id,
+                                                  test_suite_id=test_suite_id, index=index)
+        dataset_directory.mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        logger.exception(f"Unknown error on create directories for "
+                         f"<MLModel: '{instance.id}' [{instance.test_suite_id}]>", exc_info=True)
 
 
 @receiver(post_delete, sender=MLModel)
 def delete_directories(sender, instance, **kwargs):
+    from applications.ml.utils.dataset import get_dataset_directory
+    from applications.ml.utils.model import get_model_directory
     try:
-        model_path = instance.model_path
-        model_path.rmdir()
+        organization_id = instance.test_suite.project.organization_id
+        project_id = instance.test_suite.project_id
+        test_suite_id = instance.test_suite_id
+        index = instance.index
 
-        dataset_path = instance.dataset_path
-        dataset_path.rmdir()
-    except Exception as e:
-        print(e)
+        model_directory = get_model_directory(organization_id=organization_id, project_id=project_id,
+                                              test_suite_id=test_suite_id, index=index)
+        model_directory.rmdir()
+
+        dataset_directory = get_dataset_directory(organization_id=organization_id, project_id=project_id,
+                                                  test_suite_id=test_suite_id, index=index)
+        dataset_directory.rmdir()
+
+    except Exception as exc:
+        logger.exception(f"Unknown error on create directories for "
+                         f"<MLModel: '{instance.id}' [{instance.test_suite_id}]>", exc_info=True)

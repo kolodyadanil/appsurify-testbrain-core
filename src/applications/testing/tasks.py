@@ -5,7 +5,9 @@ from celery import group
 
 import functools
 import time
-
+from celery.signals import worker_ready
+from celery_singleton import clear_locks
+from celery_singleton import Singleton
 from celery.exceptions import Reject
 from hashlib import md5
 from contextlib import contextmanager
@@ -73,4 +75,15 @@ def periodic_add_association(self, chunk_size=20):
         # add_association_for_test.delay(chunk)
         job = group([add_association_for_test.s(test_id) for test_id in chunk])
         result = job.apply_async()
-        time.sleep(0.5)
+        time.sleep(1)
+
+
+@app.task(base=Singleton, raise_on_duplicate=False, lock_expiry=5 * 60)
+def update_materialized_view(*args, **kwargs):
+    from applications.testing.models import TestRunMaterializedModel
+    TestRunMaterializedModel.refresh()
+
+
+@worker_ready.connect
+def unlock_all(**kwargs):
+    clear_locks(app)
