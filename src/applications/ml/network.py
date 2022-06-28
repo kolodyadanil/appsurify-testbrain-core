@@ -336,8 +336,8 @@ class CatboostClassifierModel(object):
 
     def predict(self, tests, commits, keyword: typing.Optional[str] = None) -> pd.DataFrame:
 
-        test_ids = list(tests.values_list("id", flat=True))
-        commit_ids = list(commits.values_list("id", flat=True))
+        test_ids = list(set(list(tests.values_list("id", flat=True))))
+        commit_ids = list(set(list(commits.values_list("id", flat=True))))
 
         raw_sql = predict_sql(test_ids=test_ids, commit_ids=commit_ids)
         raw_data = native_execute_query(query=raw_sql)
@@ -378,5 +378,5 @@ class CatboostClassifierModel(object):
             keyword=keyword
         )
         df = df.sort_values(by="result", ignore_index=True, ascending=False)
-        df.head(int(len(df) * (percent / 100)))
+        df = df.head(int(len(df) * (percent / 100)))
         return df["test_id"].to_list()

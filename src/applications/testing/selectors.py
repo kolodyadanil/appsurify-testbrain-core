@@ -648,10 +648,10 @@ def get_default_by_percent_queryset(queryset, commits_ids, percent, params=None)
     default_queryset.extend(set(list(low_queryset)))
     # print("--- Default: %s seconds ---" % (time.time() - start_time))
     if len(test_ids) > 0:
-        default_queryset.extend(list(test_ids))
+        default_queryset.extend(set(list(test_ids)))
 
     _count = len(default_queryset)
-    _per = int((percent * _count) / 100)
+    _per = int(_count * (percent / 100))
     _ids = default_queryset[:_per]
 
     qs = Test.objects.filter(id__in=_ids)
