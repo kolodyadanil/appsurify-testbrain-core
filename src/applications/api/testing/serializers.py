@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import logging
 from django.db.models.expressions import Value
 from urllib.parse import urlunsplit
 
@@ -613,7 +614,10 @@ class ImportTestingReportSerializer(serializers.Serializer):
         test_run_name = validated_data.get('test_run_name', "")
 
         commits_sha = [commit.sha]
-        prioritize_task(commits_sha=commits_sha)
+        try:
+            prioritize_task(commits_sha=commits_sha)
+        except Exception as exc:
+            logging.exception(f"Error with 'prioritize_task'", exc_info=True)
         
         utils = SpecFlow.ImportUtils(
             type_xml=type,
