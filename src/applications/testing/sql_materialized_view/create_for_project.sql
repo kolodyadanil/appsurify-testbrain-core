@@ -4,7 +4,6 @@ WITH test_run_execution_time AS (
         testing_testrunresult.test_run_id,
         SUM(testing_testrunresult.execution_time) as execution_time
     FROM testing_testrunresult
-    WHERE "testing_testrunresult"."project_id" = 426
     GROUP BY 1
 ), test_run_statistic AS (
 SELECT test_run_id,
