@@ -769,8 +769,6 @@ def test_run_report_list(*, filters=None):
         }
     )
 
-
-
     queryset = queryset.annotate(
         _project=JSONObject(id='project__id', name='project__name'),
         _test_suite=JSONObject(id='test_suite__id', name='test_suite__name'),

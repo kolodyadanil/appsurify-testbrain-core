@@ -8,9 +8,9 @@ WITH test_run_execution_time AS (
 ), test_run_statistic AS (
 SELECT test_run_id,
     COUNT(*) AS tests_count,
-    COUNT(CASE WHEN status = 'passed' THEN 1 END) AS passed_tests_count,
+    COUNT(CASE WHEN status = 'pass' THEN 1 END) AS passed_tests_count,
     COUNT(CASE WHEN status = 'skipped' THEN 1 END) AS skipped_tests_count,
-    COUNT(CASE WHEN status = 'failed' THEN 1 END) AS failed_tests_count,
+    COUNT(CASE WHEN status = 'fail' THEN 1 END) AS failed_tests_count,
     COUNT(CASE WHEN status = 'broken' THEN 1 END) AS broken_tests_count,
     COUNT(CASE WHEN status IN ('pending', 'skipped', 'not_run') THEN 1 END) AS not_run_tests_count
 FROM (
