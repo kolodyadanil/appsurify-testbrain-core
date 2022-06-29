@@ -1,4 +1,4 @@
-CREATE MATERIALIZED VIEW mv_test_count_by_type_{project_id} AS
+CREATE MATERIALIZED VIEW mv_test_count_by_type AS
 WITH test_run_execution_time AS (
     SELECT
         testing_testrunresult.test_run_id,
