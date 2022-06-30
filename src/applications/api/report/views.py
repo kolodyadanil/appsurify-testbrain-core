@@ -3160,6 +3160,10 @@ class DefectReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMod
     """
     model = Defect
     serializer_class = DefectReportSerializer
+    serializer_action_classes = {
+        'list': DefectReportSerializer,
+        'retrieve': DefectDetailReportSerializer
+    }
     queryset = Defect.objects.all()
 
     filter_class = DefectReportFilterSet
