@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import logging
 import time
 
 from git import GitCommandError
@@ -19,6 +20,14 @@ from applications.testing.utils.prediction.riskiness.fast_model import fast_mode
 from applications.testing.utils.prediction.riskiness.slow_model import slow_model_analyzer
 
 from applications.testing.utils.prediction.output.dispatcher import output_analyze
+
+# import logging
+# logger = logging.getLogger('celery.task')
+# from celery.utils.log import get_task_logger
+#
+#
+# logger = get_task_logger(__name__)
+
 
 
 def make_clone_workflow(project_id, repository_id, model_name):

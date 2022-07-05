@@ -1,12 +1,12 @@
 import math
 from collections import Counter
 from datetime import datetime, timedelta
-
+import logging
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 
 from applications.project.models import Project
-from applications.testing.utils.prediction.common import save_model, load_model
+from applications.ml.network import SlowCommitRiskinessRFCM
 from applications.vcs.models import Commit
 
 
@@ -27,10 +27,13 @@ def update_slow_commits_metrics(project_id):
     # refs = repo.remotes.origin.refs
     #
     # for branch in refs:
+
+    date_limit = datetime.now() - timedelta(weeks=4)
+
     for branch in project.branches.all():
 
         # commits = repo.iter_commits(rev=branch.name)
-        commits = branch.commits.all()
+        commits = branch.commits.filter(timestamp__gte=date_limit)
 
         files = {}
         dev_experience = {}
@@ -175,7 +178,7 @@ def update_slow_commits_metrics(project_id):
 
             commit_stats = {
                 # 'hash': commit.hexsha[0:8],
-                'hash': db_commit.display_id,
+                # 'sha': db_commit.sha,
                 'additions': line_added,
                 'deletions': line_deleted,
                 'total_lines_modified': total_lines_modified,
@@ -198,86 +201,19 @@ def update_slow_commits_metrics(project_id):
     return True
 
 
-def create_slow_model(project_id):
-    date_limit = datetime.now() - timedelta(weeks=2)
-    commits = Commit.objects.filter(project_id=project_id, timestamp__lte=date_limit).prefetch_related(
-        'founded_defects')
-
-    if not commits:
-        return False
-
-    commits_data = []
-    buggy_commits = []
-
-    for commit in commits:
-        commit_stats = commit.stats.get('slow_model')
-
-        if not commit_stats:
-            continue
-
-        commits_data.append(commit_stats)
-
-        if commit.caused_defects.count():
-            buggy_commits.append(commit.display_id)
-
-    if not commits_data:
-        return False
-
-    data_frame = pd.DataFrame(commits_data)
-    data_frame = data_frame.set_index('hash').fillna(0)
-
-    labels = data_frame.index.isin(buggy_commits).astype(int)
-    labels = pd.Series(data=labels, index=data_frame.index, name='label')
-
-    model = RandomForestClassifier(n_jobs=-1, max_features='sqrt', n_estimators=200, oob_score=True)
-    model.fit(data_frame, labels)
-
-    save_model(model=model, project_id=project_id, model_prefix='slow_riskiness')
-    return model
-
-
-def analyze_commits(project_id, commits_hashes=None):
-    model = load_model(project_id=project_id, model_prefix='slow_riskiness')
-
-    if not model:
-        model = create_slow_model(project_id=project_id)
-
-    if not model:
-        return False
-
-    commits = []
-
-    if commits_hashes:
-        commits = Commit.objects.filter(project_id=project_id, sha__in=commits_hashes)
-
-    if not commits_hashes:
-        commits = Commit.objects.filter(project_id=project_id)
-
-    if not commits:
-        return False
-
-    for commit in commits:
-        if not commit.stats.get('slow_model'):
-            continue
-
-        commit_data = [
-            commit.stats.get('slow_model')
-        ]
-        data_frame = pd.DataFrame(commit_data)
-        data_frame = data_frame.set_index('hash').fillna(0)
-
-        result = model.predict_proba(X=data_frame)
-
-        if len(result[0]) == 1:
-            score = result[0][0]
-        else:
-            score = result[0][1]
-
-        Commit.objects.filter(pk=commit.id).update(riskiness=score)
-
-    return True
-
 
 def slow_model_analyzer(project_id, commits_hashes=None):
     update_slow_commits_metrics(project_id=project_id)
-    analyze_commits(project_id=project_id, commits_hashes=commits_hashes)
+
+    try:
+        fcr_rfcm = SlowCommitRiskinessRFCM(project_id=project_id)
+        fcr_rfcm = fcr_rfcm.train()
+
+        riskiness_commits = fcr_rfcm.predict_to_riskiness(commit_sha_list=commits_hashes)
+
+        for sha, riskiness in riskiness_commits.items():
+            Commit.objects.filter(sha=sha).update(riskiness=riskiness)
+
+    except Exception as exc:
+        logging.exception(f"Some error for slow model analyzer")
+        raise exc

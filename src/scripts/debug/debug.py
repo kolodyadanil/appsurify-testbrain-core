@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import sys
+
 import django
 
 django.setup()
@@ -9,7 +11,7 @@ import pandas as pd
 from django.db.models import F
 from applications.ml.models import States, MLModel, create_sequence
 from applications.ml.utils.dataset import export_datasets
-from applications.ml.network import predict, train_test_model, prepare_dataframe, DEFAULT_PREDICT_ALLOWED_COLUMNS, CatboostClassifierModel
+from applications.ml.network import TestPrioritizationCBM
 from applications.vcs.models import Commit
 from applications.testing.models import Test
 
@@ -41,7 +43,7 @@ index = 1
 # TODO: Test train models
 # ml_model_queryset = MLModel.objects.filter(test_suite_id=test_suite_id).select_related("test_suite__project", "test_suite__project__organization").annotate(organization_id=F("test_suite__project__organization_id"), project_id=F("test_suite__project_id")).order_by("organization_id", "project_id", "test_suite_id", "index", "updated")
 
-index = 10
+index = 3
 ml_model = MLModel.objects.get(test_suite_id=test_suite_id, index=index)
 
 # clf = train_test_model(
@@ -61,15 +63,17 @@ ml_model = MLModel.objects.get(test_suite_id=test_suite_id, index=index)
 #
 # print(predicts_df["priority"].value_counts())
 
-ccm = CatboostClassifierModel(ml_model=ml_model)
-clf = ccm.train()
+tpcbm = TestPrioritizationCBM(ml_model=ml_model)
+clf = tpcbm.train()
 print(clf.is_fitted)
+if not clf.is_fitted:
+    sys.exit(1)
 
 test_queryset = Test.objects.filter(test_suites=ml_model.test_suite)
 commit_queryset = Commit.objects.filter(project_id=ml_model.test_suite.project_id)[:3]
 
 start_time = time.time()
-df = ccm.predict(
+df = tpcbm.predict(
     tests=test_queryset,
     commits=commit_queryset
 )
@@ -78,7 +82,7 @@ print(df)
 
 print("##### DICT")
 start_time = time.time()
-priorities_dict = ccm.predict_by_priority(
+priorities_dict = tpcbm.predict_by_priority(
     tests=test_queryset,
     commits=commit_queryset
 )
@@ -88,7 +92,7 @@ for prio, items in priorities_dict.items():
 
 print()
 start_time = time.time()
-priorities_dict = ccm.predict_by_priority(
+priorities_dict = tpcbm.predict_by_priority(
     tests=test_queryset,
     commits=commit_queryset,
     keyword="404"
@@ -100,7 +104,7 @@ for prio, items in priorities_dict.items():
 
 print("###### TOP")
 start_time = time.time()
-items = ccm.predict_by_percent(
+items = tpcbm.predict_by_percent(
     tests=test_queryset,
     commits=commit_queryset
 )
@@ -109,7 +113,7 @@ print(f"\tTop20: {len(items)}")
 
 print()
 start_time = time.time()
-items = ccm.predict_by_percent(
+items = tpcbm.predict_by_percent(
     tests=test_queryset,
     commits=commit_queryset,
     keyword="404"
