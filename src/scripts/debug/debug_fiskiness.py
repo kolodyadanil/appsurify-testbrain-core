@@ -16,7 +16,7 @@ from applications.vcs.models import Commit
 from applications.testing.models import Test
 
 
-fcr_rfcm = FastCommitRiskinessRFCM(project_id=487)
+fcr_rfcm = FastCommitRiskinessRFCM(project_id=426)
 fcr_rfcm.train()
 r = fcr_rfcm.predict(commit_sha_list=[])
 print(r)

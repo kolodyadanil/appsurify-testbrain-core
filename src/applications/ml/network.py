@@ -524,11 +524,11 @@ class CommitRiskinessRFCM(ABC):
         predict_X = predict_df.drop(columns=["sha"], axis=1).values
         predicts = clf.predict_proba(X=predict_X)
 
-        # predicts_df = pd.DataFrame({"sha": predict_y, "predict_0": predicts[:,0], "predict_1": predicts[:,1]})
-        # predicts_df["result"] = predicts_df.apply(
-        #     lambda x: x.loc["predict_0"] if x.loc["predict_0"] == 1 else x.loc["predict_1"], axis=1)
+        if predicts.shape[1] == 1:
+            predicts_df = pd.DataFrame({"sha": predict_y, "result": predicts[:, 0]})
+        else:
+            predicts_df = pd.DataFrame({"sha": predict_y, "result": predicts[:, 1]})
 
-        predicts_df = pd.DataFrame({"sha": predict_y, "result": predicts[:, 1]})
         predicts_df.sort_values(by=["sha", "result"], ignore_index=True, ascending=False, inplace=True)
         predicts_df.drop_duplicates(subset=["sha"], keep="last", ignore_index=True, inplace=True)
         return predicts_df
