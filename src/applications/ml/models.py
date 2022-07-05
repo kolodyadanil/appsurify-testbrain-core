@@ -7,7 +7,7 @@ from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from applications.ml.utils.dataset import get_dataset_test_ids, export_datasets
 from applications.ml.utils.log import logger
-from applications.ml.network import CatboostClassifierModel
+from applications.ml.network import TestPrioritizationCBM
 
 
 class States(models.TextChoices):
@@ -110,8 +110,8 @@ class MLModel(models.Model):
         self.save()
         # TODO: RUN function with threads
         try:
-            ccm = CatboostClassifierModel(ml_model=self)
-            clf = ccm.train()
+            tpcbm = TestPrioritizationCBM(ml_model=self)
+            clf = tpcbm.train()
             if clf.is_fitted:
                 self.state = States.TRAINED
             else:
@@ -147,16 +147,16 @@ class MLModel(models.Model):
                 raise exc
 
     @classmethod
-    def load_model(cls, test_suite_id) -> CatboostClassifierModel:
+    def load_model(cls, test_suite_id) -> TestPrioritizationCBM:
         ml_model = cls.objects.filter(test_suite_id=test_suite_id, state=States.TRAINED).order_by("index").last()
         if ml_model is not None:
-            ccm = CatboostClassifierModel(ml_model=ml_model)
-            if not ccm.is_fitted:
+            tpcbm = TestPrioritizationCBM(ml_model=ml_model)
+            if not tpcbm.is_fitted:
                 logger.error(f"Classifier not fitted for {ml_model}")
-                ccm = None
+                tpcbm = None
         else:
-            ccm = None
-        return ccm
+            tpcbm = None
+        return tpcbm
 
 
 def create_sequence(test_suite_id: int) -> typing.Union[models.QuerySet, typing.List[MLModel]]:

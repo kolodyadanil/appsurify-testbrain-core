@@ -111,6 +111,11 @@ LOGGING = {
             "level": "DEBUG",
             "propagate": False
         },
+        "celery.app.trace": {
+            "handlers": ["console", "celery.file", ],
+            "level": "DEBUG",
+            "propagate": False
+        },
         "applications": {
             "handlers": ["console", "applications.file", ],
             "level": "DEBUG",

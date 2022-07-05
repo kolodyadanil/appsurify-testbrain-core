@@ -12,12 +12,16 @@ app = Celery("testbrain")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 
 
-@signals.setup_logging.connect
-def on_celery_setup_logging(*args, **kwargs):
+@signals.after_setup_logger.connect
+def on_after_setup_logger(**kwargs):
     from logging.config import dictConfig  # noqa
     from django.conf import settings  # noqa
-
     dictConfig(settings.LOGGING)
+    # import logging
+    # logger = logging.getLogger('celery')
+    # logger.propagate = False
+    # logger = logging.getLogger('celery.app.trace')
+    # logger.propagate = False
 
 
 app.autodiscover_tasks()

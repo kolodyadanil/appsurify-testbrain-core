@@ -1,5 +1,5 @@
-import pathlib
 import typing
+import pathlib
 
 from django.conf import settings
 
@@ -25,3 +25,14 @@ def predict_sql(test_ids: typing.List[int], commit_ids: typing.List[int]) -> str
 
     sql = sql_template.format(test_ids=test_ids_str, commit_ids=commit_ids_str)
     return sql
+
+
+def get_riskiness_model_directory(project_id: int) -> pathlib.PosixPath:
+    directory = pathlib.PosixPath(settings.STORAGE_ROOT) / "models" / "riskiness" / str(project_id)
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+
+def get_riskiness_model_filename(analyze_type: str, extension: typing.Optional[str] = "pkl") -> str:
+    filename = f"{analyze_type}.{extension}"
+    return filename
