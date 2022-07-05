@@ -28,7 +28,7 @@ def predict_sql(test_ids: typing.List[int], commit_ids: typing.List[int]) -> str
 
 
 def get_riskiness_model_directory(project_id: int) -> pathlib.PosixPath:
-    directory = pathlib.PosixPath(settings.STORAGE_ROOT) / "models" / str(project_id)
+    directory = pathlib.PosixPath(settings.STORAGE_ROOT) / "models" / "riskiness" / str(project_id)
     directory.mkdir(parents=True, exist_ok=True)
     return directory
 
