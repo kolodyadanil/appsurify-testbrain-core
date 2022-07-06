@@ -25,6 +25,12 @@ class Statistic(object):
         return self._current * 100 // self._total
 
     @property
+    def progress_percent_float(self):
+        if self._total == 0:
+            return 0
+        return self._current * 100 / self._total
+
+    @property
     def total(self):
         return self._total
 

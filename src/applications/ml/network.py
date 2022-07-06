@@ -467,7 +467,7 @@ class CommitRiskinessRFCM(ABC):
 
     def load_train_dataset(self, project_id: int) -> pd.DataFrame:
         from applications.vcs.models import Commit
-        from_datetime = datetime.now() + relativedelta(weeks=-8)  # TODO: Change!!!
+        from_datetime = datetime.now() + relativedelta(weeks=-4)  # TODO: Change!!!
         from_datetime = from_datetime.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=pytz.UTC)
         commits = Commit.objects.filter(project_id=project_id, timestamp__gte=from_datetime).prefetch_related(
             "founded_defects", "files", "parents")
