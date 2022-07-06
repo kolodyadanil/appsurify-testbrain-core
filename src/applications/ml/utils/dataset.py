@@ -13,8 +13,8 @@ from .functional import Statistic
 
 def get_dataset_directory(organization_id: int, project_id: int, test_suite_id: int,
                           index: int) -> pathlib.PosixPath:
-    directory = pathlib.PosixPath(settings.STORAGE_ROOT) / "ml" / "datasets" / \
-                str(organization_id) / str(project_id) / str(test_suite_id) / str(index)
+    directory = pathlib.PosixPath(settings.STORAGE_ROOT) / "machine_learning" / "priority" / \
+                str(organization_id) / str(project_id) / "datasets" / str(test_suite_id) / str(index)
     directory.mkdir(parents=True, exist_ok=True)
     return directory
 

@@ -18,15 +18,15 @@ from applications.testing.models import Test
 from applications.testing.utils.prediction.riskiness.slow_model import update_slow_commits_metrics
 
 
-fcr_rfcm = FastCommitRiskinessRFCM(project_id=469)
-fcr_rfcm.train()
-r = fcr_rfcm.predict(commit_sha_list=[])
-print(r)
-
-fcr_rfcm = SlowCommitRiskinessRFCM(project_id=469)
-fcr_rfcm.train()
-r = fcr_rfcm.predict(commit_sha_list=[])
-print(r)
+# fcr_rfcm = FastCommitRiskinessRFCM(project_id=469)
+# fcr_rfcm.train()
+# r = fcr_rfcm.predict(commit_sha_list=[])
+# print(r)
+#
+# fcr_rfcm = SlowCommitRiskinessRFCM(project_id=469)
+# fcr_rfcm.train()
+# r = fcr_rfcm.predict(commit_sha_list=[])
+# print(r)
 
 # start_time = time.time()
 #

@@ -396,10 +396,12 @@ class CommitRiskinessRFCM(ABC):
         "oob_score": True
     }
 
-    def __init__(self, project_id: int):
-        self.project_id = project_id
+    def __init__(self, project):
+        self.project_id = project.id
+        self.organization_id = project.organization_id
 
-        self.model_directory = get_riskiness_model_directory(project_id=project_id)
+        self.model_directory = get_riskiness_model_directory(organization_id=self.organization_id,
+                                                             project_id=self.project_id)
         self.model_filename = get_riskiness_model_filename(analyze_type=self.analyze_type)
         self.model_filepath = self.model_directory / self.model_filename
 

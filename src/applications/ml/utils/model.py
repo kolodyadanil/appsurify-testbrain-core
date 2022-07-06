@@ -5,8 +5,8 @@ from django.conf import settings
 
 
 def get_model_directory(organization_id: int, project_id: int, test_suite_id: int, index: int) -> pathlib.PosixPath:
-    directory = pathlib.PosixPath(settings.STORAGE_ROOT) / "ml" / "models" / \
-                str(organization_id) / str(project_id) / str(test_suite_id) / str(index)
+    directory = pathlib.PosixPath(settings.STORAGE_ROOT) / "machine_learning" / "priority" / \
+                str(organization_id) / str(project_id) / "models" / str(test_suite_id) / str(index)
     directory.mkdir(parents=True, exist_ok=True)
     return directory
 
@@ -27,8 +27,9 @@ def predict_sql(test_ids: typing.List[int], commit_ids: typing.List[int]) -> str
     return sql
 
 
-def get_riskiness_model_directory(project_id: int) -> pathlib.PosixPath:
-    directory = pathlib.PosixPath(settings.STORAGE_ROOT) / "models" / "riskiness" / str(project_id)
+def get_riskiness_model_directory(organization_id: int, project_id: int) -> pathlib.PosixPath:
+    directory = pathlib.PosixPath(settings.STORAGE_ROOT) / "machine_learning" / "riskiness" / \
+                str(organization_id) / str(project_id) / "models"
     directory.mkdir(parents=True, exist_ok=True)
     return directory
 

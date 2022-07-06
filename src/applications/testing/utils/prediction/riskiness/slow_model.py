@@ -181,7 +181,8 @@ def slow_model_analyzer(project_id, commits_hashes=None):
     update_slow_commits_metrics(project_id=project_id)
 
     try:
-        fcr_rfcm = SlowCommitRiskinessRFCM(project_id=project_id)
+        project = Project.objects.get(id=project_id)
+        fcr_rfcm = SlowCommitRiskinessRFCM(project=project)
         fcr_rfcm = fcr_rfcm.train()
 
         riskiness_commits = fcr_rfcm.predict_to_riskiness(commit_sha_list=commits_hashes)
