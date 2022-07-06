@@ -453,8 +453,17 @@ class TestRunResultReportSerializer(DynamicFieldsModelSerializer):
         model = TestRunResult
         fields = '__all__'
 
+class DefectReportSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    status = serializers.IntegerField(read_only=True)
+    priority = serializers.IntegerField(read_only=True)
+    severity = serializers.IntegerField(read_only=True)
+    type = serializers.IntegerField(read_only=True)
+    project = ProjectRelatedSerializer(fields=('id', 'name'), queryset=Project.objects.all())
 
-class DefectReportSerializer(DynamicFieldsModelSerializer):
+
+class DefectDetailReportSerializer(DynamicFieldsModelSerializer):
     project = ProjectRelatedSerializer(fields=('id', 'name'), queryset=Project.objects.all())
     owner = UserRelatedSerializer(fields=('id', 'username'), queryset=User.objects.all(), required=False)
     priority = serializers.IntegerField(default=1, min_value=1, max_value=10)
