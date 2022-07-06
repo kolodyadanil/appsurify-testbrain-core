@@ -385,35 +385,9 @@ class TestPrioritizationCBM(object):
 class CommitRiskinessRFCM(ABC):
     _analyze_type = None
 
-    DEFAULT_TRAIN_ALLOWED_COLUMNS = [
-        "defect_caused",
-        "deletions",
-        "additions",
-        "total_lines_modified",
-        "dayofweek",
-        "hour",
-        "len_message",
-        "changed_files",
-        "changed_directories",
-        "changed_subsystems",
-        "age",
-        "entropy"
-    ]
+    DEFAULT_TRAIN_ALLOWED_COLUMNS = []
 
-    DEFAULT_PREDICT_ALLOWED_COLUMNS = [
-        "sha",
-        "deletions",
-        "additions",
-        "total_lines_modified",
-        "dayofweek",
-        "hour",
-        "len_message",
-        "changed_files",
-        "changed_directories",
-        "changed_subsystems",
-        "age",
-        "entropy"
-    ]
+    DEFAULT_PREDICT_ALLOWED_COLUMNS = []
 
     DEFAULT_TRAIN_PARAMS = {
         "n_jobs": 1,
@@ -470,7 +444,7 @@ class CommitRiskinessRFCM(ABC):
         from_datetime = datetime.now() + relativedelta(weeks=-4)  # TODO: Change!!!
         from_datetime = from_datetime.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=pytz.UTC)
         commits = Commit.objects.filter(project_id=project_id, timestamp__gte=from_datetime).prefetch_related(
-            "founded_defects", "files", "parents")
+            "caused_defects", "founded_defects", "files", "parents")
 
         dataset = []
 
@@ -487,12 +461,14 @@ class CommitRiskinessRFCM(ABC):
 
     def load_predict_dataset(self, project_id: int, commit_sha_list: typing.Optional[typing.List]) -> pd.DataFrame:
         from applications.vcs.models import Commit
-        from_datetime = datetime.now() + relativedelta(weeks=-4)  # TODO: Change!!!
+        from_datetime = datetime.now() + relativedelta(weeks=-1)  # TODO: Change!!!
         from_datetime = from_datetime.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=pytz.UTC)
 
-        commits = Commit.objects.filter(project_id=project_id, timestamp__gte=from_datetime)
+        commits = Commit.objects.filter(project_id=project_id)
         if commit_sha_list:
             commits = commits.filter(sha__in=commit_sha_list)
+        else:
+            commits = commits.filter(timestamp__gte=from_datetime)
 
         dataset = []
         for commit in commits:
@@ -569,10 +545,12 @@ class CommitRiskinessRFCM(ABC):
         return self.clf
 
     def train(self, force: typing.Optional[bool] = False):
+
         if self.clf and not force:
             return self
 
-        clf = self._train_test_model(project_id=self.project_id, train_params=self.DEFAULT_TRAIN_PARAMS,
+        clf = self._train_test_model(project_id=self.project_id,
+                                     train_params=self.DEFAULT_TRAIN_PARAMS,
                                      save_model=True)
         self.clf = clf
         return self
@@ -590,6 +568,36 @@ class CommitRiskinessRFCM(ABC):
 
 class FastCommitRiskinessRFCM(CommitRiskinessRFCM):
     analyze_type = "fast"
+
+    DEFAULT_TRAIN_ALLOWED_COLUMNS = [
+        "defect_caused",
+        "deletions",
+        "additions",
+        "total_lines_modified",
+        "dayofweek",
+        "hour",
+        "len_message",
+        "changed_files",
+        "changed_directories",
+        "changed_subsystems",
+        "age",
+        "entropy",
+    ]
+
+    DEFAULT_PREDICT_ALLOWED_COLUMNS = [
+        "sha",
+        "deletions",
+        "additions",
+        "total_lines_modified",
+        "dayofweek",
+        "hour",
+        "len_message",
+        "changed_files",
+        "changed_directories",
+        "changed_subsystems",
+        "age",
+        "entropy",
+    ]
 
     def get_commit_stats(self, commit):
         import math
@@ -648,6 +656,42 @@ class FastCommitRiskinessRFCM(CommitRiskinessRFCM):
 
 class SlowCommitRiskinessRFCM(CommitRiskinessRFCM):
     analyze_type = "slow"
+
+    DEFAULT_TRAIN_ALLOWED_COLUMNS = [
+        "defect_caused",
+        "additions",
+        "deletions",
+        "total_lines_modified",
+        "lines_code_before_commit",
+        "changed_subsystems",
+        "changed_directories",
+        "changed_files",
+        "developers",
+        "files_unique_changes",
+        "author_changes",
+        "experience_weight",
+        "author_changes_subsystem",
+        "entropy",
+        "age",
+    ]
+
+    DEFAULT_PREDICT_ALLOWED_COLUMNS = [
+        "sha",
+        "additions",
+        "deletions",
+        "total_lines_modified",
+        "lines_code_before_commit",
+        "changed_subsystems",
+        "changed_directories",
+        "changed_files",
+        "developers",
+        "files_unique_changes",
+        "author_changes",
+        "experience_weight",
+        "author_changes_subsystem",
+        "entropy",
+        "age",
+    ]
 
     def get_commit_stats(self, commit):
         commit_stats = commit.stats.get("slow_model")
