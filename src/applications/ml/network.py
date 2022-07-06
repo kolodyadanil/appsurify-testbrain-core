@@ -476,10 +476,11 @@ class CommitRiskinessRFCM(ABC):
 
         for commit in commits:
             commit_stats = self.get_commit_stats(commit)
-            commit_stats["defect_caused"] = 0
-            if commit.caused_defects.count():
-                commit_stats["defect_caused"] = 1
-            dataset.append(commit_stats)
+            if commit_stats:
+                commit_stats["defect_caused"] = 0
+                if commit.caused_defects.count():
+                    commit_stats["defect_caused"] = 1
+                dataset.append(commit_stats)
 
         dataframe = pd.DataFrame(data=dataset)
         return dataframe
@@ -496,7 +497,9 @@ class CommitRiskinessRFCM(ABC):
         dataset = []
         for commit in commits:
             commit_stats = self.get_commit_stats(commit)
-            dataset.append(commit_stats)
+            if commit_stats:
+                dataset.append(commit_stats)
+
         dataframe = pd.DataFrame(data=dataset)
         return dataframe
 
