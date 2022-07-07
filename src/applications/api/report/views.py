@@ -3160,10 +3160,6 @@ class DefectReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMod
     """
     model = Defect
     serializer_class = DefectReportSerializer
-    serializer_action_classes = {
-        'list': DefectReportSerializer,
-        'retrieve': DefectDetailReportSerializer
-    }
     queryset = Defect.objects.all()
 
     filter_class = DefectReportFilterSet
@@ -3180,94 +3176,94 @@ class DefectReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMod
         queryset = queryset.filter(project__organization=get_current_organization(self.request))
         return queryset
 
-    def list(self, request, *args, **kwargs):
-        # TODO: add request validation
-        queryset = self.filter_queryset(self.get_queryset())
+    # def list(self, request, *args, **kwargs):
+    #     # TODO: add request validation
+    #     queryset = self.filter_queryset(self.get_queryset())
 
-        test_ids = set(list(queryset.values_list('associated_tests__id', flat=True)))
-        test_run_ids = set(list(queryset.values_list('found_test_runs__id', flat=True)))
+    #     test_ids = set(list(queryset.values_list('associated_tests__id', flat=True)))
+    #     test_run_ids = set(list(queryset.values_list('found_test_runs__id', flat=True)))
 
-        queryset_subquery = (
-            TestRunResult.objects
-                .filter(test_id=models.OuterRef('id'), test_run_id__in=test_run_ids)
-                .order_by('-created')
-                .values('status')[:1]
-        )
+    #     queryset_subquery = (
+    #         TestRunResult.objects
+    #             .filter(test_id=models.OuterRef('id'), test_run_id__in=test_run_ids)
+    #             .order_by('-created')
+    #             .values('status')[:1]
+    #     )
 
-        prefetch_passed_associated_tests = models.Prefetch(
-            'associated_tests',
-            queryset=Test.objects.filter(
-                id__in=test_ids,
-                test_runs__id__in=test_run_ids
-            ).annotate(
-                current_status=models.Subquery(queryset_subquery)
-            ).filter(
-                current_status=TestRunResult.STATUS_PASS
-            ),
-            to_attr='passed_associated_tests',
-        )
+    #     prefetch_passed_associated_tests = models.Prefetch(
+    #         'associated_tests',
+    #         queryset=Test.objects.filter(
+    #             id__in=test_ids,
+    #             test_runs__id__in=test_run_ids
+    #         ).annotate(
+    #             current_status=models.Subquery(queryset_subquery)
+    #         ).filter(
+    #             current_status=TestRunResult.STATUS_PASS
+    #         ),
+    #         to_attr='passed_associated_tests',
+    #     )
 
-        prefetch_failed_associated_tests = models.Prefetch(
-            'associated_tests',
-            queryset=Test.objects.filter(
-                id__in=test_ids,
-                test_runs__id__in=test_run_ids
-            ).annotate(
-                current_status=models.Subquery(queryset_subquery)
-            ).filter(
-                current_status=TestRunResult.STATUS_FAIL
-            ),
-            to_attr='failed_associated_tests',
-        )
+    #     prefetch_failed_associated_tests = models.Prefetch(
+    #         'associated_tests',
+    #         queryset=Test.objects.filter(
+    #             id__in=test_ids,
+    #             test_runs__id__in=test_run_ids
+    #         ).annotate(
+    #             current_status=models.Subquery(queryset_subquery)
+    #         ).filter(
+    #             current_status=TestRunResult.STATUS_FAIL
+    #         ),
+    #         to_attr='failed_associated_tests',
+    #     )
 
-        prefetch_broken_associated_tests = models.Prefetch(
-            'associated_tests',
-            queryset=Test.objects.filter(
-                id__in=test_ids,
-                test_runs__id__in=test_run_ids
-            ).annotate(
-                current_status=models.Subquery(queryset_subquery)
-            ).filter(
-                current_status=TestRunResult.STATUS_BROKEN
-            ),
-            to_attr='broken_associated_tests',
-        )
+    #     prefetch_broken_associated_tests = models.Prefetch(
+    #         'associated_tests',
+    #         queryset=Test.objects.filter(
+    #             id__in=test_ids,
+    #             test_runs__id__in=test_run_ids
+    #         ).annotate(
+    #             current_status=models.Subquery(queryset_subquery)
+    #         ).filter(
+    #             current_status=TestRunResult.STATUS_BROKEN
+    #         ),
+    #         to_attr='broken_associated_tests',
+    #     )
 
-        prefetch_not_run_associated_tests = models.Prefetch(
-            'associated_tests',
-            queryset=Test.objects.filter(
-                id__in=test_ids,
-                test_runs__id__in=test_run_ids
-            ).annotate(
-                current_status=models.Subquery(queryset_subquery)
-            ).filter(
-                current_status__in=[
-                    TestRunResult.STATUS_PENDING,
-                    TestRunResult.STATUS_SKIPPED,
-                    TestRunResult.STATUS_NOT_RUN
-                ]
-            ),
-            to_attr='not_run_associated_tests',
-        )
+    #     prefetch_not_run_associated_tests = models.Prefetch(
+    #         'associated_tests',
+    #         queryset=Test.objects.filter(
+    #             id__in=test_ids,
+    #             test_runs__id__in=test_run_ids
+    #         ).annotate(
+    #             current_status=models.Subquery(queryset_subquery)
+    #         ).filter(
+    #             current_status__in=[
+    #                 TestRunResult.STATUS_PENDING,
+    #                 TestRunResult.STATUS_SKIPPED,
+    #                 TestRunResult.STATUS_NOT_RUN
+    #             ]
+    #         ),
+    #         to_attr='not_run_associated_tests',
+    #     )
 
-        queryset = queryset.prefetch_related(
-            prefetch_passed_associated_tests,
-            prefetch_failed_associated_tests,
-            prefetch_broken_associated_tests,
-            prefetch_not_run_associated_tests
-        )
+    #     queryset = queryset.prefetch_related(
+    #         prefetch_passed_associated_tests,
+    #         prefetch_failed_associated_tests,
+    #         prefetch_broken_associated_tests,
+    #         prefetch_not_run_associated_tests
+    #     )
 
-        queryset = queryset.annotate(
-            associated_tests__count=models.Count('associated_tests__id', distinct=True),
-        )
+    #     queryset = queryset.annotate(
+    #         associated_tests__count=models.Count('associated_tests__id', distinct=True),
+    #     )
 
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
+    #     page = self.paginate_queryset(queryset)
+    #     if page is not None:
+    #         serializer = self.get_serializer(page, many=True)
+    #         return self.get_paginated_response(serializer.data)
 
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+    #     serializer = self.get_serializer(queryset, many=True)
+    #     return Response(serializer.data)
 
     # @swagger_auto_schema(responses={200: DefectSeverityReportSerializer()})
     @action(methods=['GET', ], detail=False)
