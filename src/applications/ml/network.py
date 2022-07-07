@@ -194,7 +194,7 @@ class TestPrioritizationCBM(object):
         predict_X = predict_df.drop(columns=["test_id"], axis=1).values
 
         predicts = clf.predict(data=predict_X, prediction_type="Probability")
-        predicts = predicts[:, 0]
+        predicts = predicts[:, 1]
         predicts_df = pd.DataFrame({"test_id": predict_y, "result": predicts, "test_names": predict_test_names})
 
         if keyword:
