@@ -119,7 +119,7 @@ LOGGING = {
         "applications": {
             "handlers": ["console", "applications.file", ],
             "level": "DEBUG",
-            "propagate": True
+            "propagate": False
         },
         "applications.ml": {
             "handlers": ["console", "ml.file", ],

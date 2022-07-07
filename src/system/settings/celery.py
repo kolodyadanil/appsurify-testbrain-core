@@ -135,6 +135,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "applications.testing.tasks.update_materialized_view",
         "schedule": crontab(minute='*/5'),
     },
+    "cleanup_vcs_items": {
+        "task": "applications.testing.vcs.clean_duplicates_from_vcs",
+        "schedule": crontab(minute='*/30'),
+    },
 }
 
 CELERYD_POOL_RESTARTS = CELERY_WORKER_POOL_RESTARTS

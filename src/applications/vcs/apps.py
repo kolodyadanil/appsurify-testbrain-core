@@ -48,5 +48,6 @@ class VCSConfig(AppConfig):
     verbose_name = _('VCS (Version Control System)')
     
     def ready(self):
-        import applications.vcs.signals
-        pre_migrate.connect(delete_duplicated_sha, sender=self)
+        # import applications.vcs.signals
+        # pre_migrate.connect(delete_duplicated_sha, sender=self)
+        ...

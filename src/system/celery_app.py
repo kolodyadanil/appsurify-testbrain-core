@@ -3,6 +3,8 @@ import os
 
 from celery import Celery
 from celery import signals  # noqa
+from celery_singleton import clear_locks
+from celery_singleton import Singleton
 
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "system.settings")
@@ -17,11 +19,6 @@ def on_after_setup_logger(**kwargs):
     from logging.config import dictConfig  # noqa
     from django.conf import settings  # noqa
     dictConfig(settings.LOGGING)
-    # import logging
-    # logger = logging.getLogger('celery')
-    # logger.propagate = False
-    # logger = logging.getLogger('celery.app.trace')
-    # logger.propagate = False
 
 
 app.autodiscover_tasks()
@@ -33,3 +30,8 @@ def debug(self, a=1, r=2, g=3, timeout=15):
     import time
     time.sleep(timeout)
     return {"a": a, "r": r, "g": g, "timeout": timeout}
+
+
+@signals.worker_ready.connect
+def unlock_all(**kwargs):
+    clear_locks(app)
