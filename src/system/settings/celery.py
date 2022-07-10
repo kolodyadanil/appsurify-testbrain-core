@@ -136,7 +136,7 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(minute='*/5'),
     },
     "cleanup_vcs_items": {
-        "task": "applications.vcs.clean_duplicates_from_vcs",
+        "task": "applications.vcs.tasks.clean_duplicates_from_vcs",
         "schedule": crontab(minute='*/30'),
     },
 }

@@ -184,7 +184,7 @@ def create_sequence(test_suite_id: int) -> typing.Union[models.QuerySet, typing.
             model.save()
 
     while model is not None:
-        next_fr = model.to
+        next_fr = model.to_date
         next_to = next_fr + relativedelta(months=default_months) + relativedelta(day=31)
 
         if current_datetime >= next_to:
