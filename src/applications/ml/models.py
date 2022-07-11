@@ -135,7 +135,8 @@ class MLModel(models.Model):
 
             ml_model.save()
             try:
-                prev_ml_model = cls.objects.filter(test_suite_id=test_suite_id, index=ml_model.index - 1).last()
+                prev_ml_model = cls.objects.order_by("test_suite", "index").filter(
+                    test_suite_id=test_suite_id, index=ml_model.index - 1).last()
                 if prev_ml_model is None:
                     result = ml_model.train()
                 else:

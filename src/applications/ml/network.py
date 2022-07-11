@@ -105,9 +105,12 @@ class TestPrioritizationCBM(object):
     def _read_file(self, file) -> pd.DataFrame:
         """ Clean spec symbols """
         data = open(file, "r").read()
-        data = data.replace("\\\\", "\\")
-        file = io.StringIO(data)
-        df = pd.read_json(file)
+        if data:
+            data = data.replace("\\\\", "\\")
+            file = io.StringIO(data)
+            df = pd.read_json(file)
+        else:
+            df = pd.DataFrame()
         return df
 
     def _prepare_mlb_classes(self, files: typing.List, mlb_columns: typing.Optional[typing.List[str]]) -> typing.Dict:
