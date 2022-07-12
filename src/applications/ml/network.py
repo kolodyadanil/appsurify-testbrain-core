@@ -196,8 +196,13 @@ class TestPrioritizationCBM(object):
         predict_y = predict_df["test_id"].values
         predict_X = predict_df.drop(columns=["test_id"], axis=1).values
 
-        predicts = clf.predict(data=predict_X, prediction_type="Probability")
-        predicts = predicts[:, 1]
+        try:
+            predicts = clf.predict(data=predict_X, prediction_type="Probability")
+            predicts = predicts[:, 1]
+        except cb.CatboostError as exc:
+            logger.exception(f"Predict have error {exc}", exc_info=True)
+            predicts = np.full(int(predict_y.shape[0]), 0.0, dtype=float)
+
         predicts_df = pd.DataFrame({"test_id": predict_y, "result": predicts, "test_names": predict_test_names})
 
         if keyword:
@@ -213,6 +218,9 @@ class TestPrioritizationCBM(object):
         predicts_df.sort_values(by=["test_id", "result"], ignore_index=True, ascending=False, inplace=True)
         predicts_df.drop_duplicates(subset=["test_id"], keep="last", ignore_index=True, inplace=True)
         return predicts_df
+
+
+
 
     def _fit_model(self, df: pd.DataFrame,
                   test_size: typing.Optional[float] = 0.25,
