@@ -6,6 +6,26 @@ from django.db import connection
 def create_functions(**kwargs):
     print('  (re)creating testing help functions...')
     sql = """
+CREATE OR REPLACE FUNCTION array_cleanup(arr text[], dflt text[] DEFAULT ARRAY [''])
+    RETURNS text[]
+    LANGUAGE plpgsql
+AS $function$
+DECLARE
+    arr_out text[];
+BEGIN
+    arr_out = array_remove(arr, NULL);
+    arr_out := array_remove(arr_out, ' ');
+    arr_out := array_remove(arr_out, '');
+
+    IF cardinality(arr_out) > 0 THEN
+        RETURN arr_out;
+    ELSE
+        RETURN dflt;
+    END IF;
+END;
+$function$;
+
+
 CREATE OR REPLACE FUNCTION assign_test_result_type
 (
     td testing_defect,
@@ -61,7 +81,7 @@ BEGIN
     FOR i IN 1 .. array_upper(arr, 1) LOOP
         arr_out[i] := rtrim(ltrim(regexp_replace(lower(replace(arr[i], ' ', '_')), E'[\n\r]+', '', 'g')));
     END LOOP;
-    
+
     RETURN arr_out;
 END;
 $function$;
