@@ -1694,11 +1694,27 @@ class TestRunReportModelViewSet(MultiSerializerViewSetMixin, viewsets.ReadOnlyMo
             return test_suite
 
     def list(self, request, *args, **kwargs):
-
+        ordering = str(request.query_params.get("ordering"))
+        if ordering == "-test_run":
+            ordering = "-name"
+        elif ordering == "test_run":
+            ordering = "name"
+        elif ordering == "start_date":
+            ordering = "start_date"
+        elif ordering == "test_suite":
+            ordering = "test_suite__name"
+        elif ordering == "-test_suite":
+            ordering = "-test_suite__name"
+        elif ordering == "project":
+            ordering = "project__name"
+        elif ordering == "-project":
+            ordering = "-project__name"
+        else:
+            ordering = "-start_date"
         filters_serializer = self.TestRunListFilterSerializer(data=request.query_params)
         filters_serializer.is_valid(raise_exception=True)
 
-        queryset = test_run_report_list(filters=filters_serializer.validated_data)
+        queryset = test_run_report_list(filters=filters_serializer.validated_data).order_by(ordering)
 
         page = self.paginate_queryset(queryset)
 

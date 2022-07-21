@@ -84,8 +84,8 @@ class ProjectModelViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = super(ProjectModelViewSet, self).get_queryset()
         user = self.request.user
-        if user.is_superuser:
-            return queryset
+        # if user.is_superuser:
+        #     return queryset
 
         organization = get_current_organization(request=self.request)
         if organization:
