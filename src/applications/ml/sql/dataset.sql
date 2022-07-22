@@ -1,6 +1,7 @@
 WITH test_suite_id AS (SELECT {test_suite_id} AS test_suite_id, {test_id} as test_id),
 min_date AS (SELECT '{min_date}'::timestamp as min_date),
 max_date AS (SELECT '{max_date}'::timestamp as max_date),
+
 ttrr AS
 (
     SELECT
@@ -298,6 +299,27 @@ tt.name,
 vc.sha,
 vc.rework,
 vc.riskiness),
+defect_caused_by_commits_messages AS (
+SELECT tt.project_id,
+tt.name as test_name,
+vc.sha,
+vc.rework,
+vc.riskiness,
+    array_cleanup((array_agg(DISTINCT vc.message)), NULL) AS defect_caused_by_commits_messages
+FROM ttrr
+INNER JOIN vcs_commit vc on ttrr.vc_id = vc.id
+INNER JOIN testing_test tt on ttrr.tt_id = tt.id
+INNER JOIN testing_defect td on ttrr.vc_id = td.created_by_commit_id and ttrr.test_run_id = td.created_by_test_run_id
+INNER JOIN testing_defect_caused_by_commits tdcabc ON td.id = tdcabc.defect_id
+INNER JOIN vcs_commit vccbc on tdcabc.commit_id = vccbc.id
+WHERE (
+tdcabc.updated > (SELECT min_date FROM min_date) AND tdcabc.updated < (SELECT max_date FROM max_date)
+)
+GROUP BY tt.project_id,
+tt.name,
+vc.sha,
+vc.rework,
+vc.riskiness),
 defect_caused_by_commits_folders AS (
 SELECT t.project_id,
 	t.test_name,
@@ -587,6 +609,7 @@ ttrr.rework AS commit_rework,
 ttrr.riskiness::numeric::integer * 100 AS commit_riskiness,
 ca.commit_areas,
 cf.commit_files,
+dccm.defect_caused_by_commits_messages AS defect_caused_by_commits_messages,
 COALESCE(dccf.defect_caused_by_commits_files, file_slr.files_since_last_run) AS defect_caused_by_commits_files,
 COALESCE(dcca.defect_caused_by_commits_areas, aslr.areas_since_last_run) AS defect_caused_by_commits_areas,
 COALESCE(dccda.defect_caused_by_commits_dependent_areas, daslr.dependent_areas_since_last_run) AS defect_caused_by_commits_dependent_areas,
@@ -622,6 +645,11 @@ LEFT OUTER JOIN commit_files cf ON ttrr.project_id = cf.project_id
 	and ttrr.sha = cf.sha
 	and ttrr.rework = cf.rework
 	and ttrr.riskiness = cf.riskiness
+LEFT OUTER JOIN defect_caused_by_commits_messages dccm ON ttrr.project_id = dccm.project_id
+	and ttrr.test_name = dccm.test_name
+	and ttrr.sha = dccm.sha
+	and ttrr.rework = dccm.rework
+	and ttrr.riskiness = dccm.riskiness
 LEFT OUTER JOIN defect_caused_by_commits_files dccf ON ttrr.project_id = dccf.project_id
 	and ttrr.test_name = dccf.test_name
 	and ttrr.sha = dccf.sha

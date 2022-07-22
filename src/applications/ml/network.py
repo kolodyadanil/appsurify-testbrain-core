@@ -355,6 +355,7 @@ class TestPrioritizationCBM(object):
         commit_ids = list(set(list(commits.values_list("id", flat=True))))
 
         raw_sql = predict_sql(test_ids=test_ids, commit_ids=commit_ids)
+        # print(f"\n{raw_sql}\n\nTestSuiteID: predict_test_suite_{self.test_suite_id}_{self.ml_model.test_suite.name}.json")
         raw_data = native_execute_query(query=raw_sql)
         df = pd.DataFrame(raw_data)
 

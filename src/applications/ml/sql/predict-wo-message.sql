@@ -14,13 +14,12 @@ vc AS
         tt.id AS tt_id,
         tt.name as tt_name,
         tt.class_name,
-        va.name as va_name,
-        vc.message
+        va.name as va_name
     FROM vcs_commit vc
 				INNER JOIN testing_test tt on tt.id IN (SELECT test_id FROM test_ids)
         INNER JOIN vcs_area va ON tt.area_id = va.id
     WHERE vc.id IN (SELECT vc_id FROM vc_id)
-GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
+GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
 ),
 vc_grp AS (
     SELECT
@@ -116,13 +115,6 @@ FROM vc
 INNER JOIN vcs_filechange vfc3 on vfc3.commit_id = vc.vc_id
 INNER JOIN vcs_file vf3 on vf3.id = vfc3.file_id
 GROUP BY vc.test_id),
-defect_caused_by_commits_messages AS (
-SELECT vc.test_id,
-    array_cleanup((array_agg(DISTINCT vc.message)), NULL) AS defect_caused_by_commits_messages
-FROM vc
-INNER JOIN vcs_filechange vfc3 on vfc3.commit_id = vc.vc_id
-INNER JOIN vcs_file vf3 on vf3.id = vfc3.file_id
-GROUP BY vc.test_id),
 defect_caused_by_commits_folders AS (
 SELECT t.test_id,
     array_cleanup(normalize_filepath_string(array_agg(DISTINCT t.folder)), NULL) AS defect_caused_by_commits_folders
@@ -166,7 +158,6 @@ vc.riskiness::numeric::integer * 100 AS commit_riskiness,
 ca.commit_areas,
 cf.commit_files,
 dccf.defect_caused_by_commits_files,
-dccm.defect_caused_by_commits_messages,
 dcca.defect_caused_by_commits_areas,
 dccda.defect_caused_by_commits_dependent_areas,
 vc.defect_closed_by_caused_by_intersection_areas,
@@ -182,7 +173,6 @@ LEFT OUTER JOIN test_dependent_areas tda ON vc.test_id = tda.test_id
 LEFT OUTER JOIN commit_areas ca ON vc.test_id = ca.test_id
 LEFT OUTER JOIN commit_files cf ON vc.test_id = cf.test_id
 LEFT OUTER JOIN defect_caused_by_commits_files dccf ON vc.test_id = dccf.test_id
-LEFT OUTER JOIN defect_caused_by_commits_messages dccm ON vc.test_id = dccf.test_id
 LEFT OUTER JOIN defect_caused_by_commits_areas dcca ON vc.test_id = dcca.test_id
 LEFT OUTER JOIN defect_caused_by_commits_dependent_areas dccda ON vc.test_id = dccda.test_id
 LEFT OUTER JOIN defect_caused_by_commits_folders dccfld ON vc.test_id = dccfld.test_id
