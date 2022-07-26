@@ -207,7 +207,7 @@ class TestPrioritizationCBM(object):
 
         if keyword:
             predicts_df["result"] = predicts_df.apply(
-                lambda x: 1.0 if similarity(x.loc["test_names"][0], "desktop") >= 0.5 else x.loc["result"], axis=1)
+                lambda x: 1.0 if similarity(x.loc["test_names"][0], keyword) >= 0.5 else x.loc["result"], axis=1)
 
         predicts_df["result"] = predicts_df["result"].round(decimals=2)
 
@@ -218,9 +218,6 @@ class TestPrioritizationCBM(object):
         predicts_df.sort_values(by=["test_id", "result"], ignore_index=True, ascending=False, inplace=True)
         predicts_df.drop_duplicates(subset=["test_id"], keep="last", ignore_index=True, inplace=True)
         return predicts_df
-
-
-
 
     def _fit_model(self, df: pd.DataFrame,
                   test_size: typing.Optional[float] = 0.25,
