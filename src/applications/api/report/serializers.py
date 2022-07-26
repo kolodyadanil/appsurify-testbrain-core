@@ -453,56 +453,53 @@ class TestRunResultReportSerializer(DynamicFieldsModelSerializer):
         model = TestRunResult
         fields = '__all__'
 
-class DefectReportSerializer(serializers.Serializer):
-    id = serializers.IntegerField(read_only=True)
-    name = serializers.CharField(read_only=True)
-    status = serializers.IntegerField(read_only=True)
-    priority = serializers.IntegerField(read_only=True)
-    severity = serializers.IntegerField(read_only=True)
-    type = serializers.IntegerField(read_only=True)
-    project = ProjectRelatedSerializer(fields=('id', 'name'), queryset=Project.objects.all())
-
-
-class DefectDetailReportSerializer(DynamicFieldsModelSerializer):
-    project = ProjectRelatedSerializer(fields=('id', 'name'), queryset=Project.objects.all())
-    owner = UserRelatedSerializer(fields=('id', 'username'), queryset=User.objects.all(), required=False)
-    priority = serializers.IntegerField(default=1, min_value=1, max_value=10)
-
-    passed_associated_tests = serializers.ListSerializer(
-        child=TestReportSerializer(read_only=True),
-        read_only=True,
-        allow_null=True,
-        allow_empty=True
-    )
-    failed_associated_tests = serializers.ListSerializer(
-        child=TestReportSerializer(read_only=True),
-        read_only=True,
-        allow_null=True,
-        allow_empty=True
-    )
-    broken_associated_tests = serializers.ListSerializer(
-        child=TestReportSerializer(read_only=True),
-        read_only=True,
-        allow_null=True,
-        allow_empty=True
-    )
-    not_run_associated_tests = serializers.ListSerializer(
-        child=TestReportSerializer(read_only=True),
-        read_only=True,
-        allow_null=True,
-        allow_empty=True
-    )
-
-    found_commits = CommitRelatedSerializer(fields=('id', 'display_id', 'message', 'url'),
-                                            queryset=Commit.objects.all(), many=True, required=False, allow_empty=True,
-                                            allow_null=True)
-    caused_by_commit = CommitRelatedSerializer(fields=('id', 'display_id', 'message', 'url'),
-                                               queryset=Commit.objects.all(), required=False, allow_empty=True,
-                                               allow_null=True)
-
-    class Meta(object):
+class DefectReportSerializer(serializers.ModelSerializer):
+    class Meta:
         model = Defect
-        fields = '__all__'
+        fields = ['id', 'name', 'status', 'priority', 'severity', 'type', 'project']
+        read_only_fields = ['id', 'name', 'status', 'priority', 'severity', 'type', 'project']
+
+
+# class DefectDetailReportSerializer(DynamicFieldsModelSerializer):
+#     project = ProjectRelatedSerializer(fields=('id', 'name'), queryset=Project.objects.all())
+#     owner = UserRelatedSerializer(fields=('id', 'username'), queryset=User.objects.all(), required=False)
+#     priority = serializers.IntegerField(default=1, min_value=1, max_value=10)
+
+#     passed_associated_tests = serializers.ListSerializer(
+#         child=TestReportSerializer(read_only=True),
+#         read_only=True,
+#         allow_null=True,
+#         allow_empty=True
+#     )
+#     failed_associated_tests = serializers.ListSerializer(
+#         child=TestReportSerializer(read_only=True),
+#         read_only=True,
+#         allow_null=True,
+#         allow_empty=True
+#     )
+#     broken_associated_tests = serializers.ListSerializer(
+#         child=TestReportSerializer(read_only=True),
+#         read_only=True,
+#         allow_null=True,
+#         allow_empty=True
+#     )
+#     not_run_associated_tests = serializers.ListSerializer(
+#         child=TestReportSerializer(read_only=True),
+#         read_only=True,
+#         allow_null=True,
+#         allow_empty=True
+#     )
+
+#     found_commits = CommitRelatedSerializer(fields=('id', 'display_id', 'message', 'url'),
+#                                             queryset=Commit.objects.all(), many=True, required=False, allow_empty=True,
+#                                             allow_null=True)
+#     caused_by_commit = CommitRelatedSerializer(fields=('id', 'display_id', 'message', 'url'),
+#                                                queryset=Commit.objects.all(), required=False, allow_empty=True,
+#                                                allow_null=True)
+
+#     class Meta(object):
+#         model = Defect
+#         fields = '__all__'
 
 
 class DefectSeverityReportSerializer(serializers.Serializer):
