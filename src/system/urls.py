@@ -6,12 +6,21 @@ from django.conf import settings
 from django.http import HttpResponse
 import re
 
+
+def waiter_view(request):
+    import time
+    time.sleep(90)
+    return HttpResponse(status=200, content='OK')
+
+
 urlpatterns = [
     url(r'^grappelli/', include('grappelli.urls')),  # grappelli URLS
     url(r'^admin/', admin.site.urls),
     url(r'^api/', include('applications.api.urls')),
     # url(r'^payments/', include('djstripe.urls', namespace='djstripe')),
     url(r'^healthy/', lambda r: HttpResponse(status=200, content='OK')),
+
+    url(r'^api/waiter/', waiter_view),
 
 ]
 

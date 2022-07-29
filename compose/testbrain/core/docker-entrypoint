@@ -66,10 +66,4 @@ for line in $(env | sort | sed 's/\=/::/' | awk -F '::' '{print $1"=""\""$2"\""}
     echo "export $line" >> ~/.bashrc;
   done
 
-# Log dirs
-#mkdir -p /opt/app/logs/{nginx,gunicorn}
-#python manage.py migrate --no-input || :
-#python manage.py collectstatic --no-input || :
-#python manage.py auto_createsuperuser || :
-
 exec "$@"

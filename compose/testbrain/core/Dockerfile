@@ -25,7 +25,7 @@ RUN apt-get update -y && apt-get install -y \
     libpq-dev gettext wget gnupg p7zip-full openssh-server \
     ssh net-tools git gcc make software-properties-common \
     locales libcurl4-openssl-dev librtmp-dev libssl-dev default-jre \
-    cron mailutils postfix postgresql-client nano htop rsyslog\
+    cron mailutils postfix postgresql-client nano htop rsyslog psmisc\
     && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false
 
 # Requirements are installed here to ensure they will be cached.
