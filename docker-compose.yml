@@ -11,7 +11,7 @@ x-testbrain-docker: &testbrian
   build:
     context: .
     dockerfile: ./compose/testbrain/core/Dockerfile
-  image: appsurifyinc/testbrain-core:latest
+  image: appsurifyinc/testbrain-core:development
   depends_on:
     - postgres
     - rabbitmq
@@ -39,8 +39,8 @@ services:
     <<: *testbrian
     container_name: testbrain-api
     restart: always
-    command: python manage.py runserver 0.0.0.0:9000
-    # command: /start-api
+    # command: python manage.py runserver 0.0.0.0:9000
+    command: /start-api
     ports:
       - 9000:9000
 
