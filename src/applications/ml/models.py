@@ -7,7 +7,7 @@ from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from applications.ml.utils.dataset import get_dataset_test_ids, export_datasets
 from applications.ml.utils.log import logger
-from applications.ml.network import TestPrioritizationCBM
+from applications.ml.network import TestPrioritizationCBM, TestPrioritizationNLPCBM
 
 
 class States(models.TextChoices):
@@ -148,6 +148,17 @@ class MLModel(models.Model):
                 raise exc
 
     @classmethod
+    def train_nlp_model(cls, project_id):
+        from applications.project.models import Project
+        try:
+            project = Project.objects.get(id=project_id)
+            tpcbm = TestPrioritizationNLPCBM(organization_id=project.organization_id, project_id=project.id)
+            tpcbm.train()
+            return tpcbm
+        except Exception as exc:
+            raise exc
+
+    @classmethod
     def load_model(cls, test_suite_id) -> TestPrioritizationCBM:
         ml_model = cls.objects.filter(test_suite_id=test_suite_id, state=States.TRAINED).order_by("index").last()
         if ml_model is not None:
@@ -156,6 +167,21 @@ class MLModel(models.Model):
                 logger.error(f"Classifier not fitted for {ml_model}")
                 tpcbm = None
         else:
+            tpcbm = None
+        return tpcbm
+
+    @classmethod
+    def load_nlp_model(cls, project_id) -> TestPrioritizationNLPCBM:
+        from applications.project.models import Project
+        tpcbm = None
+        try:
+            project = Project.objects.get(id=project_id)
+            tpcbm = TestPrioritizationNLPCBM(organization_id=project.organization_id, project_id=project.id)
+            if not tpcbm.is_fitted:
+                logger.error(f"Classifier not fitted for {project_id}")
+                tpcbm = None
+        except Exception as exc:
+            logger.exception(f"Classifier not load for {project_id}", exc_info=True)
             tpcbm = None
         return tpcbm
 

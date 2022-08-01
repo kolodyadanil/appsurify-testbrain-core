@@ -6,15 +6,9 @@ import pytz
 import pandas as pd
 import numpy as np
 import catboost as cb
-from catboost.utils import get_confusion_matrix
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report
-from sklearn.metrics import confusion_matrix
-from nltk.stem import PorterStemmer
-from statsmodels.distributions.empirical_distribution import ECDF
-import tensorflow_hub as hub
 
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
@@ -23,13 +17,11 @@ from abc import ABC, abstractmethod
 
 from applications.ml.utils.log import logger
 from applications.ml.utils.crypt import hash_list_values
-from applications.ml.utils.dataset import get_dataset_filelist, get_nlp_dataset_filelist
+from applications.ml.utils.dataset import get_dataset_filelist
 from applications.ml.utils.model import (get_model_directory, get_model_filename, predict_sql,
-                                         get_riskiness_model_directory, get_riskiness_model_filename,
-                                         get_nlp_model_directory, get_nlp_model_filename)
-from applications.ml.utils.text import similarity, similarity_np
+                                         get_riskiness_model_directory, get_riskiness_model_filename)
+from applications.ml.utils.text import similarity
 from applications.ml.utils.database import native_execute_query
-from applications.ml.utils.text import get_vector_from_list
 
 
 warnings.filterwarnings("ignore")
@@ -99,9 +91,9 @@ class TestPrioritizationCBM(object):
         self.model_filepath = str(self.model_directory / self.model_filename)
 
         self._clf = None
-        self._load_model()
+        self._load_classifier()
 
-    def _load_model(self):
+    def _load_classifier(self):
         clf = cb.CatBoostClassifier()
         try:
             clf.load_model(self.model_filepath)
@@ -172,7 +164,8 @@ class TestPrioritizationCBM(object):
                 df = df[allowed_columns]
 
             for column_name in mlb_columns:
-
+                df[column_name] = df[column_name].replace(np.NaN, None)
+                df[column_name] = df[column_name].apply(lambda x: x if x is not None else [])
 
                 df[column_name] = df[column_name].apply(hash_list_values)
 
@@ -359,7 +352,7 @@ class TestPrioritizationCBM(object):
         commit_ids = list(set(list(commits.values_list("id", flat=True))))
 
         raw_sql = predict_sql(test_ids=test_ids, commit_ids=commit_ids)
-
+        # print(f"\n{raw_sql}\n\nTestSuiteID: predict_test_suite_{self.test_suite_id}_{self.ml_model.test_suite.name}.json")
         raw_data = native_execute_query(query=raw_sql)
         df = pd.DataFrame(raw_data)
 
@@ -716,367 +709,3 @@ class SlowCommitRiskinessRFCM(CommitRiskinessRFCM):
         if commit_stats:
             commit_stats["sha"] = commit.sha
         return commit_stats
-
-
-class TestPrioritizationNLPCBM(object):
-    DEFAULT_TRAIN_PARAMS = {
-        "auto_class_weights": "Balanced",
-        "iterations": 100,
-        "depth": 10
-    }
-
-    DEFAULT_TRAIN_GGRR_PARAMS = {
-        "iterations": [100, 150, 200],
-        "learning_rate": [0.03, 0.1],
-        "depth": [2, 4, 6, 8],
-        "l2_leaf_reg": [0.2, 0.5, 1, 3]
-    }
-
-    DEFAULT_LIST_OF_FEATURES = [
-        "test_names_to_commit_files",
-        "test_names_to_commit_folders",
-        "test_names_to_commit_dependent_areas",
-        "test_class_to_commit_areas",
-        "test_class_to_commit_files",
-        "test_class_to_commit_dependent_areas",
-        "test_areas_to_commit_dependent_areas",
-    ]
-
-    DEFAULT_TRAIN_COLUMNS = [
-        "test_names",
-        "test_classes_names",
-        "test_areas",
-        "defect_closed_by_caused_by_intersection_areas",
-        "defect_closed_by_caused_by_intersection_files",
-        "defect_closed_by_caused_by_intersection_folders",
-        "defect_closed_by_caused_by_intersection_dependent_areas"
-    ]
-
-    DEFAULT_TRAIN_TARGET_COLUMN = "test_changed"
-
-    DEFAULT_PREDICT_COLUMNS = [
-        "test_names",
-        "test_classes_names",
-        "test_areas",
-        "defect_closed_by_caused_by_intersection_areas",
-        "defect_closed_by_caused_by_intersection_files",
-        "defect_closed_by_caused_by_intersection_folders",
-        "defect_closed_by_caused_by_intersection_dependent_areas"
-    ]
-
-    DEFAULT_PREDICT_TARGET_COLUMN = "test_id"
-
-    def _init_ml_model(self, ml_model):
-        self.ml_model = ml_model
-        self.organization_id = ml_model.test_suite.project.organization_id
-        self.project_id = ml_model.test_suite.project_id
-        self.test_suite_id = ml_model.test_suite_id
-        self.index = ml_model.index
-        self.test_ids = ml_model.tests.values_list("id", flat=True)
-
-        self.model_directory = get_model_directory(
-            organization_id=self.organization_id,
-            project_id=self.project_id,
-            test_suite_id=self.test_suite_id,
-            index=self.index
-        )
-        self.model_filename = get_model_filename(test_suite_id=self.test_suite_id)
-        self.model_filepath = str(self.model_directory / self.model_filename)
-
-    def _init_params(self, organization_id, project_id):
-        self.ml_model = None
-        self.organization_id = organization_id
-        self.project_id = project_id
-        # self.test_suite_id = ml_model.test_suite_id
-        # self.index = ml_model.index
-        # self.test_ids = ml_model.tests.values_list("id", flat=True)
-
-        self.model_directory = get_nlp_model_directory(
-            organization_id=self.organization_id,
-            project_id=self.project_id
-        )
-        self.model_filename = get_nlp_model_filename(project_id=self.project_id)
-        self.model_filepath = str(self.model_directory / self.model_filename)
-
-    def __init__(self, ml_model = None, organization_id = None, project_id = None):
-        if ml_model is not None:
-            self._init_ml_model(ml_model=ml_model)
-        else:
-            self._init_params(organization_id=organization_id, project_id=project_id)
-        self._clf = None
-        self._load_model()
-
-    def _load_model(self):
-        clf = cb.CatBoostClassifier()
-        try:
-            clf.load_model(self.model_filepath)
-            if clf.is_fitted():
-                self.clf = clf
-        except Exception as exc:
-            self.clf = None
-
-    @property
-    def clf(self) -> cb.CatBoostClassifier:
-        return self._clf
-
-    @clf.setter
-    def clf(self, obj: cb.CatBoostClassifier):
-        self._clf = obj
-
-    @property
-    def is_fitted(self):
-        if self._clf is not None:
-            return self._clf.is_fitted()
-        else:
-            return False
-
-    def _read_file(self, file) -> pd.DataFrame:
-        """ Clean spec symbols """
-        data = open(file, "r").read()
-        if data:
-            data = data.replace("\\\\", "\\")
-            file = io.StringIO(data)
-            df = pd.read_json(file)
-        else:
-            df = pd.DataFrame()
-        return df
-
-    def _prepare_dataframe(self, df: pd.DataFrame,
-                           target_column: typing.AnyStr,
-                           target_columns: typing.List[str],
-                           list_of_features: typing.List[str]) -> pd.DataFrame:
-
-        prepared_df = pd.DataFrame()
-
-        if not df.empty:
-
-            for column_name in target_columns:
-                df[column_name] = df[column_name].replace(np.NaN, None)
-                df[column_name] = df[column_name].apply(lambda x: x if x is not None else ["Null"])
-
-            new_features = {i: [] for i in list_of_features + [target_column]}
-
-            # Generate features
-            for idx, row in df.iterrows():
-
-                test_names = [row.test_names]
-                test_classes_names = [row.test_classes_names]
-                test_areas = [row.test_areas]
-                defect_closed_by_caused_by_intersection_areas = [row.defect_closed_by_caused_by_intersection_areas]
-                defect_closed_by_caused_by_intersection_files = [row.defect_closed_by_caused_by_intersection_files]
-                defect_closed_by_caused_by_intersection_folders = [row.defect_closed_by_caused_by_intersection_folders]
-                defect_closed_by_caused_by_intersection_dependent_areas = [row.defect_closed_by_caused_by_intersection_dependent_areas]
-
-                test_names_vector = get_vector_from_list(test_names)
-                test_classes_names_vector = get_vector_from_list(test_classes_names)
-                test_areas_vector = get_vector_from_list(test_areas)
-
-                commits_area_vector = get_vector_from_list(defect_closed_by_caused_by_intersection_areas)
-                commits_file_vector = get_vector_from_list(defect_closed_by_caused_by_intersection_files)
-                commits_folder_vector = get_vector_from_list(defect_closed_by_caused_by_intersection_folders)
-                commits_dependent_vector = get_vector_from_list(defect_closed_by_caused_by_intersection_dependent_areas)
-
-                test_names_to_commit_files = similarity_np(test_names_vector, commits_file_vector)
-                test_names_to_commit_folders = similarity_np(test_names_vector, commits_folder_vector)
-                test_names_to_commit_dependent_areas = similarity_np(test_names_vector, commits_dependent_vector)
-
-                test_class_to_commit_areas = similarity_np(test_classes_names_vector, commits_area_vector)
-                test_class_to_commit_files = similarity_np(test_classes_names_vector, commits_file_vector)
-                test_class_to_commit_dependent_areas = similarity_np(test_classes_names_vector, commits_dependent_vector)
-
-                test_areas_to_commit_dependent_areas = similarity_np(test_areas_vector, commits_dependent_vector)
-
-                new_features["test_names_to_commit_files"].append(test_names_to_commit_files)
-                new_features["test_names_to_commit_folders"].append(test_names_to_commit_folders)
-                new_features["test_names_to_commit_dependent_areas"].append(test_names_to_commit_dependent_areas)
-                new_features["test_class_to_commit_areas"].append(test_class_to_commit_areas)
-                new_features["test_class_to_commit_files"].append(test_class_to_commit_files)
-                new_features["test_class_to_commit_dependent_areas"].append(test_class_to_commit_dependent_areas)
-                new_features["test_areas_to_commit_dependent_areas"].append(test_areas_to_commit_dependent_areas)
-
-                new_features[target_column].append(row[target_column])
-
-            prepared_df = pd.DataFrame(new_features)
-            prepared_df = prepared_df[list_of_features + [target_column]]
-
-        return prepared_df
-
-    def _fit_model(self, df: pd.DataFrame, test_size: typing.Optional[float] = 0.5,
-                   random_state: int = 0, stratify: typing.Optional[pd.Series] = None,
-                   train_params: typing.Optional[typing.Dict] = None) -> cb.CatBoostClassifier:
-
-        if stratify is None:
-            stratify = df['test_changed']
-
-        if train_params is None:
-            train_params = self.DEFAULT_TRAIN_PARAMS
-
-        train, test = train_test_split(df, test_size=test_size, random_state=random_state, stratify=stratify)
-
-        y_train = train["test_changed"].values
-        X_train = train.drop(columns=["test_changed"], axis=1).values
-
-        y_eval = test["test_changed"].values
-        X_eval = test.drop(columns=["test_changed"], axis=1).values
-
-        train_data = cb.Pool(X_train, y_train)
-        eval_data = cb.Pool(X_eval, y_eval)
-
-        clf = cb.CatBoostClassifier(**train_params)
-        clf.fit(train_data, eval_set=eval_data, verbose=False, plot=False)
-
-        imp_f = list(zip(train.drop(columns=["test_changed"], axis=1).columns, clf.get_feature_importance()))
-        logger.debug(f"{imp_f}")
-
-        y_pred = clf.predict(X_eval, prediction_type='Class')
-        y_pred_proba = clf.predict_proba(X_eval)
-
-        ecdf_0 = ECDF(y_pred_proba[:, 0])
-        ecdf_1 = ECDF(y_pred_proba[:, 1])
-        score = clf.score(eval_data)
-
-        conf_matrix = confusion_matrix(y_eval, y_pred)
-        klass_report = classification_report(y_eval, y_pred, zero_division=True)
-        conf_matrix2 = get_confusion_matrix(clf, eval_data, thread_count=-1)
-
-        logger.debug(f"ConfusingMatrix: {conf_matrix}")
-        logger.debug(f"ClassReport: {klass_report}")
-        logger.debug(f"ConfusingMatrix2: {conf_matrix2}")
-        logger.debug(f"Score: {score}")
-
-        return clf
-
-    def _train_test_model(self, organization_id: int, project_id: int,
-                         test_size: typing.Optional[float] = 0.5,
-                         random_state: int = 0, stratify: typing.Optional[pd.Series] = None,
-                         train_params: typing.Optional[typing.Dict] = None,
-                         save_model: typing.Optional[bool] = True) -> cb.CatBoostClassifier:
-
-        model = None
-
-        model_directory = get_nlp_model_directory(
-            organization_id=organization_id,
-            project_id=project_id
-        )
-        model_filename = get_nlp_model_filename(project_id=project_id)
-
-        dataset_filelist = get_nlp_dataset_filelist(
-            organization_id=organization_id,
-            project_id=project_id
-        )
-
-        dfs = []
-
-        for filepath in dataset_filelist[:20]:
-            df_part = self._read_file(filepath)
-            df_part = self._prepare_dataframe(df_part, target_column=self.DEFAULT_TRAIN_TARGET_COLUMN,
-                                              target_columns=self.DEFAULT_TRAIN_COLUMNS,
-                                              list_of_features=self.DEFAULT_LIST_OF_FEATURES)
-            dfs.append(df_part)
-
-        if not dfs:
-            return model
-
-        df = pd.concat(dfs)
-
-        try:
-            clf = self._fit_model(df, test_size=test_size,
-                                  random_state=random_state,
-                                  stratify=df["test_changed"],
-                                  train_params=train_params)
-            if clf is not None:
-                model = clf
-        except cb.CatboostError as exc:
-            logger.exception(f"catboost error raised with {str(exc)}", exc_info=True)
-
-        if save_model and model is not None:
-            model.save_model(str(model_directory / model_filename))
-
-        return model
-
-    def train(self, params: typing.Optional[typing.Dict] = None) -> 'TestPrioritizationNLPCBM':
-
-        if params is None:
-            params = {}
-
-        clf = self._train_test_model(
-            organization_id=self.organization_id,
-            project_id=self.project_id,
-            save_model=True
-        )
-        self.clf = clf
-        return self
-
-    def _predict(self, df: pd.DataFrame, keyword: typing.Optional[str] = None) -> pd.DataFrame:
-
-        clf = self.clf
-
-        if not clf.is_fitted():
-            raise Exception(f'Model not loaded')
-
-        predict_test_names = df["test_names"].values
-
-        predict_df = self._prepare_dataframe(df, target_column=self.DEFAULT_PREDICT_TARGET_COLUMN,
-                                             target_columns=self.DEFAULT_PREDICT_COLUMNS,
-                                             list_of_features=self.DEFAULT_LIST_OF_FEATURES)
-
-        predict_y = predict_df["test_id"].values
-        predict_X = predict_df.drop(columns=["test_id"], axis=1).values
-
-        try:
-            predicts = clf.predict(predict_X)
-        except cb.CatboostError as exc:
-            logger.exception(f"Predict have error {exc}", exc_info=True)
-            predicts = np.full(int(predict_y.shape[0]), 0.0, dtype=float)
-
-        predicts_df = pd.DataFrame({"test_id": predict_y, "result": predicts, "test_names": predict_test_names})
-        predicts_df["test_names_str"] = [
-            ",".join(map(str, l)) for l in predicts_df["test_names"]]
-
-        if keyword:
-            # predicts_df["result"] = predicts_df.apply(
-            #     lambda x: 1.0 if similarity(x.loc["test_names"][0], keyword) >= 0.5 else x.loc["result"], axis=1)
-            predicts_df["result"] = predicts_df.apply(
-                lambda x: 1 if x.loc["test_names_str"].str.contains(keyword) else x.loc["result"], axis=1)
-
-        predicts_df.sort_values(by=["test_id", "result"], ignore_index=True, ascending=False, inplace=True)
-        predicts_df.drop_duplicates(subset=["test_id"], keep="last", ignore_index=True, inplace=True)
-
-        return predicts_df
-
-    def predict(self, tests, commits, keyword: typing.Optional[str] = None) -> pd.DataFrame:
-
-        test_ids = list(set(list(tests.values_list("id", flat=True))))
-        commit_ids = list(set(list(commits.values_list("id", flat=True))))
-
-        raw_sql = predict_sql(test_ids=test_ids, commit_ids=commit_ids)
-
-        raw_data = native_execute_query(query=raw_sql)
-
-        df = pd.DataFrame(raw_data)
-
-        predicted_df = self._predict(df, keyword=keyword)
-
-        return predicted_df
-
-    def predict_by_priority(self, tests, commits, keyword: typing.Optional[str] = None) -> typing.Dict:
-        df = self.predict(
-            tests=tests,
-            commits=commits,
-            keyword=keyword
-        )
-
-        results = {
-            "high": df[df["result"] == 1]["test_id"].to_list(),
-            "medium": df[df["result"] == 0]["test_id"].to_list(),
-            "unassigned": df[df["result"] == 0]["test_id"].to_list(),
-            "low": df[df["result"] == 0]["test_id"].to_list()
-        }
-        return results
-
-    def predict_by_percent(self, tests, commits, percent: typing.Optional[int] = 20,
-                           keyword: typing.Optional[str] = None) -> typing.List:
-        df = self.predict(tests=tests, commits=commits, keyword=keyword)
-        df = df.sort_values(by="result", ignore_index=True, ascending=False)
-        df = df.head(int(len(df) * (percent / 100)))
-        return df["test_id"].to_list()

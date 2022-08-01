@@ -57,3 +57,9 @@ pqdm
 imblearn
 stripe
 django-csp
+
+# ML New
+nltk==3.7
+statsmodels==0.13.2
+tensorflow==2.9.1
+tensorflow_hub==0.12.0

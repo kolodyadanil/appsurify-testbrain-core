@@ -1,6 +1,7 @@
 
 from datetime import datetime, timedelta
 from applications.testing.models import TestSuite
+from applications.project.models import Project
 from applications.ml.models import MLModel, States, create_sequence
 from applications.ml.utils.log import logger
 from applications.ml.utils.functional import Statistic
@@ -113,3 +114,30 @@ def perform_train_models():
                 logger.info(f"{stats} training models")
 
     logger.info(f"{stats} trained models")
+
+
+def perform_train_nlp_models():
+    stats = Statistic()
+
+    queryset = Project.objects.all()
+
+    stats.total = queryset.count()
+
+    logger.info(f"{stats} selected Projects to train NLP models")
+
+    for project in queryset:
+        stats.increase_current()
+
+        try:
+            result = MLModel.train_nlp_model(project_id=project.id)
+            stats.increase_success()
+
+        except Exception as exc:
+            stats.increase_failure()
+            logger.exception(f"{stats} error traning NLP model", exc_info=True)
+
+        finally:
+            if stats.progress_percent % 10 == 0:
+                logger.info(f"{stats} training NLP models")
+
+    logger.info(f"{stats} trained NLP models")
