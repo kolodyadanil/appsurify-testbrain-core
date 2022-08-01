@@ -119,22 +119,22 @@ def perform_train_models():
 def perform_train_nlp_models():
     stats = Statistic()
 
-    queryset = Project.objects.all()
+    queryset = TestSuite.objects.all()
 
     stats.total = queryset.count()
 
     logger.info(f"{stats} selected Projects to train NLP models")
 
-    for project in queryset:
+    for test_suite in queryset:
         stats.increase_current()
 
         try:
-            result = MLModel.train_nlp_model(project_id=project.id)
+            result = MLModel.train_nlp_model(test_suite_id=test_suite.id)
             stats.increase_success()
 
         except Exception as exc:
             stats.increase_failure()
-            logger.exception(f"{stats} error traning NLP model", exc_info=True)
+            logger.exception(f"{stats} error training NLP model", exc_info=True)
 
         finally:
             if stats.progress_percent % 10 == 0:

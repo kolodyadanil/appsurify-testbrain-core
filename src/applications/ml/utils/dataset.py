@@ -40,12 +40,12 @@ def get_dataset_filelist(organization_id: int, project_id: int, test_suite_id: i
     return file_paths
 
 
-def get_nlp_dataset_filelist(organization_id: int, project_id: int) -> typing.List[pathlib.PosixPath]:
+def get_nlp_dataset_filelist(organization_id: int, project_id: int, test_suite_id: int) -> typing.List[pathlib.PosixPath]:
     directory = pathlib.PosixPath(settings.STORAGE_ROOT) / "machine_learning" / "priority" / \
-                str(organization_id) / str(project_id) / "datasets"
+                str(organization_id) / str(project_id) / "datasets" / str(test_suite_id)
     directory.mkdir(parents=True, exist_ok=True)
 
-    file_paths = list(map(pathlib.PosixPath, glob.glob(f"{directory / '*' / '*' / '*.json'}")))
+    file_paths = list(map(pathlib.PosixPath, glob.glob(f"{directory / '*' / '*.json'}")))
     return file_paths
 
 

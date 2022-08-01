@@ -148,11 +148,15 @@ class MLModel(models.Model):
                 raise exc
 
     @classmethod
-    def train_nlp_model(cls, project_id):
-        from applications.project.models import Project
+    def train_nlp_model(cls, test_suite_id):
+        from applications.testing.models import TestSuite
         try:
-            project = Project.objects.get(id=project_id)
-            tpcbm = TestPrioritizationNLPCBM(organization_id=project.organization_id, project_id=project.id)
+            test_suite = TestSuite.objects.get(id=test_suite_id)
+            project = test_suite.project
+            organization = project.organization
+
+            tpcbm = TestPrioritizationNLPCBM(organization_id=organization.id,
+                                             project_id=project.id, test_suite_id=test_suite.id)
             tpcbm.train()
             return tpcbm
         except Exception as exc:
@@ -171,17 +175,21 @@ class MLModel(models.Model):
         return tpcbm
 
     @classmethod
-    def load_nlp_model(cls, project_id) -> TestPrioritizationNLPCBM:
-        from applications.project.models import Project
+    def load_nlp_model(cls, test_suite_id) -> TestPrioritizationNLPCBM:
+        from applications.testing.models import TestSuite
         tpcbm = None
         try:
-            project = Project.objects.get(id=project_id)
-            tpcbm = TestPrioritizationNLPCBM(organization_id=project.organization_id, project_id=project.id)
+            test_suite = TestSuite.objects.get(id=test_suite_id)
+            project = test_suite.project
+            organization = project.organization
+
+            tpcbm = TestPrioritizationNLPCBM(organization_id=organization.id,
+                                             project_id=project.id, test_suite_id=test_suite.id)
             if not tpcbm.is_fitted:
-                logger.error(f"Classifier not fitted for {project_id}")
+                logger.error(f"Classifier not fitted for {test_suite}")
                 tpcbm = None
         except Exception as exc:
-            logger.exception(f"Classifier not load for {project_id}", exc_info=True)
+            logger.exception(f"Classifier not load for {test_suite}", exc_info=True)
             tpcbm = None
         return tpcbm
 
@@ -244,7 +252,7 @@ def create_directories(sender, instance, created, **kwargs):
         index = instance.index
 
         model_directory = get_model_directory(organization_id=organization_id, project_id=project_id,
-                                              test_suite_id=test_suite_id, index=index)
+                                              test_suite_id=test_suite_id)
         model_directory.mkdir(parents=True, exist_ok=True)
 
         dataset_directory = get_dataset_directory(organization_id=organization_id, project_id=project_id,
@@ -266,7 +274,7 @@ def delete_directories(sender, instance, **kwargs):
         index = instance.index
 
         model_directory = get_model_directory(organization_id=organization_id, project_id=project_id,
-                                              test_suite_id=test_suite_id, index=index)
+                                              test_suite_id=test_suite_id)
         model_directory.rmdir()
 
         dataset_directory = get_dataset_directory(organization_id=organization_id, project_id=project_id,

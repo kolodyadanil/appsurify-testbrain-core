@@ -1,4 +1,5 @@
 import io
+import pathlib
 import typing
 import pickle
 import warnings
@@ -14,19 +15,19 @@ from sklearn.metrics import classification_report
 from sklearn.metrics import confusion_matrix
 from nltk.stem import PorterStemmer
 from statsmodels.distributions.empirical_distribution import ECDF
-import tensorflow_hub as hub
 
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
 from abc import ABC, abstractmethod
 
+from django.conf import settings
+
 from applications.ml.utils.log import logger
 from applications.ml.utils.crypt import hash_list_values
 from applications.ml.utils.dataset import get_dataset_filelist, get_nlp_dataset_filelist
-from applications.ml.utils.model import (get_model_directory, get_model_filename, predict_sql,
-                                         get_riskiness_model_directory, get_riskiness_model_filename,
-                                         get_nlp_model_directory, get_nlp_model_filename)
+from applications.ml.utils.model import (get_model_directory, get_model_filename, get_nlp_model_filename, predict_sql,
+                                         get_riskiness_model_directory, get_riskiness_model_filename)
 from applications.ml.utils.text import similarity, similarity_np
 from applications.ml.utils.database import native_execute_query
 from applications.ml.utils.text import get_vector_from_list
@@ -92,10 +93,9 @@ class TestPrioritizationCBM(object):
         self.model_directory = get_model_directory(
             organization_id=self.organization_id,
             project_id=self.project_id,
-            test_suite_id=self.test_suite_id,
-            index=self.index
+            test_suite_id=self.test_suite_id
         )
-        self.model_filename = get_model_filename(test_suite_id=self.test_suite_id)
+        self.model_filename = get_model_filename(test_suite_id=self.test_suite_id, index=self.index)
         self.model_filepath = str(self.model_directory / self.model_filename)
 
         self._clf = None
@@ -282,10 +282,9 @@ class TestPrioritizationCBM(object):
         model_directory = get_model_directory(
             organization_id=organization_id,
             project_id=project_id,
-            test_suite_id=test_suite_id,
-            index=index
+            test_suite_id=test_suite_id
         )
-        model_filename = get_model_filename(test_suite_id=test_suite_id)
+        model_filename = get_model_filename(test_suite_id=test_suite_id, index=index)
 
         dataset_filelist = get_dataset_filelist(
             organization_id=organization_id,
@@ -777,43 +776,47 @@ class TestPrioritizationNLPCBM(object):
         self.model_directory = get_model_directory(
             organization_id=self.organization_id,
             project_id=self.project_id,
-            test_suite_id=self.test_suite_id,
-            index=self.index
+            test_suite_id=self.test_suite_id
         )
-        self.model_filename = get_model_filename(test_suite_id=self.test_suite_id)
+        self.model_filename = get_nlp_model_filename(test_suite_id=self.test_suite_id)
         self.model_filepath = str(self.model_directory / self.model_filename)
 
-    def _init_params(self, organization_id, project_id):
+    def _init_params(self, organization_id, project_id, test_suite_id):
         self.ml_model = None
         self.organization_id = organization_id
         self.project_id = project_id
+        self.test_suite_id = test_suite_id
         # self.test_suite_id = ml_model.test_suite_id
         # self.index = ml_model.index
         # self.test_ids = ml_model.tests.values_list("id", flat=True)
 
-        self.model_directory = get_nlp_model_directory(
+        self.model_directory = get_model_directory(
             organization_id=self.organization_id,
-            project_id=self.project_id
+            project_id=self.project_id,
+            test_suite_id=self.test_suite_id
         )
-        self.model_filename = get_nlp_model_filename(project_id=self.project_id)
+        self.model_filename = get_nlp_model_filename(test_suite_id=self.test_suite_id)
         self.model_filepath = str(self.model_directory / self.model_filename)
 
-    def __init__(self, ml_model = None, organization_id = None, project_id = None):
+    def __init__(self, ml_model=None, organization_id=None, project_id=None, test_suite_id=None):
         if ml_model is not None:
             self._init_ml_model(ml_model=ml_model)
         else:
-            self._init_params(organization_id=organization_id, project_id=project_id)
+            self._init_params(organization_id=organization_id, project_id=project_id, test_suite_id=test_suite_id)
         self._clf = None
         self._load_model()
 
     def _load_model(self):
+        self.clf = None
         clf = cb.CatBoostClassifier()
         try:
             clf.load_model(self.model_filepath)
             if clf.is_fitted():
                 self.clf = clf
         except Exception as exc:
-            self.clf = None
+            clf.load_model(str(self.model_directory / ".." / f"{self.project_id}.cbm"))
+            if clf.is_fitted():
+                self.clf = clf
 
     @property
     def clf(self) -> cb.CatBoostClassifier:
@@ -835,8 +838,8 @@ class TestPrioritizationNLPCBM(object):
         data = open(file, "r").read()
         if data:
             data = data.replace("\\\\", "\\")
-            file = io.StringIO(data)
-            df = pd.read_json(file)
+            file_content = io.StringIO(data)
+            df = pd.read_json(file_content)
         else:
             df = pd.DataFrame()
         return df
@@ -845,10 +848,17 @@ class TestPrioritizationNLPCBM(object):
                            target_column: typing.AnyStr,
                            target_columns: typing.List[str],
                            list_of_features: typing.List[str]) -> pd.DataFrame:
-        from applications.ml.utils.tensorflowHub import load
-        embed = load()
 
         prepared_df = pd.DataFrame()
+
+        import tensorflow_hub as hub
+
+        try:
+            embed = hub.load(str(pathlib.PosixPath(settings.STORAGE_ROOT) / "universal-sentence-encoder_4"))
+        except OSError:
+            embed = hub.load("https://tfhub.dev/google/universal-sentence-encoder/4")
+        except Exception as exc:
+            raise Exception("Error load embed from hub")
 
         if not df.empty:
 
@@ -948,7 +958,7 @@ class TestPrioritizationNLPCBM(object):
 
         return clf
 
-    def _train_test_model(self, organization_id: int, project_id: int,
+    def _train_test_model(self, organization_id: int, project_id: int, test_suite_id: int,
                          test_size: typing.Optional[float] = 0.5,
                          random_state: int = 0, stratify: typing.Optional[pd.Series] = None,
                          train_params: typing.Optional[typing.Dict] = None,
@@ -956,28 +966,35 @@ class TestPrioritizationNLPCBM(object):
 
         model = None
 
-        model_directory = get_nlp_model_directory(
+        model_directory = get_model_directory(
             organization_id=organization_id,
-            project_id=project_id
+            project_id=project_id,
+            test_suite_id=test_suite_id,
+
         )
-        model_filename = get_nlp_model_filename(project_id=project_id)
+        model_filename = get_nlp_model_filename(test_suite_id=test_suite_id)
 
         dataset_filelist = get_nlp_dataset_filelist(
             organization_id=organization_id,
-            project_id=project_id
+            project_id=project_id,
+            test_suite_id=test_suite_id
         )
 
         dfs = []
 
         for filepath in dataset_filelist:
             df_part = self._read_file(filepath)
-            df_part = self._prepare_dataframe(df_part, target_column=self.DEFAULT_TRAIN_TARGET_COLUMN,
-                                              target_columns=self.DEFAULT_TRAIN_COLUMNS,
-                                              list_of_features=self.DEFAULT_LIST_OF_FEATURES)
-            dfs.append(df_part)
+            try:
+                df_part = self._prepare_dataframe(df_part, target_column=self.DEFAULT_TRAIN_TARGET_COLUMN,
+                                                  target_columns=self.DEFAULT_TRAIN_COLUMNS,
+                                                  list_of_features=self.DEFAULT_LIST_OF_FEATURES)
+                dfs.append(df_part)
+            except Exception as exc:
+                logger.exception(f"Trouble with file: {filepath}", exc_info=True)
+                continue
 
         if not dfs:
-            return model
+            return cb.CatBoostClassifier()
 
         df = pd.concat(dfs)
 
@@ -1004,6 +1021,7 @@ class TestPrioritizationNLPCBM(object):
         clf = self._train_test_model(
             organization_id=self.organization_id,
             project_id=self.project_id,
+            test_suite_id=self.test_suite_id,
             save_model=True
         )
         self.clf = clf

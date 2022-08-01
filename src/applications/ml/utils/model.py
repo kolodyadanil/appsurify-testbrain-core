@@ -4,27 +4,20 @@ import pathlib
 from django.conf import settings
 
 
-def get_model_directory(organization_id: int, project_id: int, test_suite_id: int, index: int) -> pathlib.PosixPath:
+def get_model_directory(organization_id: int, project_id: int, test_suite_id: int) -> pathlib.PosixPath:
     directory = pathlib.PosixPath(settings.STORAGE_ROOT) / "machine_learning" / "priority" / \
-                str(organization_id) / str(project_id) / "models" / str(test_suite_id) / str(index)
+                str(organization_id) / str(project_id) / "models" / str(test_suite_id)
     directory.mkdir(parents=True, exist_ok=True)
     return directory
 
 
-def get_nlp_model_directory(organization_id: int, project_id: int) -> pathlib.PosixPath:
-    directory = pathlib.PosixPath(settings.STORAGE_ROOT) / "machine_learning" / "priority" / \
-                str(organization_id) / str(project_id) / "models"
-    directory.mkdir(parents=True, exist_ok=True)
-    return directory
-
-
-def get_model_filename(test_suite_id: int, extension: typing.Optional[str] = "cbm"):
-    filename = f"{test_suite_id}.{extension}"
+def get_model_filename(test_suite_id: int, index: int, extension: typing.Optional[str] = "cbm"):
+    filename = f"{test_suite_id}.{index}.{extension}"
     return filename
 
 
-def get_nlp_model_filename(project_id: int, extension: typing.Optional[str] = "cbm"):
-    filename = f"{project_id}.{extension}"
+def get_nlp_model_filename(test_suite_id: int, extension: typing.Optional[str] = "cbm"):
+    filename = f"{test_suite_id}.nlp.{extension}"
     return filename
 
 
