@@ -18,7 +18,7 @@ from applications.ml.network import *
 from applications.vcs.models import Commit
 from applications.testing.models import Test
 
-
+tpcbm = TestPrioritizationNLPCBM(organization_id=73, project_id=469)
 tpNLPCBM = MLModel.train_nlp_model(project_id=469)
 print(tpNLPCBM.is_fitted)
 
