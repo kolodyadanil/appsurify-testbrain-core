@@ -9,4 +9,4 @@ def load():
         return None
 
 
-embed = load()
+# embed = load()

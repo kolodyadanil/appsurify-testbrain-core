@@ -845,6 +845,8 @@ class TestPrioritizationNLPCBM(object):
                            target_column: typing.AnyStr,
                            target_columns: typing.List[str],
                            list_of_features: typing.List[str]) -> pd.DataFrame:
+        from applications.ml.utils.tensorflowHub import load
+        embed = load()
 
         prepared_df = pd.DataFrame()
 
@@ -867,14 +869,14 @@ class TestPrioritizationNLPCBM(object):
                 defect_closed_by_caused_by_intersection_folders = [row.defect_closed_by_caused_by_intersection_folders]
                 defect_closed_by_caused_by_intersection_dependent_areas = [row.defect_closed_by_caused_by_intersection_dependent_areas]
 
-                test_names_vector = get_vector_from_list(test_names)
-                test_classes_names_vector = get_vector_from_list(test_classes_names)
-                test_areas_vector = get_vector_from_list(test_areas)
+                test_names_vector = get_vector_from_list(test_names, embed=embed)
+                test_classes_names_vector = get_vector_from_list(test_classes_names, embed=embed)
+                test_areas_vector = get_vector_from_list(test_areas, embed=embed)
 
-                commits_area_vector = get_vector_from_list(defect_closed_by_caused_by_intersection_areas)
-                commits_file_vector = get_vector_from_list(defect_closed_by_caused_by_intersection_files)
-                commits_folder_vector = get_vector_from_list(defect_closed_by_caused_by_intersection_folders)
-                commits_dependent_vector = get_vector_from_list(defect_closed_by_caused_by_intersection_dependent_areas)
+                commits_area_vector = get_vector_from_list(defect_closed_by_caused_by_intersection_areas, embed=embed)
+                commits_file_vector = get_vector_from_list(defect_closed_by_caused_by_intersection_files, embed=embed)
+                commits_folder_vector = get_vector_from_list(defect_closed_by_caused_by_intersection_folders, embed=embed)
+                commits_dependent_vector = get_vector_from_list(defect_closed_by_caused_by_intersection_dependent_areas, embed=embed)
 
                 test_names_to_commit_files = similarity_np(test_names_vector, commits_file_vector)
                 test_names_to_commit_folders = similarity_np(test_names_vector, commits_folder_vector)

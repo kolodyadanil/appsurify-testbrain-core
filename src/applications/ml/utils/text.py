@@ -2,7 +2,6 @@ import re
 import textdistance
 import numpy as np
 from nltk.stem import PorterStemmer
-from applications.ml.utils.tensorflowHub import embed
 
 
 def camel_case_split(value):
@@ -204,7 +203,7 @@ def get_tokens_from_list(lst):
     return tokens
 
 
-def get_vector_from_list(lst):
+def get_vector_from_list(lst, embed = None):
     tokens = []
     for sub_lst in lst:
         for item in sub_lst:
