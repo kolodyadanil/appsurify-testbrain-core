@@ -99,7 +99,9 @@ def prioritized_test_list(*, params=None):
 
     ml_predictor = None
     if test_suite:
-        ml_predictor = MLModel.load_model(test_suite_id=test_suite.id)
+        project = params["project"]
+        ml_predictor = MLModel.load_nlp_model(project_id=project.id)
+        # ml_predictor = MLModel.load_model(test_suite_id=test_suite.id)
 
     ml_model_existing_flag = ml_predictor is not None
 

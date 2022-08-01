@@ -1,11 +1,11 @@
 import pathlib
 import typing
+import glob
 import concurrent.futures
 
 from django.db import connection
 from django.conf import settings
 
-# from applications.ml.utils.functional import Statistic
 from .database import psql_execute_query
 from .log import logger
 from .functional import Statistic
@@ -37,6 +37,15 @@ def get_dataset_filelist(organization_id: int, project_id: int, test_suite_id: i
         file_path = dataset_directory / get_dataset_filename(test_id)
         if file_path.exists():
             file_paths.append(file_path)
+    return file_paths
+
+
+def get_nlp_dataset_filelist(organization_id: int, project_id: int) -> typing.List[pathlib.PosixPath]:
+    directory = pathlib.PosixPath(settings.STORAGE_ROOT) / "machine_learning" / "priority" / \
+                str(organization_id) / str(project_id) / "datasets"
+    directory.mkdir(parents=True, exist_ok=True)
+
+    file_paths = list(map(pathlib.PosixPath, glob.glob(f"{directory / '*' / '*' / '*.json'}")))
     return file_paths
 
 
