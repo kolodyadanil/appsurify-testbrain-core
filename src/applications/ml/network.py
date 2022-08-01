@@ -969,7 +969,7 @@ class TestPrioritizationNLPCBM(object):
 
         dfs = []
 
-        for filepath in dataset_filelist[:20]:
+        for filepath in dataset_filelist:
             df_part = self._read_file(filepath)
             df_part = self._prepare_dataframe(df_part, target_column=self.DEFAULT_TRAIN_TARGET_COLUMN,
                                               target_columns=self.DEFAULT_TRAIN_COLUMNS,
