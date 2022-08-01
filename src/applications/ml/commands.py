@@ -66,7 +66,7 @@ def create_and_check_models():
 def perform_prepare_datasets():
     stats = Statistic()
 
-    queryset = MLModel.objects.filter(state=States.PENDING).order_by("test_suite", "index", "updated")[:20]
+    queryset = MLModel.objects.filter(state=States.PENDING).order_by("test_suite", "index", "updated")[:30]
     stats.total = queryset.count()
     logger.info(f"{stats} models for preparing datasets are selected")
 

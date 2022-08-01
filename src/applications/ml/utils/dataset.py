@@ -106,7 +106,7 @@ def export_dataset_to_file(organization_id: int, project_id: int, test_suite_id:
 
 
 def export_datasets(organization_id: int, project_id: int, test_suite_id: int, index: int,
-                    test_ids: typing.List[int], from_date, to_date, max_workers: typing.Optional[int] = 10):
+                    test_ids: typing.List[int], from_date, to_date, max_workers: typing.Optional[int] = 20):
 
     stats = Statistic()
     stats.total = len(test_ids)
