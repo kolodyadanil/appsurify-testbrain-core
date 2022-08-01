@@ -11,7 +11,7 @@ x-testbrain-docker: &testbrian
   build:
     context: .
     dockerfile: ./compose/testbrain/core/Dockerfile
-  image: appsurifyinc/testbrain-core:development
+  image: appsurifyinc/testbrain-core:latest
   depends_on:
     - postgres
     - rabbitmq
