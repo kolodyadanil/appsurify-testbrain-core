@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 from applications.testing.models import TestSuite
 from applications.project.models import Project
-from applications.ml.models import MLModel, States, create_sequence
+from applications.ml.models import MLModel, MLDataset, DatasetStates, MLStates, create_sequence
 from applications.ml.utils.log import logger
 from applications.ml.utils.functional import Statistic
 
@@ -18,11 +18,11 @@ def create_and_check_models():
         stats.increase_current()
         logger.debug(f"{stats} creating model for <TestSuite: {test_suite.id}>")
         try:
-            seq_queryset = create_sequence(test_suite_id=test_suite.id)
+            ml_model = create_sequence(test_suite_id=test_suite.id)
             stats.increase_success()
 
             logger.debug(f"{stats} created models for "
-                         f"<TestSuite: '{test_suite.id}'> - total sequence: {seq_queryset.count()}")
+                         f"<TestSuite: '{test_suite.id}'> - total sequence: {ml_model.datasets.count()}")
 
         except Exception as exc:
             stats.increase_failure()
@@ -38,7 +38,7 @@ def create_and_check_models():
 
     time_threshold = datetime.now() - timedelta(weeks=2)
     queryset = MLModel.objects.filter(
-        created__lt=time_threshold, state__in=States.values).order_by("test_suite_id").distinct("test_suite_id")
+        created__lt=time_threshold, state__in=MLStates.values).order_by("test_suite_id").distinct("test_suite_id")
     stats.total = queryset.count()
 
     logger.info(f"{stats} selected models for which you want to add a sequence")
@@ -47,11 +47,11 @@ def create_and_check_models():
         stats.increase_current()
         logger.debug(f"{stats} creating sequence for {ml_model}")
         try:
-            seq_queryset = create_sequence(test_suite_id=ml_model.test_suite_id)
+            ml_model = create_sequence(test_suite_id=ml_model.test_suite_id)
             stats.increase_success()
 
             logger.debug(f"{stats} created sequence for "
-                         f"{ml_model} - total sequences: {seq_queryset.count()}")
+                         f"{ml_model} - total sequences: {ml_model.datasets.count()}")
         except Exception as exc:
             stats.increase_failure()
             logger.exception(f"{stats} error created sequence for "
@@ -66,22 +66,22 @@ def create_and_check_models():
 def perform_prepare_datasets():
     stats = Statistic()
 
-    queryset = MLModel.objects.filter(state=States.PENDING).order_by("test_suite", "index", "updated")[:30]
+    queryset = MLDataset.objects.filter(state=DatasetStates.PENDING).order_by("test_suite", "index", "updated")[:30]
     stats.total = queryset.count()
     logger.info(f"{stats} models for preparing datasets are selected")
 
-    for ml_model in queryset:
+    for ml_dataset in queryset:
         stats.increase_current()
-        logger.debug(f"{stats} preparing for the model {ml_model}")
+        logger.debug(f"{stats} preparing for the model {ml_dataset}")
         try:
-            result = ml_model.prepare()
+            result = ml_dataset.prepare()
             stats.increase_success()
 
-            logger.debug(f"{stats} complete preparing for the model {ml_model} with result: {result}")
+            logger.debug(f"{stats} complete preparing for the model {ml_dataset} with result: {result}")
 
         except Exception as exc:
             stats.increase_failure()
-            logger.debug(f"{stats} error preparing for the model {ml_model}", exc_info=True)
+            logger.debug(f"{stats} error preparing for the model {ml_dataset}", exc_info=True)
         finally:
             if stats.progress_percent % 10 == 0:
                 logger.info(f"{stats} preparing datasets for models")
@@ -92,52 +92,29 @@ def perform_prepare_datasets():
 def perform_train_models():
     stats = Statistic()
 
-    queryset = TestSuite.objects.filter(
-        models__state=States.PREPARED).order_by("id", "models__updated").distinct("id")[:20]
+    queryset = MLModel.objects.filter(
+        state=MLStates.PENDING).order_by("updated")[:20]
+
+    for i in queryset:
+        print(f"{i.id} {i.updated} {i.state}")
+
     stats.total = queryset.count()
 
     logger.info(f"{stats} selected TestSuites to train models")
 
-    for test_suite in queryset:
+    for ml_model in queryset:
         stats.increase_current()
 
         try:
-            result = MLModel.train_model(test_suite_id=test_suite.id)
+            result = MLModel.train_model(test_suite_id=ml_model.test_suite_id)
             stats.increase_success()
 
         except Exception as exc:
             stats.increase_failure()
-            logger.exception(f"{stats} error traning model", exc_info=True)
+            logger.exception(f"{stats} error training model", exc_info=True)
 
         finally:
             if stats.progress_percent % 10 == 0:
                 logger.info(f"{stats} training models")
 
     logger.info(f"{stats} trained models")
-
-
-def perform_train_nlp_models():
-    stats = Statistic()
-
-    queryset = TestSuite.objects.all()
-
-    stats.total = queryset.count()
-
-    logger.info(f"{stats} selected Projects to train NLP models")
-
-    for test_suite in queryset:
-        stats.increase_current()
-
-        try:
-            result = MLModel.train_nlp_model(test_suite_id=test_suite.id)
-            stats.increase_success()
-
-        except Exception as exc:
-            stats.increase_failure()
-            logger.exception(f"{stats} error training NLP model", exc_info=True)
-
-        finally:
-            if stats.progress_percent % 10 == 0:
-                logger.info(f"{stats} training NLP models")
-
-    logger.info(f"{stats} trained NLP models")
