@@ -183,7 +183,7 @@ class MLModel(models.Model):
         valid_datasets = ml_model.datasets.filter(state=DatasetStates.PREPARED).count()
 
         if total_datasets == skipped_datasets:
-            logger.error(f"Skipped this {ml_model}: previous model not trained")
+            logger.error(f"Skipped this {ml_model}: all datasets empty.")
             ml_model.state = MLStates.SKIPPED
             ml_model.save()
         elif valid_datasets > 0:
@@ -197,15 +197,31 @@ class MLModel(models.Model):
 
     @classmethod
     def load_model(cls, test_suite_id) -> typing.Union[TestPrioritizationNLPCBM, None]:
+        # try:
+        #     ml_model = cls.objects.get(test_suite_id=test_suite_id)
+        #     tpcbm = TestPrioritizationNLPCBM(ml_model=ml_model)
+        #     if not tpcbm.is_fitted:
+        #         logger.error(f"Classifier not fitted for {ml_model}")
+        #         tpcbm = None
+        #     else:
+        #         tpcbm = None
+        # except MLModel.DoesNotExist:
+        #     tpcbm = None
+        # return tpcbm
+        from applications.testing.models import TestSuite
+        tpcbm = None
         try:
-            ml_model = cls.objects.get(test_suite_id=test_suite_id)
-            tpcbm = TestPrioritizationNLPCBM(ml_model=ml_model)
+            test_suite = TestSuite.objects.get(id=test_suite_id)
+            project = test_suite.project
+            organization = project.organization
+
+            tpcbm = TestPrioritizationNLPCBM(organization_id=organization.id,
+                                             project_id=project.id, test_suite_id=test_suite.id)
             if not tpcbm.is_fitted:
-                logger.error(f"Classifier not fitted for {ml_model}")
+                logger.error(f"Classifier not fitted for {test_suite_id}")
                 tpcbm = None
-            else:
-                tpcbm = None
-        except MLModel.DoesNotExist:
+        except Exception as exc:
+            logger.exception(f"Classifier not load for {test_suite_id}", exc_info=True)
             tpcbm = None
         return tpcbm
 
