@@ -103,7 +103,8 @@ class MLDataset(models.Model):
                 index=index,
                 test_ids=test_ids,
                 from_date=self.from_date,
-                to_date=self.to_date
+                to_date=self.to_date,
+                max_workers=10
             )
             self.state = DatasetStates.PREPARED
         except Exception as exc:
