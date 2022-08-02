@@ -109,6 +109,8 @@ def prioritized_test_list(*, params=None):
     priority = params["priority"]
     keyword = params.get("keyword", None)
 
+    logging.info(f"Get priority tests with params: {params} - use SQL: {use_sql}")
+
     if priority == PRIORITY_HIGH:
         if use_sql:
             queryset = get_default_high_queryset(queryset, commit_list, params=params)
