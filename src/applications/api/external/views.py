@@ -254,10 +254,12 @@ class ExternalAPIViewSet(MultiSerializerViewSetMixin, viewsets.GenericViewSet):
         params_serializer.is_valid(raise_exception=True)
         params = params_serializer.validated_data
 
-        queryset = prioritized_test_list(params=params)
-
-        serializer = PrioritizedTestsSerializer(queryset, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        try:
+            queryset = prioritized_test_list(params=params)
+            serializer = PrioritizedTestsSerializer(queryset, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as exc:
+            raise APIException(code="500", detail=exc.args)
 
     @action(methods=['GET', ], detail=False, url_path=r'output')  # TODO: rename url path
     def output_test_run_view(self, request, *args, **kwargs):
