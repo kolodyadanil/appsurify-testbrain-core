@@ -546,6 +546,7 @@ class TestPrioritizationNLPCBM(object):
             prepared_df = pd.DataFrame(new_features)
             prepared_df = prepared_df[list_of_features + [target_column]]
 
+        del embed
         return prepared_df
 
     def _fit_model(self, df: pd.DataFrame, test_size: typing.Optional[float] = 0.5,
