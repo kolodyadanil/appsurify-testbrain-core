@@ -7,6 +7,8 @@ from applications.ml.models import MLModel, MLDataset
 class MLModelAdmin(admin.ModelAdmin):
     list_display = ('id', 'test_suite', 'ds_count', 'state', 'created', 'updated')
 
+    list_filter = ['test_suite__project', ]
+
     def get_queryset(self, request):
         qs = super(MLModelAdmin, self).get_queryset(request)
         return qs.annotate(_ds_count=models.Count('datasets', distinct=True))
@@ -23,6 +25,8 @@ admin.site.register(MLModel, MLModelAdmin)
 
 class MLDatasetAdmin(admin.ModelAdmin):
     list_display = ('id', 'test_suite', 'test_count', 'state', 'index', 'from_date', 'to_date', 'created', 'updated')
+
+    list_filter = ['test_suite__project', ]
 
     def get_queryset(self, request):
         qs = super(MLDatasetAdmin, self).get_queryset(request)
