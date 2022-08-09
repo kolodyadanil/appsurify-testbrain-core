@@ -1,5 +1,6 @@
 import io
 import pathlib
+import gc
 import typing
 import pickle
 import warnings
@@ -24,7 +25,7 @@ from abc import ABC, abstractmethod
 from django.conf import settings
 
 from applications.ml.utils.log import logger
-from applications.ml.utils.crypt import hash_list_values
+from applications.ml.utils.functional import reduce_mem_usage
 from applications.ml.utils.dataset import get_dataset_filelist, get_nlp_dataset_filelist
 from applications.ml.utils.model import (get_model_directory, get_model_filename, get_nlp_model_filename, predict_sql,
                                          get_riskiness_model_directory, get_riskiness_model_filename)
@@ -468,15 +469,17 @@ class TestPrioritizationNLPCBM(object):
         else:
             return False
 
-    def _read_file(self, file) -> pd.DataFrame:
+    def _read_file(self, filepath) -> pd.DataFrame:
         """ Clean spec symbols """
-        data = open(file, "r").read()
+        file = open(filepath, "r")
+        data = file.read()
         if data:
             data = data.replace("\\\\", "\\")
             file_content = io.StringIO(data)
             df = pd.read_json(file_content)
         else:
             df = pd.DataFrame()
+        file.close()
         return df
 
     def _prepare_dataframe(self, df: pd.DataFrame,
@@ -547,6 +550,8 @@ class TestPrioritizationNLPCBM(object):
             prepared_df = prepared_df[list_of_features + [target_column]]
 
         del embed
+        del df
+        gc.collect()
         return prepared_df
 
     def _fit_model(self, df: pd.DataFrame, test_size: typing.Optional[float] = 0.5,
@@ -616,15 +621,25 @@ class TestPrioritizationNLPCBM(object):
             test_suite_id=test_suite_id
         )
 
+        # total = len(dataset_filelist)
+        # current = 0
+
         dfs = []
 
         for filepath in dataset_filelist:
+
+            # current += 1
+            # print(f"{current} of {total}")
+
             df_part = self._read_file(filepath)
             try:
                 df_part = self._prepare_dataframe(df_part, target_column=self.DEFAULT_TRAIN_TARGET_COLUMN,
                                                   target_columns=self.DEFAULT_TRAIN_COLUMNS,
                                                   list_of_features=self.DEFAULT_LIST_OF_FEATURES)
+                df_part = reduce_mem_usage(df=df_part)
                 dfs.append(df_part)
+                del df_part
+                gc.collect()
             except Exception as exc:
                 logger.exception(f"Trouble with file: {filepath}", exc_info=True)
                 continue
@@ -633,6 +648,7 @@ class TestPrioritizationNLPCBM(object):
             return cb.CatBoostClassifier()
 
         df = pd.concat(dfs)
+        del dfs
 
         try:
             clf = self._fit_model(df, test_size=test_size,
