@@ -20,7 +20,12 @@ from applications.ml.commands import *
 from applications.vcs.models import Commit
 from applications.testing.models import Test, TestSuite
 
+# ml_model = MLModel.objects.get(id=161)
+# tpcbm = TestPrioritizationNLPCBM(ml_model=ml_model)
+# tpcbm.train()
+# print(tpcbm.is_fitted)
+queryset = TestSuite.objects.filter(models__isnull=True, project__id__exact=671).distinct().order_by("project_id")
 
-tpcbm = TestPrioritizationNLPCBM(organization_id=70, project_id=426, test_suite_id=299)
-tpcbm.train()
-print(tpcbm.is_fitted)
+time_threshold = datetime.now() - timedelta(weeks=2)
+queryset = MLModel.objects.filter(created__lt=time_threshold, state__in=MLStates.values, test_suite__project__id__exact=671).order_by("test_suite_id").distinct("test_suite_id")
+

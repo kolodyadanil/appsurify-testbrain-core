@@ -90,12 +90,22 @@ class MLDataset(models.Model):
         self.state = DatasetStates.PREPARING
         self.save()
         # TODO: RUN function with threads
+        # TODO: Update one more time tests
+        tests = list(self.tests_for_train)
+        self.tests.set(tests)
+
         try:
             organization_id = int(self.test_suite.project.organization_id)
             project_id = int(self.test_suite.project_id)
             test_suite_id = int(self.test_suite_id)
             index = self.index
+
             test_ids = list(self.tests.values_list("id", flat=True))
+            if len(test_ids) == 0:
+                self.state = DatasetStates.SKIPPED
+                self.save()
+                return
+
             result = export_datasets(
                 organization_id=organization_id,
                 project_id=project_id,
@@ -253,6 +263,7 @@ def create_sequence(test_suite_id: int) -> MLModel:
             dataset.save()
 
     dataset = MLDataset.objects.filter(test_suite_id=test_suite_id).last()
+
     while dataset is not None:
         next_fr = dataset.to_date
         next_to = next_fr + relativedelta(months=default_months) + relativedelta(day=31)
