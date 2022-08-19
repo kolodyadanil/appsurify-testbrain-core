@@ -5,6 +5,7 @@ from .models import *
 
 class TestReportAdmin(admin.ModelAdmin):
     list_display = ('id', 'project', 'test_suite', 'name', 'format', 'status', 'created', 'updated')
+    list_filter = ['project', ]
 
 
 class TestTypeAdmin(admin.ModelAdmin):
@@ -52,8 +53,8 @@ class TestRunResultAdmin(admin.ModelAdmin):
 
 class DefectAdmin(admin.ModelAdmin):
     list_display = ('id', 'name', 'project', 'owner', 'type',
-                    'status', 'created_by_commit_field',
-                    'caused_by_commits_field', 'created', 'updated')
+                    'status', 'created_by_commit_field', 'closed_by_commit_field',
+                    'caused_by_commits_field', )
     list_filter = ('project', )
     raw_id_fields = (
         'project',
@@ -89,6 +90,16 @@ class DefectAdmin(admin.ModelAdmin):
     )
 
     # filter_horizontal = ('associated_tests', )
+
+    def closed_by_commit_field(self, obj):
+        try:
+            return obj.closed_commit.display_id
+        except AttributeError:
+            return None
+
+    closed_by_commit_field.empty_value_display = '(None)'
+    closed_by_commit_field.short_description = 'Closed by commits'
+    closed_by_commit_field.admin_order_field = 'closed_commit_id'
 
     def created_by_commit_field(self, obj):
         try:

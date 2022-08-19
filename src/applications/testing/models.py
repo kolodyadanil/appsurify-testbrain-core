@@ -1376,6 +1376,8 @@ class Defect(models.Model):
             raise ValueError(err_msg)
 
         self.caused_by_commits.add(commit)
+        # self.caused_by_commits.get_or_create(commit=commit, defect=self)
+
         for parent_commit in commit.parents.iterator():
             test_runs_old = TestRun.objects.filter(commit=parent_commit, project=self.project, test_suite=test_suite)
             test_run_results = TestRunResult.objects.filter(test_run__in=test_runs_old)

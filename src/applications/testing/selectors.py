@@ -209,7 +209,7 @@ def prioritized_test_list(*, params=None):
         classname_separator = params.get("classname_separator", "")
         queryset = queryset.annotate(mname=F('name')).values('mname').annotate(name=Concat(F('class_name'), Value(classname_separator), 'mname', output_field=CharField())).values('name')
 
-    testsuitename = params.get("classname", False)
+    testsuitename = params.get("testsuitename", False)
     if testsuitename:
         testsuitename_separator = params.get("testsuitename_separator", "")
         queryset = queryset.annotate(mname=F('name')).values('mname').annotate(name=Concat(F('area__name'), Value(testsuitename_separator), 'mname', output_field=CharField())).values('name')
