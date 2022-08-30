@@ -203,7 +203,7 @@ def get_tokens_from_list(lst):
     return tokens
 
 
-def get_vector_from_list(lst, embed = None):
+def get_vector_from_list(lst, embed=None):
     tokens = []
     for sub_lst in lst:
         for item in sub_lst:
