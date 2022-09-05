@@ -923,7 +923,7 @@ class TestRun(MPTTModel):
 
 class TestRunMaterializedModel(models.Model):
     test_run = models.OneToOneField('testing.TestRun',
-                                    related_name='mv_test_count_by_type', on_delete=models.CASCADE, primary_key=True)
+                                    related_name='mv_test_count_by_type', on_delete=models.DO_NOTHING, primary_key=True)
     tests_count = models.IntegerField()
     passed_tests_count = models.IntegerField()
     skipped_tests_count = models.IntegerField()
